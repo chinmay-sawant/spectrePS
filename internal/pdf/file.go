@@ -7,10 +7,6 @@ import (
 )
 
 const (
-	errSyntax = "syntaxerror"
-	errAccess = "invalidaccess"
-	errType   = "typecheck"
-
 	opPDF     = "pdf"
 	opXRef    = "xref"
 	opEncrypt = "Encrypt"
@@ -164,7 +160,10 @@ func trailerDict(src []byte, offset int) (Value, error) {
 }
 
 func readStreamXRef(src []byte, offset int) (map[int]XEntry, Value, error) {
-	_, _, val, _, err := ParseIndirect(src, offset)
+	objNum, _, val, _, err := ParseIndirect(src, offset)
+	if objNum < 0 {
+		return nil, NullVal(), NewError(opXRef, errSyntax)
+	}
 	if err != nil {
 		return nil, NullVal(), err
 	}
@@ -424,7 +423,7 @@ func pairAt(header []byte, pos int) (int, int, int, bool) {
 }
 
 func keywordHere(src []byte, pos int, word string) bool {
-	if pos > 0 && !isDelim(src[pos-1]) {
+	if pos > 0 && !fileDelim(src[pos-1]) {
 		return false
 	}
 	return hasKeyword(src, pos, word)
@@ -438,7 +437,7 @@ func hasKeyword(src []byte, pos int, word string) bool {
 	if end == len(src) {
 		return true
 	}
-	return isDelim(src[end])
+	return fileDelim(src[end])
 }
 
 func pdfInt(src []byte, pos int) (int, int, bool) {
@@ -498,7 +497,7 @@ func isSpaceByte(cur byte) bool {
 	}
 }
 
-func isDelim(cur byte) bool {
+func fileDelim(cur byte) bool {
 	if isSpaceByte(cur) {
 		return true
 	}

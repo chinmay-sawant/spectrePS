@@ -474,8 +474,8 @@ func isOctal(cur byte) bool {
 	return cur >= '0' && cur <= '7'
 }
 
-func newToken(kind tokKind, num int64, real float64, text string, raw []byte) token {
-	return token{kind: kind, num: num, real: real, text: text, raw: raw}
+func newToken(kind tokKind, num int64, realNum float64, text string, raw []byte) token {
+	return token{kind: kind, num: num, real: realNum, text: text, raw: raw}
 }
 
 func endToken() token {

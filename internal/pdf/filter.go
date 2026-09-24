@@ -8,11 +8,8 @@ import (
 )
 
 const (
-	opFlate      = "FlateDecode"
-	opPredictor  = "Predictor"
-	errUndefined = "undefined"
-	errSyntax    = "syntaxerror"
-	errLimit     = "limitcheck"
+	opFlate     = "FlateDecode"
+	opPredictor = "Predictor"
 
 	// maxInflated caps one decoded Flate stream. Predictor growth is not applied.
 	maxInflated = 32 << 20

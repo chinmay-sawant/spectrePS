@@ -2,7 +2,7 @@ package cli
 
 import (
 	"bytes"
-	"compress/flate"
+	"compress/zlib"
 	"fmt"
 	"image"
 	"image/png"
@@ -115,7 +115,8 @@ func TestRasterPDF(t *testing.T) {
 	}
 	empty := writeTemp(t, "empty.pdf", emptyKidsPDF(t))
 	emptyOut := filepath.Join(t.TempDir(), "empty.ppm")
-	want(t, []string{"raster", "-o", emptyOut, "-w", "20", "-h", "20", "-r", "72", empty}, 1, "", "Error: /rangecheck in RasterizePage\n")
+	args := []string{"raster", "-o", emptyOut, "-w", "20", "-h", "20", "-r", "72", empty}
+	want(t, args, 1, "", "Error: /rangecheck in RasterizePage\n")
 }
 
 func TestValidate(t *testing.T) {
@@ -317,10 +318,7 @@ func flateStream(t *testing.T, content string) []byte {
 func flateBytes(t *testing.T, plain []byte) []byte {
 	t.Helper()
 	var body bytes.Buffer
-	writer, err := flate.NewWriter(&body, flate.DefaultCompression)
-	if err != nil {
-		t.Fatal(err)
-	}
+	writer := zlib.NewWriter(&body)
 	if _, err := writer.Write(plain); err != nil {
 		t.Fatal(err)
 	}

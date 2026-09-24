@@ -2,10 +2,11 @@ package pdf
 
 import (
 	"bytes"
-	"compress/flate"
+	"compress/zlib"
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -74,7 +75,7 @@ func (doc *pdfDoc) put(num int, body string) {
 	fmt.Fprintf(&doc.buf, "%d 0 obj\n%s\nendobj\n", num, body)
 }
 
-func (doc *pdfDoc) classic(root int, extra string) []byte {
+func (doc *pdfDoc) classic(extra string) []byte {
 	xrefAt := doc.buf.Len()
 	size := len(doc.offsets)
 	fmt.Fprintf(&doc.buf, "xref\n0 %d\n", size)
@@ -82,7 +83,7 @@ func (doc *pdfDoc) classic(root int, extra string) []byte {
 	for num := 1; num < size; num++ {
 		doc.buf.WriteString(xrefLine(doc.offsets[num], 0, true))
 	}
-	fmt.Fprintf(&doc.buf, "trailer\n<< /Size %d /Root %d 0 R%s >>\n", size, root, extra)
+	fmt.Fprintf(&doc.buf, "trailer\n<< /Size %d /Root %d 0 R%s >>\n", size, idCatalog, extra)
 	fmt.Fprintf(&doc.buf, "startxref\n%d\n%%%%EOF\n", xrefAt)
 	return doc.buf.Bytes()
 }
@@ -110,14 +111,11 @@ func streamBody(dict string, raw []byte) string {
 func flateRaw(t *testing.T, plain []byte) []byte {
 	t.Helper()
 	var buf bytes.Buffer
-	writer, err := flate.NewWriter(&buf, flate.DefaultCompression)
-	if err != nil {
+	writer := zlib.NewWriter(&buf)
+	if _, err := writer.Write(plain); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = writer.Write(plain); err != nil {
-		t.Fatal(err)
-	}
-	if err = writer.Close(); err != nil {
+	if err := writer.Close(); err != nil {
 		t.Fatal(err)
 	}
 	return buf.Bytes()
@@ -135,7 +133,7 @@ func classicLine(t *testing.T, marks string) []byte {
 	if catalog != idCatalog || pages != idPages || nested != idNested || page != idPage || content != idContent {
 		t.Fatal("object ids")
 	}
-	return doc.classic(idCatalog, "")
+	return doc.classic("")
 }
 
 func joinedPage(t *testing.T) []byte {
@@ -146,12 +144,12 @@ func joinedPage(t *testing.T) []byte {
 	doc.object("<< /Type /Page /Parent 2 0 R /Contents [4 0 R 5 0 R] >>")
 	doc.object(streamBody("", []byte("q")))
 	doc.object(streamBody("", []byte("Q")))
-	return doc.classic(idCatalog, "")
+	return doc.classic("")
 }
 
 func openContext(t *testing.T) {
 	t.Helper()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	_, err := Open(ctx, []byte("%PDF-"))
 	if !errors.Is(err, context.Canceled) {
@@ -168,7 +166,7 @@ func openContext(t *testing.T) {
 
 func mustOpen(t *testing.T, src []byte) *File {
 	t.Helper()
-	file, err := Open(context.Background(), src)
+	file, err := Open(t.Context(), src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,5 +191,5 @@ func wantJob(t *testing.T, err error, opName, errName string) {
 }
 
 func stringsContain(text, part string) bool {
-	return len(part) > 0 && bytes.Contains([]byte(text), []byte(part))
+	return len(part) > 0 && strings.Contains(text, part)
 }

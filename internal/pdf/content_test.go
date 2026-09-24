@@ -106,7 +106,7 @@ func TestPaintNilContext(t *testing.T) {
 			t.Fatalf("panic = %v, want pdf: nil context", got)
 		}
 	}()
-	_ = Paint(nil, nil, nil, 1)
+	_ = Paint(nil, nil, nil, 1) //nolint:staticcheck // nil context is the case under test
 }
 
 func TestPaintNoCurrentPoint(t *testing.T) {

@@ -150,7 +150,10 @@ func mustValue(t *testing.T, src string) (Value, int) {
 func rejectValue(t *testing.T, src string) {
 	t.Helper()
 	_, _, err := ParseValue([]byte(src), 0)
-	wantSyntax(t, err)
+	job := wantSyntax(t, err)
+	if job.Name != nameSyntax {
+		t.Fatal(job)
+	}
 }
 
 func wantSyntax(t *testing.T, err error) *Error {

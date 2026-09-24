@@ -11,7 +11,7 @@ import (
 type (
 	tokenKind int
 
-	token struct {
+	ctok struct {
 		kind tokenKind
 		num  float64
 		text string
@@ -79,12 +79,8 @@ const (
 	octalExtra   = 2
 	pairLen      = 2
 
-	errUndefined = "undefined"
-	errLimit     = "limitcheck"
 	errUnderflow = "stackunderflow"
 	errNoPoint   = "nocurrentpoint"
-	errSyntax    = "syntaxerror"
-	errType      = "typecheck"
 
 	panicNilContext = "pdf: nil context"
 	syntaxOp        = "content"
@@ -143,7 +139,7 @@ func (run *runner) play(ctx context.Context, lex *scanner) error {
 	}
 }
 
-func (run *runner) take(tok token) error {
+func (run *runner) take(tok ctok) error {
 	if tok.kind != tokOperator {
 		run.stack = append(run.stack, item{num: tok.num, isNum: tok.kind == tokNumber})
 		return nil
@@ -219,7 +215,7 @@ func (run *runner) takeState(opName string) (bool, error) {
 	}
 }
 
-func (lex *scanner) next() (token, bool, error) {
+func (lex *scanner) next() (ctok, bool, error) {
 	lex.skipIgnored()
 	if lex.pos >= len(lex.src) {
 		return zeroToken(), false, nil
@@ -231,7 +227,7 @@ func (lex *scanner) next() (token, bool, error) {
 	return tok, true, nil
 }
 
-func (lex *scanner) one() (token, error) {
+func (lex *scanner) one() (ctok, error) {
 	switch lex.src[lex.pos] {
 	case '/':
 		lex.skipName()
@@ -243,24 +239,24 @@ func (lex *scanner) one() (token, error) {
 	case '[':
 		return lex.skipped(lex.skipArray)
 	case ']', ')', '>', '{', '}':
-		return zeroToken(), syntaxErr()
+		return zeroToken(), contentSyntax()
 	default:
 		return lex.scanWord()
 	}
 }
 
-func (lex *scanner) skipped(skip func() error) (token, error) {
+func (lex *scanner) skipped(skip func() error) (ctok, error) {
 	if err := skip(); err != nil {
 		return zeroToken(), err
 	}
 	return operandToken(), nil
 }
 
-func (lex *scanner) scanWord() (token, error) {
+func (lex *scanner) scanWord() (ctok, error) {
 	start := lex.pos
 	lex.skipWord()
 	if start == lex.pos {
-		return zeroToken(), syntaxErr()
+		return zeroToken(), contentSyntax()
 	}
 	text := string(lex.src[start:lex.pos])
 	if keywordOperand(text) {
@@ -271,7 +267,7 @@ func (lex *scanner) scanWord() (token, error) {
 	}
 	num, ok := finiteNumber(text)
 	if !ok {
-		return zeroToken(), syntaxErr()
+		return zeroToken(), contentSyntax()
 	}
 	return numberToken(num), nil
 }
@@ -279,7 +275,7 @@ func (lex *scanner) scanWord() (token, error) {
 func (lex *scanner) skipIgnored() {
 	for lex.pos < len(lex.src) {
 		cur := lex.src[lex.pos]
-		if isSpace(cur) {
+		if contentSpace(cur) {
 			lex.pos++
 			continue
 		}
@@ -320,12 +316,12 @@ func (lex *scanner) skipString() error {
 		lex.pos++
 		next, bad := lex.stringStep(cur, depth)
 		if bad {
-			return syntaxErr()
+			return contentSyntax()
 		}
 		depth = next
 	}
 	if depth != 0 {
-		return syntaxErr()
+		return contentSyntax()
 	}
 	return nil
 }
@@ -353,7 +349,7 @@ func (lex *scanner) skipEscape() bool {
 		lex.skipLF()
 		return true
 	}
-	if isOctal(cur) {
+	if contentOctal(cur) {
 		lex.skipOctal()
 	}
 	return true
@@ -367,7 +363,7 @@ func (lex *scanner) skipLF() {
 
 func (lex *scanner) skipOctal() {
 	extra := octalExtra
-	for extra > 0 && lex.pos < len(lex.src) && isOctal(lex.src[lex.pos]) {
+	for extra > 0 && lex.pos < len(lex.src) && contentOctal(lex.src[lex.pos]) {
 		lex.pos++
 		extra--
 	}
@@ -389,7 +385,7 @@ func (lex *scanner) skipHex() error {
 		}
 		lex.pos++
 	}
-	return syntaxErr()
+	return contentSyntax()
 }
 
 func (lex *scanner) skipDict() error {
@@ -410,7 +406,7 @@ func (lex *scanner) skipNested(step func(*int) error) error {
 		}
 	}
 	if depth != 0 {
-		return syntaxErr()
+		return contentSyntax()
 	}
 	return nil
 }
@@ -434,7 +430,7 @@ func (lex *scanner) arrayStep(depth *int) error {
 	case '/':
 		lex.skipName()
 	case '{', '}', ')', '>':
-		return syntaxErr()
+		return contentSyntax()
 	default:
 		lex.skipWord()
 	}
@@ -458,7 +454,7 @@ func (lex *scanner) dictStep(depth *int) error {
 	case '/':
 		lex.skipName()
 	case ']', ')', '{', '}':
-		return syntaxErr()
+		return contentSyntax()
 	default:
 		lex.skipWord()
 	}
@@ -476,7 +472,7 @@ func (lex *scanner) dictAngle(depth *int) error {
 
 func (lex *scanner) dictGreater(depth *int) error {
 	if !lex.startsPair('>') {
-		return syntaxErr()
+		return contentSyntax()
 	}
 	*depth--
 	lex.pos += pairLen
@@ -745,23 +741,23 @@ func (run *runner) popNum(opName string) (float64, error) {
 	return last.num, nil
 }
 
-func zeroToken() token {
-	return token{kind: tokNumber, num: 0, text: ""}
+func zeroToken() ctok {
+	return ctok{kind: tokNumber, num: 0, text: ""}
 }
 
-func numberToken(num float64) token {
-	return token{kind: tokNumber, num: num, text: ""}
+func numberToken(num float64) ctok {
+	return ctok{kind: tokNumber, num: num, text: ""}
 }
 
-func operandToken() token {
-	return token{kind: tokOperand, num: 0, text: ""}
+func operandToken() ctok {
+	return ctok{kind: tokOperand, num: 0, text: ""}
 }
 
-func operatorToken(text string) token {
-	return token{kind: tokOperator, num: 0, text: text}
+func operatorToken(text string) ctok {
+	return ctok{kind: tokOperator, num: 0, text: text}
 }
 
-func syntaxErr() error {
+func contentSyntax() error {
 	return NewError(syntaxOp, errSyntax)
 }
 
@@ -828,7 +824,7 @@ func finiteNumber(text string) (float64, bool) {
 	return num, true
 }
 
-func isSpace(cur byte) bool {
+func contentSpace(cur byte) bool {
 	switch cur {
 	case 0, '\t', '\n', '\f', '\r', ' ':
 		return true
@@ -837,7 +833,7 @@ func isSpace(cur byte) bool {
 	}
 }
 
-func isDelim(cur byte) bool {
+func contentDelim(cur byte) bool {
 	switch cur {
 	case '(', ')', '<', '>', '[', ']', '{', '}', '/', '%':
 		return true
@@ -847,9 +843,9 @@ func isDelim(cur byte) bool {
 }
 
 func isBreak(cur byte) bool {
-	return isSpace(cur) || isDelim(cur)
+	return contentSpace(cur) || contentDelim(cur)
 }
 
-func isOctal(cur byte) bool {
+func contentOctal(cur byte) bool {
 	return cur >= '0' && cur <= '7'
 }

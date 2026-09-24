@@ -7,12 +7,12 @@ import (
 
 // ParseValue reads one PDF value at offset. next is the first byte after that value.
 // A dictionary is KindDict. This function does not consume a stream body.
-func ParseValue(src []byte, offset int) (val Value, next int, err error) {
+func ParseValue(src []byte, offset int) (Value, int, error) {
 	lex, err := newLexer(src, offset)
 	if err != nil {
 		return NullVal(), 0, err
 	}
-	val, err = lex.parseValue()
+	val, err := lex.parseValue()
 	if err != nil {
 		return NullVal(), 0, err
 	}
@@ -24,16 +24,16 @@ func ParseValue(src []byte, offset int) (val Value, next int, err error) {
 // bytes between stream and endstream.
 // /Length must be a direct integer. An indirect Length returns NewError("Length", "syntaxerror").
 // next is the first byte after endobj.
-func ParseIndirect(src []byte, offset int) (num int, gen int, val Value, next int, err error) {
+func ParseIndirect(src []byte, offset int) (int, int, Value, int, error) {
 	lex, err := newLexer(src, offset)
 	if err != nil {
 		return 0, 0, NullVal(), 0, err
 	}
-	num, gen, err = lex.objectHeader()
+	num, gen, err := lex.objectHeader()
 	if err != nil {
 		return 0, 0, NullVal(), 0, err
 	}
-	val, err = lex.parseValue()
+	val, err := lex.parseValue()
 	if err != nil {
 		return 0, 0, NullVal(), 0, err
 	}
@@ -104,14 +104,8 @@ func (lex *lexer) intOrRef(num int64) (Value, error) {
 // takeRef reads "gen R" after an integer, or rewinds so that integer stands alone.
 func (lex *lexer) takeRef(num int64) (Value, bool, error) {
 	mark := lex.pos
-	genTok, err := lex.take()
-	if err != nil || genTok.kind != tokInt {
-		lex.pos = mark
-		return NullVal(), false, nil
-	}
-	word, err := lex.take()
-	if err != nil || word.kind != tokWord || word.text != wordRef {
-		lex.pos = mark
+	genTok, ok := lex.peekRef()
+	if !ok {
 		return NullVal(), false, nil
 	}
 	if num < 0 || genTok.num < 0 {
@@ -127,6 +121,21 @@ func (lex *lexer) takeRef(num int64) (Value, bool, error) {
 		return NullVal(), false, syntaxErr(wordRef)
 	}
 	return RefVal(objNum, gen), true, nil
+}
+
+func (lex *lexer) peekRef() (token, bool) {
+	mark := lex.pos
+	genTok, err := lex.take()
+	if err != nil || genTok.kind != tokInt {
+		lex.pos = mark
+		return endToken(), false
+	}
+	word, err := lex.take()
+	if err != nil || word.kind != tokWord || word.text != wordRef {
+		lex.pos = mark
+		return endToken(), false
+	}
+	return genTok, true
 }
 
 func fitInt(num int64) (int, bool) {

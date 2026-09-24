@@ -88,19 +88,32 @@ func wantClassic(t *testing.T, src []byte, offset int) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	wantTrailerAt(t, src, next, len(entries))
+	wantFreeRow(t, entries[0])
+	wantPlainRow(t, entries[1], 185)
+}
+
+func wantTrailerAt(t *testing.T, src []byte, next, count int) {
+	t.Helper()
 	if next < 0 || next > len(src) || !bytes.HasPrefix(src[next:], []byte("trailer")) {
 		t.Fatalf("next %d", next)
 	}
-	if len(entries) != 2 {
-		t.Fatalf("len %d", len(entries))
+	if count != 2 {
+		t.Fatalf("len %d", count)
 	}
-	free := entries[0]
-	if free.InUse || free.Compressed || free.Offset != 0 || free.Gen != 65535 {
-		t.Fatalf("free %+v", free)
+}
+
+func wantFreeRow(t *testing.T, row XEntry) {
+	t.Helper()
+	if row.InUse || row.Compressed || row.Offset != 0 || row.Gen != 65535 {
+		t.Fatalf("free %+v", row)
 	}
-	used := entries[1]
-	if !used.InUse || used.Compressed || used.Offset != 185 || used.Gen != 0 {
-		t.Fatalf("used %+v", used)
+}
+
+func wantPlainRow(t *testing.T, row XEntry, offset int) {
+	t.Helper()
+	if !row.InUse || row.Compressed || row.Offset != offset || row.Gen != 0 {
+		t.Fatalf("used %+v", row)
 	}
 }
 

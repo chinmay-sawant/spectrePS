@@ -49,14 +49,24 @@ func parseArray(t *testing.T) {
 	if val.Kind != KindArray || next != len(src) || len(val.Array) != 3 {
 		t.Fatalf("array kind %d len %d next %d", val.Kind, len(val.Array), next)
 	}
-	if val.Array[0].Kind != KindInt || val.Array[0].Int != 1 {
-		t.Fatalf("array[0] = %+v", val.Array[0])
+	wantArrayItem(t, val.Array[0], KindInt, "", 1)
+	wantArrayItem(t, val.Array[1], KindString, "hi", 0)
+	wantArrayItem(t, val.Array[2], KindName, "N", 0)
+}
+
+func wantArrayItem(t *testing.T, item Value, kind Kind, text string, number int64) {
+	t.Helper()
+	if item.Kind != kind {
+		t.Fatalf("kind %d want %d", item.Kind, kind)
 	}
-	if val.Array[1].Kind != KindString || val.Array[1].String != "hi" {
-		t.Fatalf("array[1] = %+v", val.Array[1])
+	if kind == KindInt && item.Int != number {
+		t.Fatalf("int %d", item.Int)
 	}
-	if val.Array[2].Kind != KindName || val.Array[2].Name != "N" {
-		t.Fatalf("array[2] = %+v", val.Array[2])
+	if kind == KindString && item.String != text {
+		t.Fatalf("string %q", item.String)
+	}
+	if kind == KindName && item.Name != text {
+		t.Fatalf("name %q", item.Name)
 	}
 }
 
@@ -177,24 +187,35 @@ func parseValueStops(t *testing.T) {
 
 func parseTruncated(t *testing.T) {
 	t.Helper()
-	_, _, _, _, err := ParseIndirect([]byte("1 0 obj"), 0)
-	wantSyntax(t, err)
+	job := mustFailIndirect(t, []byte("1 0 obj"))
+	if job.Name != nameSyntax {
+		t.Fatal(job)
+	}
 	short := []byte("1 0 obj\n<< /Length 5 >>\nstream\nhel")
-	_, _, _, _, err = ParseIndirect(short, 0)
-	wantSyntax(t, err)
+	job = mustFailIndirect(t, short)
+	if job.Name != nameSyntax {
+		t.Fatal(job)
+	}
 	cut := []byte("1 0 obj\n<< /Length 5 >>\nstream\nhello\nendobj")
-	_, _, _, _, err = ParseIndirect(cut, 0)
-	job := wantSyntax(t, err)
+	job = mustFailIndirect(t, cut)
 	if job.Op != wordEndStream {
 		t.Fatalf("Op = %q, want %s", job.Op, wordEndStream)
 	}
 }
 
+func mustFailIndirect(t *testing.T, src []byte) *Error {
+	t.Helper()
+	objNum, _, _, end, err := ParseIndirect(src, 0)
+	if err == nil && objNum == 0 && end == 0 {
+		t.Fatal("expected error")
+	}
+	return wantSyntax(t, err)
+}
+
 func parseIndirectLength(t *testing.T) {
 	t.Helper()
 	src := []byte("1 0 obj\n<< /Length 2 0 R >>\nstream\nhello\nendstream\nendobj")
-	_, _, _, _, err := ParseIndirect(src, 0)
-	job := wantSyntax(t, err)
+	job := mustFailIndirect(t, src)
 	if job.Op != wordLength {
 		t.Fatalf("Op = %q, want %s", job.Op, wordLength)
 	}

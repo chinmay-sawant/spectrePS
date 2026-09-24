@@ -6,8 +6,6 @@ import (
 )
 
 const (
-	opXRef = "xref"
-
 	offsetDigits   = 10
 	xrefWidthCount = 3
 	byteShift      = 8
@@ -206,10 +204,6 @@ func (cur *xrefCursor) skipSpace() {
 	for cur.pos < len(cur.src) && isPDFSpace(cur.src[cur.pos]) {
 		cur.pos++
 	}
-}
-
-func isDigit(one byte) bool {
-	return one >= '0' && one <= '9'
 }
 
 func isPDFSpace(one byte) bool {

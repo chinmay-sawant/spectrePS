@@ -2,7 +2,7 @@ package spectreps_test
 
 import (
 	"bytes"
-	"compress/flate"
+	"compress/zlib"
 	"errors"
 	"fmt"
 	"testing"
@@ -108,10 +108,7 @@ func flateStream(t *testing.T, content string) []byte {
 func flateBytes(t *testing.T, plain []byte) []byte {
 	t.Helper()
 	var body bytes.Buffer
-	writer, err := flate.NewWriter(&body, flate.DefaultCompression)
-	if err != nil {
-		t.Fatal(err)
-	}
+	writer := zlib.NewWriter(&body)
 	if _, err := writer.Write(plain); err != nil {
 		t.Fatal(err)
 	}
