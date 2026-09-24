@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"compress/flate"
+	"fmt"
 	"image"
 	"image/png"
 	"os"
@@ -95,9 +97,25 @@ func TestRaster(t *testing.T) {
 }
 
 func TestRewrite(t *testing.T) {
-	path := writeTemp(t, "in.pdf", []byte("%PDF"))
+	path := writeTemp(t, "in.pdf", onePagePDF(t, "0 0 m 10 0 l S"))
 	wantCode(t, []string{"rewrite", path}, 2)
 	want(t, []string{"rewrite", "-o", "out.pdf", path}, 1, "", notImplemented)
+}
+
+func TestRasterPDF(t *testing.T) {
+	src := writeTemp(t, "in.pdf", onePagePDF(t, "0 0 m 10 0 l S"))
+	out := filepath.Join(t.TempDir(), "out.ppm")
+	want(t, []string{"raster", "-o", out, "-w", "20", "-h", "20", "-r", "72", src}, 0, "", "")
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(got, []byte("P6")) {
+		t.Fatalf("ppm prefix %q", ppmPrefix(got))
+	}
+	empty := writeTemp(t, "empty.pdf", emptyKidsPDF(t))
+	emptyOut := filepath.Join(t.TempDir(), "empty.ppm")
+	want(t, []string{"raster", "-o", emptyOut, "-w", "20", "-h", "20", "-r", "72", empty}, 1, "", "Error: /rangecheck in RasterizePage\n")
 }
 
 func TestValidate(t *testing.T) {
@@ -256,5 +274,118 @@ func TestCompareSameOptions(t *testing.T) {
 	}
 	if spectreps.CompareRaster(low[0], high[0]).Equal {
 		t.Fatal("program did not change with resolution")
+	}
+}
+
+func ppmPrefix(got []byte) []byte {
+	if len(got) > 16 {
+		return got[:16]
+	}
+	return got
+}
+
+func onePagePDF(t *testing.T, content string) []byte {
+	t.Helper()
+	objects := [][]byte{
+		[]byte("<< /Type /Catalog /Pages 2 0 R >>"),
+		[]byte("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+		[]byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 20 20] /Contents 4 0 R /Resources << >> >>"),
+		flateStream(t, content),
+	}
+	return classicXref(t, objects)
+}
+
+func emptyKidsPDF(t *testing.T) []byte {
+	t.Helper()
+	objects := [][]byte{
+		[]byte("<< /Type /Catalog /Pages 2 0 R >>"),
+		[]byte("<< /Type /Pages /Kids [ ] /Count 0 >>"),
+	}
+	return classicXref(t, objects)
+}
+
+func flateStream(t *testing.T, content string) []byte {
+	t.Helper()
+	compressed := flateBytes(t, []byte(content))
+	var body bytes.Buffer
+	writef(t, &body, "<< /Length %d /Filter /FlateDecode >>\nstream\n", len(compressed))
+	writeAll(t, &body, compressed)
+	writeString(t, &body, "\nendstream")
+	return body.Bytes()
+}
+
+func flateBytes(t *testing.T, plain []byte) []byte {
+	t.Helper()
+	var body bytes.Buffer
+	writer, err := flate.NewWriter(&body, flate.DefaultCompression)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Write(plain); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return body.Bytes()
+}
+
+// classicXref writes a classic xref. Each entry is 20 bytes, including the end-of-line.
+func classicXref(t *testing.T, objects [][]byte) []byte {
+	t.Helper()
+	var body bytes.Buffer
+	writeString(t, &body, "%PDF-1.4\n")
+	offsets := make([]int, 1, len(objects)+1)
+	for i, object := range objects {
+		offsets = append(offsets, body.Len())
+		writef(t, &body, "%d 0 obj\n", i+1)
+		writeAll(t, &body, object)
+		writeString(t, &body, "\nendobj\n")
+	}
+	xrefAt := body.Len()
+	writef(t, &body, "xref\n0 %d\n", len(offsets))
+	writeString(t, &body, "0000000000 65535 f \n")
+	for _, offset := range offsets[1:] {
+		writef(t, &body, "%010d 00000 n \n", offset)
+	}
+	writef(t, &body, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n", len(offsets), xrefAt)
+	writeString(t, &body, "%%EOF\n")
+	pdf := body.Bytes()
+	checkObjectOffsets(t, pdf, offsets)
+	return pdf
+}
+
+func checkObjectOffsets(t *testing.T, pdf []byte, offsets []int) {
+	t.Helper()
+	for i, offset := range offsets {
+		if i == 0 {
+			continue
+		}
+		want := fmt.Sprintf("%d 0 obj\n", i)
+		end := offset + len(want)
+		if end > len(pdf) || string(pdf[offset:end]) != want {
+			t.Fatalf("object %d at %d", i, offset)
+		}
+	}
+}
+
+func writef(t *testing.T, body *bytes.Buffer, format string, args ...any) {
+	t.Helper()
+	if _, err := fmt.Fprintf(body, format, args...); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeAll(t *testing.T, body *bytes.Buffer, data []byte) {
+	t.Helper()
+	if _, err := body.Write(data); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeString(t *testing.T, body *bytes.Buffer, text string) {
+	t.Helper()
+	if _, err := body.WriteString(text); err != nil {
+		t.Fatal(err)
 	}
 }

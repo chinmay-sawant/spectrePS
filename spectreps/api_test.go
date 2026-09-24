@@ -95,16 +95,17 @@ func checkNotImplemented(
 	t.Helper()
 
 	doc, err := in.OpenPDF(t.Context(), src)
-	if !errors.Is(err, spectreps.ErrNotImplemented) {
-		t.Fatalf("OpenPDF() error = %v, want ErrNotImplemented", err)
+	var job spectreps.JobError
+	if errors.Is(err, spectreps.ErrNotImplemented) || !errors.As(err, &job) {
+		t.Fatalf("OpenPDF() error = %v, want JobError", err)
 	}
 	if doc != nil {
 		t.Fatalf("OpenPDF() document = %#v, want nil", doc)
 	}
 
 	img, err := in.RasterizePage(t.Context(), nil, 0, opt)
-	if !errors.Is(err, spectreps.ErrNotImplemented) {
-		t.Fatalf("RasterizePage() error = %v, want ErrNotImplemented", err)
+	if errors.Is(err, spectreps.ErrNotImplemented) || !errors.As(err, &job) || job.Msg != "rangecheck" {
+		t.Fatalf("RasterizePage() error = %v, want rangecheck", err)
 	}
 	requireZeroPageImage(t, img)
 
