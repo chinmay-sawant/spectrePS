@@ -201,13 +201,6 @@ func opEnd(ctx context.Context, interp *Interp) error {
 	return nil
 }
 
-func opMark(ctx context.Context, interp *Interp) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return interp.Push(MarkObj())
-}
-
 func opEndArray(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err

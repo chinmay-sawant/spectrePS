@@ -41,6 +41,8 @@ func NewInterp() *Interp {
 	}
 	registerValueOps(interp)
 	registerFlowOps(interp)
+	system.putNew("systemdict", DictObj(system))
+	system.putNew("userdict", DictObj(user))
 	return interp
 }
 

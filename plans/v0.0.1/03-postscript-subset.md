@@ -1,7 +1,7 @@
 # v0.0.2 - PostScript subset
 
 > **Parent:** `plans/v0.0.1/00-program.md` - program ledger
-> **Status:** not started
+> **Status:** implemented. Lint and test passed on 2026-09-24. `RunPostScript` still returns `ErrNotImplemented`.
 > **Estimated effort:** 1 to 2 weeks
 
 ---
@@ -20,36 +20,36 @@ The reader scans `{ ... }` into an executable array and does not run it. Names a
 
 ### 3.1 Scanner
 
-- [ ] `internal/ps` scans integers, reals, executable names, literal names, comments, parenthesis strings with the escapes listed in `documentation/language.md`, and hex strings. An int token outside int32 is `rangecheck` at scan time. Proof: `go test -count=1 ./internal/ps -run TestScan`
+- [x] `internal/ps` scans integers, reals, executable names, literal names, comments, parenthesis strings with the escapes listed in `documentation/language.md`, and hex strings. An int token outside int32 is `rangecheck` at scan time. Proof: `go test -count=1 ./internal/ps -run TestScan` exited 0 on 2026-09-24.
 
 ### 3.2 Procedures
 
-- [ ] The reader builds nested executable arrays for `{ { 1 2 add } }`. The outer array has one element, and that element is an executable array. Braces that do not match return `syntaxerror`. Proof: `go test -count=1 ./internal/ps -run TestProcedure`
+- [x] The reader builds nested executable arrays for `{ { 1 2 add } }`. The outer array has one element, and that element is an executable array. Braces that do not match return `syntaxerror`. Proof: `go test -count=1 ./internal/ps -run TestProcedure` exited 0 on 2026-09-24.
 
 ### 3.3 Execution rule
 
-- [ ] Top-level `1 2 add` leaves 3. `{ 1 2 add }` leaves a procedure. `{ 1 2 add } exec` leaves 3. `{ { 1 2 add } } exec` leaves the inner procedure and does not run `add`. Proof: `go test -count=1 ./internal/ps -run TestExecRule`
+- [x] Top-level `1 2 add` leaves 3. `{ 1 2 add }` leaves a procedure. `{ 1 2 add } exec` leaves 3. `{ { 1 2 add } } exec` leaves the inner procedure and does not run `add`. Proof: `go test -count=1 ./internal/ps -run TestExecRule` exited 0 on 2026-09-24.
 
 ### 3.4 Late lookup
 
-- [ ] A procedure built while `/test` prints one value, then redefined, runs the new value. Lookup is not frozen at scan time. Proof: `go test -count=1 ./internal/ps -run TestLateLookup`
+- [x] A procedure built while `/test` has one value, then redefined, runs the new value. Lookup is not frozen at scan time. Proof: `go test -count=1 ./internal/ps -run TestLateLookup` exited 0 on 2026-09-24.
 
 ### 3.5 Stack, math, dict, control
 
-- [ ] Stack, math, compare, array, dictionary, and control operators from `documentation/language.md` match the error names in that file. `div` pushes a real. Division by zero is `undefinedresult`. Integer overflow is `rangecheck`. `copy` is the count form only. Proof: `go test -count=1 ./internal/ps -run 'TestStack|TestMath|TestDict|TestControl'`
+- [x] Stack, math, compare, array, dictionary, and control operators from `documentation/language.md` match the error names in that file. `div` pushes a real. Division by zero is `undefinedresult`. Integer overflow is `rangecheck`. `copy` is the count form only. Proof: `go test -count=1 ./internal/ps -run 'TestStack|TestMath|TestDict|TestControl'` exited 0 on 2026-09-24.
 
 ### 3.6 Banned operators
 
-- [ ] `file`, `run`, `deletefile`, `renamefile`, `filenameforall` are defined and return `invalidaccess`. An unknown name such as `show` returns `undefined`. Proof: `go test -count=1 ./internal/ps -run TestBanned`
+- [x] `file`, `run`, `deletefile`, `renamefile`, `filenameforall` are defined and return `invalidaccess`. An unknown name such as `show` returns `undefined`. Proof: `go test -count=1 ./internal/ps -run TestBanned` exited 0 on 2026-09-24.
 
 ### 3.7 Limits
 
-- [ ] Operand stack 8192, execution stack 500, dictionary stack 20, and procedure nesting 128 return `limitcheck` or `stackoverflow` as named in the language file. A cancelled context returns `ctx.Err()`. Proof: `go test -count=1 ./internal/ps -run TestLimits`
+- [x] Operand stack 8192, execution stack 500, dictionary stack 20, and procedure nesting 128 return `limitcheck` or `stackoverflow` as named in the language file. A cancelled context returns `ctx.Err()`. Proof: `go test -count=1 ./internal/ps -run TestLimits` exited 0 on 2026-09-24.
 
 ### 3.8 Closure
 
-- [ ] `make lint` passes. Record the outcome here.
-- [ ] `make test` passes. Record the outcome here.
+- [x] `make lint` passes. Outcome on 2026-09-24: exit 0. `gofmt -l .` printed nothing. `golangci-lint run ./...` exited 0.
+- [x] `make test` passes. Outcome on 2026-09-24: exit 0. `go test ./...` passed `internal/cli`, `internal/ps`, and `spectreps`. `internal/ps` took 0.009s.
 
 ## Dependencies
 

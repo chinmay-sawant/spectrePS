@@ -9,7 +9,6 @@ import (
 const (
 	defaultLineWidth = 1
 	maxGSaveDepth    = 32
-	maxPathPoints    = 100000
 	halfTurnDegrees  = 180
 	opSetRGB         = "setrgbcolor"
 	paintStroke      = "stroke"

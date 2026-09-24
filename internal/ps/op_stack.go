@@ -16,7 +16,6 @@ const (
 	errSyntax          = "syntaxerror"
 
 	noStringVal  = "--nostringval--"
-	decBase      = 10
 	bitSize64    = 64
 	maxByteValue = 255
 	roundHalf    = 0.5

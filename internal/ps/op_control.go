@@ -11,8 +11,6 @@ const (
 	errTypeCheck     = "typecheck"
 	errRangeCheck    = "rangecheck"
 	errLimitCheck    = "limitcheck"
-	errUndefined     = "undefined"
-	errUnmatchedMark = "unmatchedmark"
 	errInvalidAccess = "invalidaccess"
 	errInvalidExit   = "invalidexit"
 	errNoCurrentPt   = "nocurrentpoint"
@@ -396,11 +394,6 @@ func insideLoop(interp *Interp) bool {
 
 func isExitErr(err error) bool {
 	return isErrName(err, exitErrName)
-}
-
-func zeroObj() Object {
-	var obj Object
-	return obj
 }
 
 func isErrName(err error, name string) bool {

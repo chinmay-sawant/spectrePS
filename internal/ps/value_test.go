@@ -10,13 +10,13 @@ func TestStack(t *testing.T) {
 		assertPSError(t, "pop", "stackunderflow")
 	})
 	t.Run("dup", func(t *testing.T) {
-		assertInts(t, assertRun(t, "1 dup"), 1, 1)
+		assertIntValues(t, assertRun(t, "1 dup"), 1, 1)
 	})
 	t.Run("exch", func(t *testing.T) {
-		assertInts(t, assertRun(t, "1 2 exch"), 2, 1)
+		assertIntValues(t, assertRun(t, "1 2 exch"), 2, 1)
 	})
 	t.Run("copy", func(t *testing.T) {
-		assertInts(t, assertRun(t, "1 2 3 2 copy"), 1, 2, 3, 2, 3)
+		assertIntValues(t, assertRun(t, "1 2 3 2 copy"), 1, 2, 3, 2, 3)
 	})
 	t.Run("copy typecheck", func(t *testing.T) {
 		assertPSError(t, "1 2 3.5 copy", "typecheck")
@@ -25,10 +25,10 @@ func TestStack(t *testing.T) {
 		assertPSError(t, "]", "unmatchedmark")
 	})
 	t.Run("cleartomark", func(t *testing.T) {
-		assertInts(t, assertRun(t, "1 mark 2 3 cleartomark"), 1)
+		assertIntValues(t, assertRun(t, "1 mark 2 3 cleartomark"), 1)
 	})
 	t.Run("count", func(t *testing.T) {
-		assertInts(t, assertRun(t, "1 2 count"), 1, 2, 2)
+		assertIntValues(t, assertRun(t, "1 2 count"), 1, 2, 2)
 	})
 }
 
@@ -44,7 +44,7 @@ func TestMath(t *testing.T) {
 		assertPSError(t, "2147483647 1 add", "rangecheck")
 	})
 	t.Run("add", func(t *testing.T) {
-		assertInts(t, assertRun(t, "1 2 add"), 3)
+		assertIntValues(t, assertRun(t, "1 2 add"), 3)
 	})
 	t.Run("sqrt negative", func(t *testing.T) {
 		assertPSError(t, "-4 sqrt", "undefinedresult")
@@ -74,7 +74,7 @@ func assertPSError(t *testing.T, src, name string) {
 	}
 }
 
-func assertInts(t *testing.T, got []Object, want ...int32) {
+func assertIntValues(t *testing.T, got []Object, want ...int32) {
 	t.Helper()
 	if len(got) != len(want) {
 		t.Fatalf("len = %d, want %d (%+v)", len(got), len(want), got)

@@ -22,6 +22,27 @@ func TestExecRule(t *testing.T) {
 	})
 }
 
+func TestProcedure(t *testing.T) {
+	outer := wantExecArray(t, execSrc(t, "{ { 1 2 add } }"))
+	if len(outer.Arr.Elems) != 1 {
+		t.Fatalf("outer len = %d, want 1", len(outer.Arr.Elems))
+	}
+	inner := outer.Arr.Elems[0]
+	if inner.Kind != KindArray || inner.Arr == nil || !inner.Arr.Exec {
+		t.Fatalf("inner = %#v, want executable array", inner)
+	}
+	wantAddBody(t, inner.Arr)
+
+	for _, src := range []string{"{", "}", "{ 1", "1 }"} {
+		interp := NewInterp()
+		err := interp.Run(t.Context(), []byte(src))
+		got, ok := psError(err)
+		if !ok || got.Name != "syntaxerror" {
+			t.Fatalf("Run(%q) error = %v, want syntaxerror", src, err)
+		}
+	}
+}
+
 func TestLateLookup(t *testing.T) {
 	const src = "/test 1 def\n/proc { test } def\n/test 2 def\nproc\n"
 	wantOneInt(t, execSrc(t, src), 2)
