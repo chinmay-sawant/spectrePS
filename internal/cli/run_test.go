@@ -508,3 +508,49 @@ func writeString(t *testing.T, body *bytes.Buffer, text string) {
 		t.Fatal(err)
 	}
 }
+
+func TestBBox(t *testing.T) {
+	square := "0 0 moveto 10 0 lineto 10 10 lineto 0 10 lineto closepath fill"
+	white := "%%BoundingBox: 0 0 0 0\n%%HiResBoundingBox: 0 0 0 0\n"
+	marked := "%%BoundingBox: 0 0 10 10\n%%HiResBoundingBox: 0 0 10 10\n"
+
+	path := writeTemp(t, "square.ps", []byte(square))
+	want(t, []string{"bbox", "-w", "20", "-h", "20", "-r", "72", path}, 0, marked, "")
+	want(t, []string{"bbox", "-w", "20", "-h", "20", path}, 0, marked, "")
+
+	missing := filepath.Join(t.TempDir(), "missing.ps")
+	wantCode(t, []string{"bbox", "-w", "20", "-h", "20", "-r", "72", missing}, 2)
+
+	blank := writeTemp(t, "blank.ps", []byte(""))
+	want(t, []string{"bbox", "-w", "20", "-h", "20", "-r", "72", blank}, 0, white, "")
+
+	two := writeTemp(t, "two.ps", []byte("showpage "+square+" showpage"))
+	want(t, []string{"bbox", "-w", "20", "-h", "20", "-r", "72", two}, 0, white+marked, "")
+
+	pdf := writeTemp(t, "square.pdf", onePagePDF(t, "0 0 m 10 0 l 10 10 l 0 10 l h f"))
+	want(t, []string{"bbox", "-w", "20", "-h", "20", "-r", "72", pdf}, 0, marked, "")
+}
+
+func TestInkcov(t *testing.T) {
+	square := "0 0 moveto 10 0 lineto 10 10 lineto 0 10 lineto closepath fill"
+	white := "Page 1\n0.00000 0.00000 0.00000 RGB\n"
+	quarter := "Page 1\n0.25000 0.25000 0.25000 RGB\n"
+
+	path := writeTemp(t, "square.ps", []byte(square))
+	want(t, []string{"inkcov", "-w", "20", "-h", "20", "-r", "72", path}, 0, quarter, "")
+	want(t, []string{"inkcov", "-w", "20", "-h", "20", path}, 0, quarter, "")
+
+	missing := filepath.Join(t.TempDir(), "missing.ps")
+	wantCode(t, []string{"inkcov", "-w", "20", "-h", "20", "-r", "72", missing}, 2)
+
+	blank := writeTemp(t, "blank.ps", []byte(""))
+	want(t, []string{"inkcov", "-w", "20", "-h", "20", "-r", "72", blank}, 0, white, "")
+
+	two := writeTemp(t, "two.ps", []byte("showpage "+square+" showpage"))
+	want(t, []string{"inkcov", "-w", "20", "-h", "20", "-r", "72", two}, 0,
+		white+"Page 2\n0.25000 0.25000 0.25000 RGB\n", "")
+
+	red := "Page 1\n0.00000 1.00000 1.00000 RGB\n"
+	pdf := writeTemp(t, "red.pdf", onePagePDF(t, "1 0 0 rg 0 0 20 20 re f"))
+	want(t, []string{"inkcov", "-w", "20", "-h", "20", "-r", "72", pdf}, 0, red, "")
+}

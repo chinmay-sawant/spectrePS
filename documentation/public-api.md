@@ -43,6 +43,19 @@ type CompareResult struct {
     Reason string
 }
 
+type Box struct {
+    MinX float64
+    MinY float64
+    MaxX float64
+    MaxY float64
+}
+
+type Ink struct {
+    R float64
+    G float64
+    B float64
+}
+
 var ErrNotImplemented = errors.New("spectreps: not implemented")
 
 type JobError struct {
@@ -73,9 +86,12 @@ func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOp
 
 func CompareFiles(a, b []byte) CompareResult
 func CompareRaster(a, b PageImage) CompareResult
+
+func MeasureBox(img PageImage, dpi float64) (Box, bool)
+func MeasureInk(img PageImage) Ink
 ```
 
-`CompareFiles` and `CompareRaster` do not take an `Instance`.
+`CompareFiles` and `CompareRaster` do not take an `Instance`. `MeasureBox` and `MeasureInk` do not take one either.
 
 `CompareFiles` rules:
 
@@ -89,6 +105,21 @@ func CompareRaster(a, b PageImage) CompareResult
 - Different `Width` or `Height` sets `Equal` false, `Offset` -1, `Reason` `width` or `height`. Width is checked first.
 - Same dimensions and different RGB bytes set `Reason` `pixel` and `Offset` to the first byte index in row-major order, ignoring stride padding.
 - Stride padding is not compared.
+
+`MeasureBox` and `MeasureInk` read a finished `PageImage`. They do not paint a second time and they add no operator.
+
+`MeasureBox` rules:
+
+- The box is the union of marked pixels in points, origin at the lower left.
+- A pixel marks when any of R, G, or B is not 255. Stride padding is ignored.
+- Column `c` spans `c*72/dpi` to `(c+1)*72/dpi`. Row 0 is the top, so pixel row `r` spans `(height-r-1)*72/dpi` to `(height-r)*72/dpi`.
+- `dpi` of 0 or less selects 72. No marked pixel returns the zero `Box` and false.
+
+`MeasureInk` rules:
+
+- Each field is the fraction of pixels whose channel byte is not 255. The denominator is `Width * Height`.
+- Stride padding is ignored. A zero-size image returns the zero `Ink`.
+- The channels are RGB occupancy, not CMYK, and not Ghostscript `ink_cov` amounts.
 
 A cancelled `ctx` returns `ctx.Err()` and no partial success. `nil` context is a programming error and panics. The CLI always passes a real context.
 

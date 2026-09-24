@@ -10,6 +10,8 @@ The CLI is a caller of package `spectreps`. Flags exist to fill `RunOptions`, `R
 spectreps version
 spectreps run [options] file.ps
 spectreps raster [options] file.ps|file.pdf
+spectreps bbox [options] file.ps|file.pdf
+spectreps inkcov [options] file.ps|file.pdf
 spectreps rewrite [options] file.pdf
 spectreps validate [options] file.ps|file.pdf
 spectreps compare bytes fileA fileB
@@ -18,7 +20,7 @@ spectreps compare raster [options] fileA fileB
 
 `version` prints `0.0.1` until the first tag that bumps `Version`, then prints that constant. Exit 0.
 
-Shared options for `run`, `raster`, and `compare raster`:
+Shared options for `run`, `raster`, `compare raster`, `bbox`, and `inkcov`:
 
 | Flag | Meaning | Default |
 | --- | --- | --- |
@@ -26,6 +28,8 @@ Shared options for `run`, `raster`, and `compare raster`:
 | `-h` | Page height in points | 792 |
 | `-r` | Pixels per inch | 72 |
 | `-o` | Output path | required for `raster` |
+
+`bbox` and `inkcov` write their report to stdout and do not write a file.
 
 `rewrite` options:
 
@@ -44,6 +48,24 @@ Shared options for `run`, `raster`, and `compare raster`:
 
 If the job produces one page and `-o` has no `%d`, the path is used as given. If the job produces more than one page and `-o` has no `%d`, the command exits 2. `%d` is the one-based page number, matching the `%d` token Ghostscript documents for `-sOutputFile`.
 
+`bbox` writes two lines per page to stdout:
+
+```
+%%BoundingBox: 0 0 10 10
+%%HiResBoundingBox: 0 0 10 10
+```
+
+`%%BoundingBox` uses the floor of each minimum and the ceiling of each maximum. `%%HiResBoundingBox` prints the point edges with `strconv.FormatFloat(v, 'f', -1, 64)`. A page with no marked pixel prints `%%BoundingBox: 0 0 0 0` and `%%HiResBoundingBox: 0 0 0 0`. The measured dpi is the resolved `-r`, so 0 selects 72.
+
+`inkcov` writes two lines per page to stdout, page numbers one-based:
+
+```
+Page 1
+0.25000 0.25000 0.25000 RGB
+```
+
+The three fractions are RGB occupancy with five digits after the point. They are not CMYK, and the line does not end in `CMYK OK`.
+
 `rewrite` writes one PDF.
 
 ## Exit codes
@@ -54,6 +76,8 @@ If the job produces one page and `-o` has no `%d`, the path is used as given. If
 | 1 | `JobError`, `ErrNotImplemented`, or a compare mismatch. |
 | 2 | Usage. Missing file, unknown flag, unknown command, missing `-o`. |
 | 3 | A read or write failed before the interpreter ran. |
+
+`bbox` and `inkcov` exit 0 after printing every page, 1 on an interpreter error, and 2 on a missing input or a bad flag.
 
 Mismatch text for compare, one line on stdout:
 

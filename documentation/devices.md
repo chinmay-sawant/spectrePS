@@ -22,6 +22,14 @@ Anti-aliasing is off in this ledger. There is no `TextAlphaBits` equivalent yet.
 
 A mismatch is exit code 1. It is not an interpreter error.
 
+## Box and ink coverage
+
+`MeasureBox` and `MeasureInk` read a finished `PageImage`. They do not paint a second time and they add no operator.
+
+The box is the union of marked pixels in points, origin at the lower left. A pixel marks when any of R, G, or B is not 255. `dpi` of 0 selects 72.
+
+Ink output is RGB occupancy: the fraction of pixels marked in each of R, G, and B. The pixmap is RGB, not CMYK, so the CLI line ends in `RGB` and not `CMYK OK`. These numbers are occupancy fractions, not Ghostscript `ink_cov` weighted amounts.
+
 ## Rewrite
 
 `RewritePDF` builds a new PDF from drawing operations on a `Document`. Stream compression uses `compress/flate` when `CompressStreams` is true. The CLI default is true.
