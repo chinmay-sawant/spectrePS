@@ -15,6 +15,7 @@ cmd/spectreps/main.go
 internal/cli/
 internal/engine/
 internal/graphics/
+internal/pdf/
 internal/ps/
 spectreps/
 testdata/
