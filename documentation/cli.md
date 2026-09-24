@@ -28,6 +28,14 @@ Shared options for `run`, `raster`, `pdfimage`, and `compare raster`:
 | `-r` | Pixels per inch | 72 |
 | `-o` | Output path | required for `raster` and `pdfimage` |
 
+`raster` adds one flag:
+
+| Flag | Meaning | Default |
+| --- | --- | --- |
+| `-jpegq` | JPEG quality, clamped to 1 through 100 | 75 |
+
+`run` and `compare raster` do not accept `-jpegq`.
+
 `rewrite` options:
 
 | Flag | Meaning | Default |
@@ -41,7 +49,9 @@ Shared options for `run`, `raster`, `pdfimage`, and `compare raster`:
 
 ## Output files
 
-`raster` writes a PPM raw file (P6) unless `-o` ends in `.png`, in which case it writes a PNG from the same pixels.
+`raster` writes a PPM raw file (P6) unless `-o` ends in `.png`, `.jpg`, or `.jpeg`.
+
+A `.png` output encodes the pixmap with `image/png`. A `.jpg` or `.jpeg` output encodes the same pixmap with `image/jpeg` at the `-jpegq` quality. Every other suffix falls back to PPM. JPEG is lossy, so decoded pixels can differ from the pixmap by a small amount. JPEG file bytes are not an equality oracle. `CompareRaster` and `PageImage` are.
 
 If the job produces one page and `-o` has no `%d`, the path is used as given. If the job produces more than one page and `-o` has no `%d`, the command exits 2. `%d` is the one-based page number, matching the `%d` token Ghostscript documents for `-sOutputFile`.
 

@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"image"
+	"image/jpeg"
 	"image/png"
 	"io"
 	"io/fs"
@@ -23,10 +24,13 @@ const (
 	exitUsage = 2
 	exitIO    = 3
 
-	comparePaths   = 2
-	rasterFileMode = 0o600
-	rgbChannels    = 3
-	rgbaChannels   = 4
+	comparePaths       = 2
+	rasterFileMode     = 0o600
+	rgbChannels        = 3
+	rgbaChannels       = 4
+	jpegDefaultQuality = 75
+	jpegMinQuality     = 1
+	jpegMaxQuality     = 100
 )
 
 // Run parses args and returns the process exit code.
@@ -59,7 +63,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 func usage(w io.Writer) {
 	fmt.Fprint(w, `spectreps version
 spectreps run [-w points] [-h points] [-r dpi] [-o path] file
-spectreps raster [-w points] [-h points] [-r dpi] -o path file
+spectreps raster [-w points] [-h points] [-r dpi] [-jpegq quality] -o path file
 spectreps pdfimage [-w points] [-h points] [-r dpi] -o path file
 spectreps rewrite [-compress] -o path file.pdf
 spectreps validate file
@@ -78,7 +82,7 @@ func cmdVersion(args []string, stdout, stderr io.Writer) int {
 }
 
 func cmdRun(args []string, stderr io.Writer) int {
-	rest, opt, outPath, code := parsePageFlags("run", args, stderr)
+	rest, opt, code := parsePageFlags("run", args, stderr)
 	if code != 0 {
 		return code
 	}
@@ -86,8 +90,6 @@ func cmdRun(args []string, stderr io.Writer) int {
 		usage(stderr)
 		return exitUsage
 	}
-	// Accepted and ignored until the command writes a file.
-	_ = outPath
 	return withInput(stderr, rest[0], func(ctx context.Context, in *spectreps.Instance, src []byte) error {
 		_, err := in.RunPostScript(ctx, src, opt)
 		return err
@@ -95,13 +97,24 @@ func cmdRun(args []string, stderr io.Writer) int {
 }
 
 func cmdRaster(args []string, stderr io.Writer) int {
-	rest, opt, outPath, code := parsePageFlags("raster", args, stderr)
+	set := newFlagSet("raster", stderr)
+	w := set.Float64("w", 0, "page width in points")
+	h := set.Float64("h", 0, "page height in points")
+	r := set.Int("r", 0, "pixels per inch")
+	outPath := set.String("o", "", "output path")
+	jpegq := set.Int("jpegq", jpegDefaultQuality, "jpeg quality, 1 to 100")
+	rest, code := parseSet(set, args)
 	if code != 0 {
 		return code
 	}
-	if len(rest) != 1 || outPath == "" {
+	if len(rest) != 1 || *outPath == "" {
 		usage(stderr)
 		return exitUsage
+	}
+	opt := spectreps.RunOptions{
+		PageWidthPt:   *w,
+		PageHeightPt:  *h,
+		ResolutionDPI: *r,
 	}
 	path := rest[0]
 	in, code := newInstance(stderr)
@@ -129,17 +142,27 @@ func cmdRaster(args []string, stderr io.Writer) int {
 	if err != nil {
 		return finish(stderr, err)
 	}
-	return writePages(outPath, pages, stderr)
+	return writePages(*outPath, pages, clampJPEGQuality(*jpegq), stderr)
 }
 
 func cmdPDFImage(args []string, stderr io.Writer) int {
-	rest, opt, outPath, code := parsePageFlags("pdfimage", args, stderr)
+	set := newFlagSet("pdfimage", stderr)
+	w := set.Float64("w", 0, "page width in points")
+	h := set.Float64("h", 0, "page height in points")
+	r := set.Int("r", 0, "pixels per inch")
+	outPath := set.String("o", "", "output path")
+	rest, code := parseSet(set, args)
 	if code != 0 {
 		return code
 	}
-	if len(rest) != 1 || outPath == "" {
+	if len(rest) != 1 || *outPath == "" {
 		usage(stderr)
 		return exitUsage
+	}
+	opt := spectreps.RunOptions{
+		PageWidthPt:   *w,
+		PageHeightPt:  *h,
+		ResolutionDPI: *r,
 	}
 	path := rest[0]
 	in, code := newInstance(stderr)
@@ -159,7 +182,7 @@ func cmdPDFImage(args []string, stderr io.Writer) int {
 	if err != nil {
 		return finish(stderr, err)
 	}
-	return writeRewrite(outPath, payload, stderr)
+	return writeRewrite(*outPath, payload, stderr)
 }
 
 // pdfImagePages paints every page with the raster path. A .pdf input uses
@@ -336,7 +359,7 @@ func cmdCompareBytes(args []string, stdout, stderr io.Writer) int {
 }
 
 func cmdCompareRaster(args []string, stdout, stderr io.Writer) int {
-	rest, opt, outPath, code := parsePageFlags("compare raster", args, stderr)
+	rest, opt, code := parsePageFlags("compare raster", args, stderr)
 	if code != 0 {
 		return code
 	}
@@ -344,7 +367,6 @@ func cmdCompareRaster(args []string, stdout, stderr io.Writer) int {
 		usage(stderr)
 		return exitUsage
 	}
-	_ = outPath
 	in, code := newInstance(stderr)
 	if code != 0 {
 		return code
@@ -395,7 +417,7 @@ func rasterPair(
 	return spectreps.CompareRaster(left[0], right[0]), nil
 }
 
-func writePages(outPath string, pages []spectreps.PageImage, stderr io.Writer) int {
+func writePages(outPath string, pages []spectreps.PageImage, jpegQuality int, stderr io.Writer) int {
 	if len(pages) > 1 && !strings.Contains(outPath, "%d") {
 		fmt.Fprintln(stderr, "spectreps: multiple pages need a page number in the output path")
 		return exitUsage
@@ -405,16 +427,10 @@ func writePages(outPath string, pages []spectreps.PageImage, stderr io.Writer) i
 		if strings.Contains(path, "%d") {
 			path = strings.ReplaceAll(path, "%d", strconv.Itoa(i+1))
 		}
-		var payload []byte
-		if strings.HasSuffix(path, ".png") {
-			var err error
-			payload, err = encodePNG(page)
-			if err != nil {
-				fmt.Fprintln(stderr, err.Error())
-				return exitIO
-			}
-		} else {
-			payload = encodePPM(page)
+		payload, err := encodePage(path, page, jpegQuality)
+		if err != nil {
+			fmt.Fprintln(stderr, err.Error())
+			return exitIO
 		}
 		if err := os.WriteFile(path, payload, rasterFileMode); err != nil {
 			fmt.Fprintln(stderr, err.Error())
@@ -425,6 +441,17 @@ func writePages(outPath string, pages []spectreps.PageImage, stderr io.Writer) i
 		}
 	}
 	return exitOK
+}
+
+func encodePage(path string, page spectreps.PageImage, jpegQuality int) ([]byte, error) {
+	switch {
+	case strings.HasSuffix(path, ".png"):
+		return encodePNG(page)
+	case strings.HasSuffix(path, ".jpg"), strings.HasSuffix(path, ".jpeg"):
+		return encodeJPEG(page, jpegQuality)
+	default:
+		return encodePPM(page), nil
+	}
 }
 
 func encodePPM(img spectreps.PageImage) []byte {
@@ -438,6 +465,22 @@ func encodePPM(img spectreps.PageImage) []byte {
 }
 
 func encodePNG(img spectreps.PageImage) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, rgbaFromPage(img)); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func encodeJPEG(img spectreps.PageImage, quality int) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, rgbaFromPage(img), &jpeg.Options{Quality: quality}); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func rgbaFromPage(img spectreps.PageImage) *image.RGBA {
 	pic := image.NewRGBA(image.Rect(0, 0, img.Width, img.Height))
 	for y := range img.Height {
 		for x := range img.Width {
@@ -449,33 +492,40 @@ func encodePNG(img spectreps.PageImage) ([]byte, error) {
 			pic.Pix[dst+3] = 255
 		}
 	}
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, pic); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return pic
 }
 
-func parsePageFlags(name string, args []string, stderr io.Writer) ([]string, spectreps.RunOptions, string, int) {
+func clampJPEGQuality(quality int) int {
+	if quality < jpegMinQuality {
+		return jpegMinQuality
+	}
+	if quality > jpegMaxQuality {
+		return jpegMaxQuality
+	}
+	return quality
+}
+
+func parsePageFlags(name string, args []string, stderr io.Writer) ([]string, spectreps.RunOptions, int) {
 	set := newFlagSet(name, stderr)
 	w := set.Float64("w", 0, "page width in points")
 	h := set.Float64("h", 0, "page height in points")
 	r := set.Int("r", 0, "pixels per inch")
-	outPath := set.String("o", "", "output path")
+	// run and compare raster accept -o and ignore it.
+	set.String("o", "", "output path")
 	rest, code := parseSet(set, args)
 	if code != 0 {
 		return nil, spectreps.RunOptions{
 			PageWidthPt:   0,
 			PageHeightPt:  0,
 			ResolutionDPI: 0,
-		}, "", code
+		}, code
 	}
 	opt := spectreps.RunOptions{
 		PageWidthPt:   *w,
 		PageHeightPt:  *h,
 		ResolutionDPI: *r,
 	}
-	return rest, opt, *outPath, exitOK
+	return rest, opt, exitOK
 }
 
 func parseBare(name string, args []string, stderr io.Writer) ([]string, int) {

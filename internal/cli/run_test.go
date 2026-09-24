@@ -5,9 +5,11 @@ import (
 	"compress/zlib"
 	"fmt"
 	"image"
+	"image/jpeg"
 	"image/png"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -320,6 +322,85 @@ func matchPNGBody(t *testing.T, decoded image.Image, body []byte) {
 			i := (y*20 + x) * 3
 			if byte(red>>8) != body[i] || byte(green>>8) != body[i+1] || byte(blue>>8) != body[i+2] {
 				t.Fatalf("png pixel %d,%d", x, y)
+			}
+		}
+	}
+}
+
+func TestRasterJPEG(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "solid.ps")
+	prog := []byte("0 0.5 0 setrgbcolor 0 0 moveto 20 0 lineto 20 20 lineto 0 20 lineto closepath fill")
+	if err := os.WriteFile(src, prog, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ppm := filepath.Join(dir, "out.ppm")
+	want(t, []string{"raster", "-o", ppm, "-w", "20", "-h", "20", "-r", "72", src}, 0, "", "")
+	body := ppmBody(t, ppm)
+
+	for _, quality := range []int{0, 75, 500} {
+		out := filepath.Join(dir, fmt.Sprintf("q%d.jpg", quality))
+		args := []string{"raster", "-o", out, "-w", "20", "-h", "20", "-r", "72", "-jpegq", strconv.Itoa(quality), src}
+		want(t, args, 0, "", "")
+		checkJPEG(t, out, body, quality != 0)
+	}
+
+	jpegPath := filepath.Join(dir, "out.jpeg")
+	want(t, []string{"raster", "-o", jpegPath, "-w", "20", "-h", "20", "-r", "72", src}, 0, "", "")
+	checkJPEG(t, jpegPath, body, true)
+
+	wantCode(t, []string{"run", "-jpegq", "50", src}, 2)
+	wantCode(t, []string{"compare", "raster", "-jpegq", "50", src, src}, 2)
+}
+
+func ppmBody(t *testing.T, path string) []byte {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	header := []byte("P6\n20 20\n255\n")
+	if !bytes.HasPrefix(raw, header) {
+		t.Fatalf("ppm header %q", raw[:len(header)])
+	}
+	return raw[len(header):]
+}
+
+func checkJPEG(t *testing.T, path string, body []byte, exact bool) {
+	t.Helper()
+	pic := decodeJPEG(t, path)
+	if pic.Bounds().Dx() != 20 || pic.Bounds().Dy() != 20 {
+		t.Fatalf("%s bounds %v, want 20x20", path, pic.Bounds())
+	}
+	if exact {
+		matchJPEGBody(t, pic, body)
+	}
+}
+
+func decodeJPEG(t *testing.T, path string) image.Image {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(raw, []byte{0xff, 0xd8}) {
+		t.Fatalf("%s is not a JPEG", path)
+	}
+	pic, err := jpeg.Decode(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pic
+}
+
+func matchJPEGBody(t *testing.T, pic image.Image, body []byte) {
+	t.Helper()
+	for y := range 20 {
+		for x := range 20 {
+			red, green, blue, _ := pic.At(x, y).RGBA()
+			i := (y*20 + x) * 3
+			if byte(red>>8) != body[i] || byte(green>>8) != body[i+1] || byte(blue>>8) != body[i+2] {
+				t.Fatalf("jpeg pixel %d,%d", x, y)
 			}
 		}
 	}
