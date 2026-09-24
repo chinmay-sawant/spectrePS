@@ -105,5 +105,5 @@ No GitHub issue exists for this note. The ledger file is `plans/v0.0.1/00-progra
 
 | Extension | Files | Insertions | Deletions |
 | --- | ---: | ---: | ---: |
-| `.md` | 2 | 160 | 1 |
-| **Total** | **2** | **160** | **1** |
+| `.md` | 3 | 269 | 1 |
+| **Total** | **3** | **269** | **1** |
