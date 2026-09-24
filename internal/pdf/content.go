@@ -48,7 +48,7 @@ type (
 	}
 
 	runner struct {
-		pixmap  *graphics.Pixmap
+		marker  graphics.Marker
 		scale   float64
 		stack   []item
 		path    []point
@@ -86,24 +86,24 @@ const (
 	syntaxOp        = "content"
 )
 
-// Paint runs one PDF content stream onto pixmap.
+// Paint runs one PDF content stream onto marker.
 // scale matches PostScript UsePixmap: a user unit becomes scale device pixels. 72 dpi uses 1.
 // Paint does not call ShowPage.
-func Paint(ctx context.Context, content []byte, pixmap *graphics.Pixmap, scale float64) error {
+func Paint(ctx context.Context, content []byte, marker graphics.Marker, scale float64) error {
 	if ctx == nil {
 		panic(panicNilContext)
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	run := newRunner(pixmap, scale)
+	run := newRunner(marker, scale)
 	lex := scanner{src: content, pos: 0}
 	return run.play(ctx, &lex)
 }
 
-func newRunner(pixmap *graphics.Pixmap, scale float64) *runner {
+func newRunner(marker graphics.Marker, scale float64) *runner {
 	return &runner{
-		pixmap:  pixmap,
+		marker:  marker,
 		scale:   scale,
 		stack:   nil,
 		path:    nil,
@@ -603,15 +603,15 @@ func (run *runner) clearPath() {
 }
 
 func (run *runner) stroke() {
-	if run.pixmap != nil {
-		run.pixmap.Stroke(run.devicePoints(), run.width*run.scale, run.red, run.green, run.blue)
+	if run.marker != nil {
+		run.marker.Stroke(run.devicePoints(), run.width*run.scale, run.red, run.green, run.blue)
 	}
 	run.clearPath()
 }
 
 func (run *runner) fill(evenOdd bool) {
-	if run.pixmap != nil {
-		run.pixmap.Fill(run.devicePoints(), run.red, run.green, run.blue, evenOdd)
+	if run.marker != nil {
+		run.marker.Fill(run.devicePoints(), run.red, run.green, run.blue, evenOdd)
 	}
 	run.clearPath()
 }

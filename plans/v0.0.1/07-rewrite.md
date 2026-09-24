@@ -1,7 +1,7 @@
 # v0.0.4 - PDF rewrite
 
 > **Parent:** `plans/v0.0.1/00-program.md` - program ledger
-> **Status:** not started
+> **Status:** implemented. Lint and test passed on 2026-09-25. Tag 0.0.4 is checked.
 > **Estimated effort:** 2 weeks
 
 ---
@@ -20,25 +20,25 @@ The writer omits wall-clock dates and uses a trailer id derived from the content
 
 ### 7.1 Vector rewrite
 
-- [ ] `internal/pdfout` implements the device seam and emits path operators for the same subset phase 06 paints. `spectreps rewrite -o out.pdf in.pdf` exits 0. Opening `out.pdf` with `OpenPDF` and rasterizing page 0 matches `RasterizePage` of the input, via `CompareRaster`. Proof: `go test -count=1 ./spectreps -run TestRewritePixels`
+- [x] `internal/pdfout` implements the device seam and emits path operators for the same subset phase 06 paints. `spectreps rewrite -o out.pdf in.pdf` exits 0. Opening `out.pdf` with `OpenPDF` and rasterizing page 0 matches `RasterizePage` of the input, via `CompareRaster`. Proof: `go test -count=1 ./spectreps -run TestRewritePixels` exited 0 on 2026-09-25.
 
 ### 7.2 Flate
 
-- [ ] With `DefaultRewriteOptions`, page content streams are Flate compressed. With `CompressStreams` false, those streams are not Flate. Both outputs still match pixels under row 7.1. Proof: `go test -count=1 ./internal/pdfout -run TestFlate`
+- [x] With `DefaultRewriteOptions`, page content streams are Flate compressed. With `CompressStreams` false, those streams are not Flate. Both outputs still match pixels under row 7.1. Proof: `go test -count=1 ./internal/pdfout -run TestFlate` exited 0 on 2026-09-25.
 
 ### 7.3 Stable bytes
 
-- [ ] Two `RewritePDF` calls on the same bytes return buffers `CompareFiles` reports equal. The output contains no current timestamp. Proof: `go test -count=1 ./spectreps -run TestRewriteStable`
+- [x] Two `RewritePDF` calls on the same bytes return buffers `CompareFiles` reports equal. The output contains no current timestamp. Proof: `go test -count=1 ./spectreps -run TestRewriteStable` exited 0 on 2026-09-25.
 
 ### 7.4 CLI
 
-- [ ] `spectreps rewrite` without `-o` exits 2. `-compress=false` selects the uncompressed option. Proof: `go test -count=1 ./internal/cli -run TestRewriteCLI`
+- [x] `spectreps rewrite` without `-o` exits 2. `-compress=false` selects the uncompressed option. Proof: `go test -count=1 ./internal/cli -run TestRewriteCLI` exited 0 on 2026-09-25.
 
 ### 7.5 Closure
 
-- [ ] `make lint` passes. Record the outcome here.
-- [ ] `make test` passes. Record the outcome here.
-- [ ] Tag 0.0.4 note added to `plans/v0.0.1/09-release-records.md`.
+- [x] `make lint` passes. Outcome on 2026-09-25: exit 0. `gofmt -l .` printed nothing. `golangci-lint run ./...` exited 0. `size-check` reported 0 over-limit files.
+- [x] `make test` passes. Outcome on 2026-09-25: exit 0. Transcript is in `plans/v0.0.1/09-release-records.md` under tag 0.0.4.
+- [x] Tag 0.0.4 note added to `plans/v0.0.1/09-release-records.md`.
 
 ## Dependencies
 

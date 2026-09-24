@@ -14,7 +14,7 @@
 | `make tidy` | `go mod tidy` |
 | `make clean` | remove `bin/` |
 
-`make build` compiles `./cmd/spectreps` to `bin/spectreps`. The public library is `spectreps/`. Private code is `internal/cli`, `internal/engine`, `internal/ps`, `internal/graphics`, and `internal/pdf`. The module root has no `.go` files.
+`make build` compiles `./cmd/spectreps` to `bin/spectreps`. The public library is `spectreps/`. Private code is `internal/cli`, `internal/engine`, `internal/ps`, `internal/graphics`, `internal/pdf`, and `internal/pdfout`. The module root has no `.go` files.
 
 `make lint` and `make test` are the gates for a phase that changes Go code. Record both commands and their outcomes in the phase file before marking that phase complete. A documentation-only change does not run them. The rule comes from `skills/phase-wise-checklist/SKILLS.md`.
 

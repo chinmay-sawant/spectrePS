@@ -1,7 +1,7 @@
 # v0.0.1 - Release records
 
 > **Parent:** `plans/v0.0.1/00-program.md` - program ledger
-> **Status:** tag 0.0.3 recorded on 2026-09-24
+> **Status:** tag 0.0.4 recorded on 2026-09-25
 > **Estimated effort:** part of each tag, not a separate build
 
 ---
@@ -33,8 +33,8 @@ The phase files own the behavior rows. This file owns the proof that the tag was
 
 ### 9.4 Tag 0.0.4
 
-- [ ] `make lint` output pasted below after phase 07 closure.
-- [ ] `make test` output pasted below after phase 07 closure.
+- [x] `make lint` output pasted below after phase 07 closure. Outcome on 2026-09-25: exit 0.
+- [x] `make test` output pasted below after phase 07 closure. Outcome on 2026-09-25: exit 0.
 
 ### 9.5 Tag 0.0.5
 
@@ -156,6 +156,35 @@ ok  	github.com/chinmay-sawant/spectrePS/internal/graphics	0.005s
 ok  	github.com/chinmay-sawant/spectrePS/internal/pdf	0.011s
 ok  	github.com/chinmay-sawant/spectrePS/internal/ps	0.017s
 ok  	github.com/chinmay-sawant/spectrePS/spectreps	0.017s
+```
+
+Exit 0.
+
+### Tag 0.0.4, 2026-09-25
+
+`make lint`
+
+```
+golangci-lint run ./...
+make size-check
+bash scripts/check-file-size.sh
+size-check: clean (0 over-limit files).
+```
+
+Exit 0. `gofmt -l .` printed nothing before golangci-lint.
+
+`make test`
+
+```
+go test ./...
+?   	github.com/chinmay-sawant/spectrePS/cmd/spectreps	[no test files]
+ok  	github.com/chinmay-sawant/spectrePS/internal/cli	0.032s
+?   	github.com/chinmay-sawant/spectrePS/internal/engine	[no test files]
+ok  	github.com/chinmay-sawant/spectrePS/internal/graphics	0.003s
+ok  	github.com/chinmay-sawant/spectrePS/internal/pdf	0.011s
+ok  	github.com/chinmay-sawant/spectrePS/internal/pdfout	0.012s
+ok  	github.com/chinmay-sawant/spectrePS/internal/ps	0.016s
+ok  	github.com/chinmay-sawant/spectrePS/spectreps	0.027s
 ```
 
 Exit 0.

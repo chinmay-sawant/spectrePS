@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/chinmay-sawant/spectrePS/internal/pdf"
+	"github.com/chinmay-sawant/spectrePS/internal/pdfout"
 )
 
 // Document is an open PDF. file holds the parsed objects.
@@ -28,12 +29,36 @@ func (in *Instance) OpenPDF(ctx context.Context, src []byte) (*Document, error) 
 	return &Document{file: opened}, nil
 }
 
-// RewritePDF writes a new PDF. The writer arrives in a later tag.
+// RewritePDF writes a new PDF from the open document.
 func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOptions) ([]byte, error) {
-	_ = doc
-	_ = opt
-
-	return nil, in.impl.Ready(ctx)
+	if ctx == nil {
+		panic("spectreps: nil context")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	_ = in
+	if doc == nil || doc.file == nil {
+		return nil, JobError{Op: "RewritePDF", Msg: "rangecheck", Filename: "", Line: 0, Column: 0}
+	}
+	count := doc.file.PageCount()
+	pages := make([]pdfout.Page, 0, count)
+	for i := range count {
+		content, err := doc.file.Content(i)
+		if err != nil {
+			return nil, asPDFJobError(err)
+		}
+		emitted, err := pdfout.Emit(ctx, content)
+		if err != nil {
+			return nil, asPDFJobError(err)
+		}
+		pages = append(pages, pdfout.Page{Content: emitted})
+	}
+	out, err := pdfout.Write(ctx, pages, opt.CompressStreams)
+	if err != nil {
+		return nil, asPDFJobError(err)
+	}
+	return out, nil
 }
 
 func asPDFJobError(err error) error {
