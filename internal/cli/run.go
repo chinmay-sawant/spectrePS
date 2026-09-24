@@ -11,6 +11,7 @@ import (
 	"image/png"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -39,6 +40,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		usage(stderr)
 		return exitUsage
 	}
+	return dispatch(args, stdout, stderr)
+}
+
+func dispatch(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "version":
 		return cmdVersion(args[1:], stdout, stderr)
@@ -48,6 +53,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return cmdRaster(args[1:], stderr)
 	case "pdfimage":
 		return cmdPDFImage(args[1:], stderr)
+	case "bbox", "inkcov":
+		return cmdMeasure(args[0], args[1:], stdout, stderr)
 	case "rewrite":
 		return cmdRewrite(args[1:], stderr)
 	case "validate":
@@ -65,6 +72,8 @@ func usage(w io.Writer) {
 spectreps run [-w points] [-h points] [-r dpi] [-o path] file
 spectreps raster [-w points] [-h points] [-r dpi] [-jpegq quality] -o path file
 spectreps pdfimage [-w points] [-h points] [-r dpi] -o path file
+spectreps bbox [-w points] [-h points] [-r dpi] file
+spectreps inkcov [-w points] [-h points] [-r dpi] file
 spectreps rewrite [-compress] -o path file.pdf
 spectreps validate file
 spectreps compare bytes fileA fileB
@@ -210,6 +219,97 @@ func pdfImagePages(
 		pages = append(pages, image)
 	}
 	return pages, nil
+}
+
+func cmdMeasure(name string, args []string, stdout, stderr io.Writer) int {
+	pages, opt, code := measurePages(name, args, stderr)
+	if code != 0 {
+		return code
+	}
+	for i, page := range pages {
+		if name == "bbox" {
+			writeBBox(stdout, page, opt.ResolutionDPI)
+		} else {
+			writeInk(stdout, i+1, page)
+		}
+	}
+	return exitOK
+}
+
+// measurePages rasterizes every page of one PostScript or PDF input.
+func measurePages(name string, args []string, stderr io.Writer) ([]spectreps.PageImage, spectreps.RunOptions, int) {
+	rest, opt, code := parsePageFlags(name, args, stderr)
+	if code != 0 {
+		return nil, opt, code
+	}
+	if len(rest) != 1 {
+		usage(stderr)
+		return nil, opt, exitUsage
+	}
+	path := rest[0]
+	in, code := newInstance(stderr)
+	if code != 0 {
+		return nil, opt, code
+	}
+	defer in.Close()
+	src, code := readFile(path, stderr)
+	if code != 0 {
+		return nil, opt, code
+	}
+	pages, err := allPageImages(path, in, src, opt)
+	if err != nil {
+		return nil, opt, finish(stderr, err)
+	}
+	return pages, opt, exitOK
+}
+
+func allPageImages(
+	path string,
+	in *spectreps.Instance,
+	src []byte,
+	opt spectreps.RunOptions,
+) ([]spectreps.PageImage, error) {
+	ctx := context.Background()
+	if !strings.HasSuffix(path, ".pdf") {
+		return in.RunPostScript(ctx, src, opt)
+	}
+	doc, err := in.OpenPDF(ctx, src)
+	if err != nil {
+		return nil, err
+	}
+	pages := make([]spectreps.PageImage, 0, doc.PageCount())
+	for page := range doc.PageCount() {
+		img, err := in.RasterizePage(ctx, doc, page, opt)
+		if err != nil {
+			return nil, err
+		}
+		pages = append(pages, img)
+	}
+	return pages, nil
+}
+
+func writeBBox(w io.Writer, img spectreps.PageImage, dpi int) {
+	box, ok := spectreps.MeasureBox(img, float64(dpi))
+	if !ok {
+		fmt.Fprintln(w, "%%BoundingBox: 0 0 0 0")
+		fmt.Fprintln(w, "%%HiResBoundingBox: 0 0 0 0")
+		return
+	}
+	fmt.Fprintf(w, "%%%%BoundingBox: %d %d %d %d\n",
+		int(math.Floor(box.MinX)), int(math.Floor(box.MinY)),
+		int(math.Ceil(box.MaxX)), int(math.Ceil(box.MaxY)))
+	fmt.Fprintf(w, "%%%%HiResBoundingBox: %s %s %s %s\n",
+		pointText(box.MinX), pointText(box.MinY), pointText(box.MaxX), pointText(box.MaxY))
+}
+
+func pointText(v float64) string {
+	return strconv.FormatFloat(v, 'f', -1, 64)
+}
+
+func writeInk(w io.Writer, page int, img spectreps.PageImage) {
+	ink := spectreps.MeasureInk(img)
+	fmt.Fprintf(w, "Page %d\n", page)
+	fmt.Fprintf(w, "%.5f %.5f %.5f RGB\n", ink.R, ink.G, ink.B)
 }
 
 func cmdRewrite(args []string, stderr io.Writer) int {
