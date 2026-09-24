@@ -32,6 +32,14 @@ The output is not a copy of the input xref, and it is not expected to match `pdf
 
 This tag compresses content streams. It does not downsample images, and it does not DCT-encode them. Those are image-model features and they are deferred.
 
+## Bitmap PDF
+
+`ImagePDF` wraps each `PageImage` in one PDF page. The image is 24-bit RGB, 8 bits per component, `/ColorSpace /DeviceRGB`, `/Filter /FlateDecode`. The stored stream is the tightly packed RGB rows, so stride padding is dropped. `/MediaBox` is `[0 0 width*72/dpi height*72/dpi]` points, and a `dpi` of zero or less selects 72.
+
+Each page has one content stream and one image XObject. The content stream is `q W 0 0 H 0 0 cm /Im0 Do Q`, and `/Resources` carries the XObject. Spectre's PDF interpreter still returns `undefined` for `Do`, so rasterizing this output is not the proof. The test decodes the image stream and compares it with `PageImage`.
+
+The writer emits objects in a fixed order, adds no `/Info`, and sets both trailer `/ID` strings to the SHA-256 of the concatenated Flate image streams. Two calls on the same pages return equal buffers, and `CompareFiles` is the proof. The output is not `pdfwrite` and it is not a DCT encode.
+
 ## Validate
 
 `validate` runs the interpreter in stop-on-first-error mode.

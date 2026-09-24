@@ -508,3 +508,115 @@ func writeString(t *testing.T, body *bytes.Buffer, text string) {
 		t.Fatal(err)
 	}
 }
+
+func TestPDFImage(t *testing.T) {
+	t.Run("usage", checkPDFImageUsage)
+	t.Run("ps", checkPDFImagePS)
+	t.Run("pdf", checkPDFImagePDF)
+	t.Run("rewrite", checkPDFImageRewrite)
+}
+
+func checkPDFImageUsage(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out.pdf")
+	ps := writeTemp(t, "in.ps", []byte("1 2 add"))
+	missing := filepath.Join(t.TempDir(), "missing.ps")
+	wantCode(t, []string{"pdfimage", ps}, 2)
+	wantCode(t, []string{"pdfimage", "-o", out}, 2)
+	wantCode(t, []string{"pdfimage", "-o", out, ps, ps}, 2)
+	wantCode(t, []string{"pdfimage", "-o", out, missing}, 2)
+}
+
+func checkPDFImagePS(t *testing.T) {
+	dir := t.TempDir()
+	ps := filepath.Join(dir, "in.ps")
+	if err := os.WriteFile(ps, []byte("0 0 moveto 10 0 lineto stroke"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "out.pdf")
+	want(t, []string{"pdfimage", "-o", out, "-w", "20", "-h", "20", "-r", "72", ps}, 0, "", "")
+	checkPDFImageOutput(t, out, 1)
+	info, err := os.Stat(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode = %v, want 0600", info.Mode().Perm())
+	}
+}
+
+func checkPDFImagePDF(t *testing.T) {
+	objects := [][]byte{
+		[]byte("<< /Type /Catalog /Pages 2 0 R >>"),
+		[]byte("<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>"),
+		[]byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 20 20] /Contents 5 0 R /Resources << >> >>"),
+		[]byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 20 20] /Contents 6 0 R /Resources << >> >>"),
+		flateStream(t, "0 0 m 10 0 l S"),
+		flateStream(t, "1 0 0 rg 0 0 10 10 re f"),
+	}
+	src := writeTemp(t, "two.pdf", classicXref(t, objects))
+	out := filepath.Join(t.TempDir(), "out.pdf")
+	want(t, []string{"pdfimage", "-o", out, "-w", "20", "-h", "20", "-r", "72", src}, 0, "", "")
+	checkPDFImageOutput(t, out, 2)
+}
+
+func checkPDFImageRewrite(t *testing.T) {
+	src := writeTemp(t, "path.pdf", onePagePDF(t, "0 0 m 10 0 l S"))
+	out := filepath.Join(t.TempDir(), "rewrite.pdf")
+	want(t, []string{"rewrite", "-o", out, src}, 0, "", "")
+	checkPDFImageRaster(t, out, 1)
+}
+
+func checkPDFImageOutput(t *testing.T, path string, pages int) {
+	t.Helper()
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(payload, []byte("%PDF-")) {
+		t.Fatalf("%s prefix %q", path, pdfPrefix(payload))
+	}
+	doc := openPDFBytes(t, payload)
+	if doc.PageCount() != pages {
+		t.Fatalf("PageCount = %d, want %d", doc.PageCount(), pages)
+	}
+}
+
+func checkPDFImageRaster(t *testing.T, path string, pages int) {
+	t.Helper()
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in, err := spectreps.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = in.Close() })
+	doc, err := in.OpenPDF(t.Context(), payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.PageCount() != pages {
+		t.Fatalf("PageCount = %d, want %d", doc.PageCount(), pages)
+	}
+	opt := spectreps.RunOptions{PageWidthPt: 20, PageHeightPt: 20, ResolutionDPI: 72}
+	for page := range pages {
+		if _, err := in.RasterizePage(t.Context(), doc, page, opt); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func openPDFBytes(t *testing.T, payload []byte) *spectreps.Document {
+	t.Helper()
+	in, err := spectreps.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = in.Close() })
+	doc, err := in.OpenPDF(t.Context(), payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return doc
+}
