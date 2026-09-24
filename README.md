@@ -7,3 +7,7 @@ The command is `spectreps`. The library import path is `github.com/chinmay-sawan
 v0.0.1 is the module, the exported function list, and file byte compare. Raster, PDF, and rewrite are later tags. Their checklists already live in `plans/v0.0.1/` so the API does not get redesigned when those tags start.
 
 Contracts are in `documentations/README.md`. The work ledger is `plans/v0.0.1/00-program.md`.
+
+## License
+
+Spectre PS is released under the MIT license. See `LICENSE`. The copyright is Chinmay Sawant's. This project does not link Ghostscript and does not include Ghostscript source.
