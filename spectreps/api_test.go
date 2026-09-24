@@ -110,8 +110,9 @@ func checkNotImplemented(
 	requireZeroPageImage(t, img)
 
 	out, err := in.RewritePDF(t.Context(), nil, rewrite)
-	if !errors.Is(err, spectreps.ErrNotImplemented) {
-		t.Fatalf("RewritePDF() error = %v, want ErrNotImplemented", err)
+	want := spectreps.JobError{Op: "RewritePDF", Msg: "rangecheck", Filename: "", Line: 0, Column: 0}
+	if !errors.As(err, &job) || job != want {
+		t.Fatalf("RewritePDF() error = %v, want rangecheck", err)
 	}
 	if out != nil {
 		t.Fatalf("RewritePDF() bytes = %#v, want nil", out)

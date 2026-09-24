@@ -3,6 +3,7 @@ package spectreps_test
 import (
 	"bytes"
 	"compress/zlib"
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -54,6 +55,149 @@ func TestRasterizePage(t *testing.T) {
 		}
 		requireZeroPageImage(t, img)
 	}
+}
+
+func TestRewritePixels(t *testing.T) {
+	opt := spectreps.RunOptions{PageWidthPt: 20, PageHeightPt: 20, ResolutionDPI: 72}
+	cases := []struct {
+		name    string
+		content string
+	}{
+		{name: "stroke", content: "0 0 m 10 0 l S"},
+		{name: "fill", content: "1 0 0 rg 0 0 10 10 re f"},
+		{name: "gray", content: "0.5 g 0 0 8 8 re f"},
+		{name: "eofill", content: "1 0 0 RG 0 0 10 10 re f*"},
+		{name: "curve", content: "0 0 m 0 10 10 10 10 0 c S"},
+		{name: "gsave", content: "q 0 1 0 rg 0 0 10 10 re f Q"},
+		{name: "grestore", content: "1 0 0 rg q 0 1 0 rg Q 0 0 10 10 re f"},
+		{name: "empty", content: ""},
+	}
+	in := newInst(t)
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			assertRewritePixels(t, in, opt, tt.content, spectreps.DefaultRewriteOptions())
+		})
+	}
+	t.Run("stroke-144", func(t *testing.T) {
+		opt144 := spectreps.RunOptions{PageWidthPt: 20, PageHeightPt: 20, ResolutionDPI: 144}
+		assertRewritePixels(t, in, opt144, "0 0 m 10 0 l S", spectreps.DefaultRewriteOptions())
+	})
+	t.Run("stroke-raw", func(t *testing.T) {
+		raw := spectreps.RewriteOptions{CompressStreams: false}
+		assertRewritePixels(t, in, opt, "0 0 m 10 0 l S", raw)
+	})
+	t.Run("Tj", func(t *testing.T) {
+		assertRewriteTj(t, in)
+	})
+}
+
+func TestRewriteStable(t *testing.T) {
+	in := newInst(t)
+	src := onePagePDF(t, "0 0 m 10 0 l S")
+	doc, err := in.OpenPDF(t.Context(), src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc == nil {
+		t.Fatal("OpenPDF() document = nil")
+	}
+	compressed := rewritePair(t, in, doc, spectreps.DefaultRewriteOptions())
+	plain := rewritePair(t, in, doc, spectreps.RewriteOptions{CompressStreams: false})
+	if spectreps.CompareFiles(compressed, plain).Equal {
+		t.Fatal("compressed buffer matches uncompressed")
+	}
+	if spectreps.CompareFiles(compressed, src).Equal {
+		t.Fatal("compressed rewrite matches input")
+	}
+	if spectreps.CompareFiles(plain, src).Equal {
+		t.Fatal("uncompressed rewrite matches input")
+	}
+	if bytes.Contains(compressed, []byte("CreationDate")) || bytes.Contains(compressed, []byte("ModDate")) {
+		t.Fatal("compressed buffer contains a date")
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	out, err := in.RewritePDF(ctx, doc, spectreps.DefaultRewriteOptions())
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("RewritePDF() error = %v, want context.Canceled", err)
+	}
+	if out != nil {
+		t.Fatalf("RewritePDF() bytes = %#v, want nil", out)
+	}
+}
+
+func assertRewritePixels(
+	t *testing.T,
+	in *spectreps.Instance,
+	opt spectreps.RunOptions,
+	content string,
+	rewrite spectreps.RewriteOptions,
+) {
+	t.Helper()
+	doc, err := in.OpenPDF(t.Context(), onePagePDF(t, content))
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := in.RasterizePage(t.Context(), doc, 0, opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rewritten, err := in.RewritePDF(t.Context(), doc, rewrite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := in.OpenPDF(t.Context(), rewritten)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := in.RasterizePage(t.Context(), again, 0, opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if compared := spectreps.CompareRaster(before, after); !compared.Equal {
+		t.Fatalf("CompareRaster = %+v", compared)
+	}
+}
+
+func assertRewriteTj(t *testing.T, in *spectreps.Instance) {
+	t.Helper()
+	doc, err := in.OpenPDF(t.Context(), onePagePDF(t, "(Hi) Tj"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc == nil {
+		t.Fatal("OpenPDF() document = nil")
+	}
+	out, err := in.RewritePDF(t.Context(), doc, spectreps.DefaultRewriteOptions())
+	var job spectreps.JobError
+	if !errors.As(err, &job) || job.Msg != "undefined" || job.Op != "Tj" {
+		t.Fatalf("RewritePDF() error = %v, want undefined in Tj", err)
+	}
+	if out != nil {
+		t.Fatalf("RewritePDF() bytes = %#v, want nil", out)
+	}
+}
+
+func rewritePair(
+	t *testing.T,
+	in *spectreps.Instance,
+	doc *spectreps.Document,
+	opt spectreps.RewriteOptions,
+) []byte {
+	t.Helper()
+	first, err := in.RewritePDF(t.Context(), doc, opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := in.RewritePDF(t.Context(), doc, opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if compared := spectreps.CompareFiles(first, second); !compared.Equal {
+		t.Fatalf("CompareFiles = %+v", compared)
+	}
+	return first
 }
 
 func assertSamePixels(

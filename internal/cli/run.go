@@ -141,20 +141,51 @@ func cmdRewrite(args []string, stderr io.Writer) int {
 		usage(stderr)
 		return exitUsage
 	}
-	var opt spectreps.RewriteOptions
-	if *compress {
-		opt = spectreps.DefaultRewriteOptions()
-	} else {
-		opt = spectreps.RewriteOptions{CompressStreams: false}
+	return rewriteToFile(stderr, rest[0], *outPath, rewriteOptions(*compress))
+}
+
+func rewriteOptions(compress bool) spectreps.RewriteOptions {
+	if compress {
+		return spectreps.DefaultRewriteOptions()
 	}
-	return withInput(stderr, rest[0], func(ctx context.Context, in *spectreps.Instance, src []byte) error {
-		doc, err := in.OpenPDF(ctx, src)
-		if err != nil {
-			return err
+	return spectreps.RewriteOptions{CompressStreams: false}
+}
+
+func rewriteToFile(stderr io.Writer, inPath, outPath string, opt spectreps.RewriteOptions) int {
+	in, code := newInstance(stderr)
+	if code != 0 {
+		return code
+	}
+	defer in.Close()
+	src, code := readFile(inPath, stderr)
+	if code != 0 {
+		return code
+	}
+	payload, err := rewriteBytes(in, src, opt)
+	if err != nil {
+		return finish(stderr, err)
+	}
+	return writeRewrite(outPath, payload, stderr)
+}
+
+func rewriteBytes(in *spectreps.Instance, src []byte, opt spectreps.RewriteOptions) ([]byte, error) {
+	ctx := context.Background()
+	doc, err := in.OpenPDF(ctx, src)
+	if err != nil {
+		return nil, err
+	}
+	return in.RewritePDF(ctx, doc, opt)
+}
+
+func writeRewrite(path string, payload []byte, stderr io.Writer) int {
+	if err := os.WriteFile(path, payload, rasterFileMode); err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		if errors.Is(err, fs.ErrNotExist) {
+			return exitUsage
 		}
-		_, err = in.RewritePDF(ctx, doc, opt)
-		return err
-	})
+		return exitIO
+	}
+	return exitOK
 }
 
 func cmdValidate(args []string, stderr io.Writer) int {

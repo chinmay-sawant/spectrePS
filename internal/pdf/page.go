@@ -34,8 +34,8 @@ func (file *File) Content(index int) ([]byte, error) {
 	return cloneBytes(file.pages[index]), nil
 }
 
-// PaintPage paints one page onto pixmap. It does not call ShowPage.
-func (file *File) PaintPage(ctx context.Context, index int, pixmap *graphics.Pixmap, scale float64) error {
+// PaintPage paints one page onto marker. It does not call ShowPage.
+func (file *File) PaintPage(ctx context.Context, index int, marker graphics.Marker, scale float64) error {
 	if ctx == nil {
 		panic(panicNilCtx)
 	}
@@ -46,7 +46,7 @@ func (file *File) PaintPage(ctx context.Context, index int, pixmap *graphics.Pix
 	if err != nil {
 		return err
 	}
-	return Paint(ctx, content, pixmap, scale)
+	return Paint(ctx, content, marker, scale)
 }
 
 func (file *File) walkRoot() ([][]byte, error) {

@@ -16,6 +16,7 @@ internal/cli/
 internal/engine/
 internal/graphics/
 internal/pdf/
+internal/pdfout/
 internal/ps/
 spectreps/
 testdata/
