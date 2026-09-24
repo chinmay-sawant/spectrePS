@@ -42,6 +42,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return cmdRun(args[1:], stderr)
 	case "raster":
 		return cmdRaster(args[1:], stderr)
+	case "pdfimage":
+		return cmdPDFImage(args[1:], stderr)
 	case "rewrite":
 		return cmdRewrite(args[1:], stderr)
 	case "validate":
@@ -58,6 +60,7 @@ func usage(w io.Writer) {
 	fmt.Fprint(w, `spectreps version
 spectreps run [-w points] [-h points] [-r dpi] [-o path] file
 spectreps raster [-w points] [-h points] [-r dpi] -o path file
+spectreps pdfimage [-w points] [-h points] [-r dpi] -o path file
 spectreps rewrite [-compress] -o path file.pdf
 spectreps validate file
 spectreps compare bytes fileA fileB
@@ -127,6 +130,63 @@ func cmdRaster(args []string, stderr io.Writer) int {
 		return finish(stderr, err)
 	}
 	return writePages(outPath, pages, stderr)
+}
+
+func cmdPDFImage(args []string, stderr io.Writer) int {
+	rest, opt, outPath, code := parsePageFlags("pdfimage", args, stderr)
+	if code != 0 {
+		return code
+	}
+	if len(rest) != 1 || outPath == "" {
+		usage(stderr)
+		return exitUsage
+	}
+	path := rest[0]
+	in, code := newInstance(stderr)
+	if code != 0 {
+		return code
+	}
+	defer in.Close()
+	src, code := readFile(path, stderr)
+	if code != 0 {
+		return code
+	}
+	pages, err := pdfImagePages(in, path, src, opt)
+	if err != nil {
+		return finish(stderr, err)
+	}
+	payload, err := in.ImagePDF(context.Background(), pages, float64(opt.ResolutionDPI))
+	if err != nil {
+		return finish(stderr, err)
+	}
+	return writeRewrite(outPath, payload, stderr)
+}
+
+// pdfImagePages paints every page with the raster path. A .pdf input uses
+// RasterizePage for each page. Any other input uses RunPostScript.
+func pdfImagePages(
+	in *spectreps.Instance,
+	path string,
+	src []byte,
+	opt spectreps.RunOptions,
+) ([]spectreps.PageImage, error) {
+	ctx := context.Background()
+	if !strings.HasSuffix(path, ".pdf") {
+		return in.RunPostScript(ctx, src, opt)
+	}
+	doc, err := in.OpenPDF(ctx, src)
+	if err != nil {
+		return nil, err
+	}
+	pages := make([]spectreps.PageImage, 0, doc.PageCount())
+	for page := range doc.PageCount() {
+		image, err := in.RasterizePage(ctx, doc, page, opt)
+		if err != nil {
+			return nil, err
+		}
+		pages = append(pages, image)
+	}
+	return pages, nil
 }
 
 func cmdRewrite(args []string, stderr io.Writer) int {
