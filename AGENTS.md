@@ -26,6 +26,10 @@ The product reads PostScript and PDF. It rasterizes pages, rewrites a new PDF, r
 3. When a phase changes Go code, run `make lint` and `make test` before marking the phase complete. A documentation-only change skips both.
 4. Keep one open copy of a row. A deferred item is `[~]` in `plans/v0.0.1/10-deferred.md`, with the reason and the phase that has to land first.
 
+## Code structure
+
+Keep each `.go` file at or under 2,000 lines. Count test files. A file past that limit is overflow. Record it in `scripts/file-size-allowlist.txt` as the repo-relative path, a tab, and the exact line count. `make size-check` reads that list. It fails when an over-limit file is absent, when a listed file is missing or back under the limit, or when the recorded count disagrees with the file. `make lint` runs the check. The list is empty because every Go file on this tree is under the limit.
+
 ## Writing
 
 Apply `skills/unslop/SKILL.md` before plans, docs, knowledge-base pages, PR text, issue text, commit messages, and replies. Sentence case headings. Straight quotes. Periods and commas.
