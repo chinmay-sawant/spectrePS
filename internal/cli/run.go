@@ -141,20 +141,36 @@ func cmdRewrite(args []string, stderr io.Writer) int {
 		usage(stderr)
 		return exitUsage
 	}
-	var opt spectreps.RewriteOptions
+	opt := spectreps.RewriteOptions{CompressStreams: false}
 	if *compress {
 		opt = spectreps.DefaultRewriteOptions()
-	} else {
-		opt = spectreps.RewriteOptions{CompressStreams: false}
 	}
-	return withInput(stderr, rest[0], func(ctx context.Context, in *spectreps.Instance, src []byte) error {
-		doc, err := in.OpenPDF(ctx, src)
-		if err != nil {
-			return err
+	in, code := newInstance(stderr)
+	if code != 0 {
+		return code
+	}
+	defer in.Close()
+	src, code := readFile(rest[0], stderr)
+	if code != 0 {
+		return code
+	}
+	ctx := context.Background()
+	doc, err := in.OpenPDF(ctx, src)
+	if err != nil {
+		return finish(stderr, err)
+	}
+	payload, err := in.RewritePDF(ctx, doc, opt)
+	if err != nil {
+		return finish(stderr, err)
+	}
+	if err := os.WriteFile(*outPath, payload, rasterFileMode); err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		if errors.Is(err, fs.ErrNotExist) {
+			return exitUsage
 		}
-		_, err = in.RewritePDF(ctx, doc, opt)
-		return err
-	})
+		return exitIO
+	}
+	return exitOK
 }
 
 func cmdValidate(args []string, stderr io.Writer) int {

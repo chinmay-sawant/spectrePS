@@ -13,8 +13,6 @@ import (
 	"github.com/chinmay-sawant/spectrePS/spectreps"
 )
 
-const notImplemented = "spectreps: not implemented\n"
-
 func callRun(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
@@ -99,7 +97,42 @@ func TestRaster(t *testing.T) {
 func TestRewrite(t *testing.T) {
 	path := writeTemp(t, "in.pdf", onePagePDF(t, "0 0 m 10 0 l S"))
 	wantCode(t, []string{"rewrite", path}, 2)
-	want(t, []string{"rewrite", "-o", "out.pdf", path}, 1, "", notImplemented)
+}
+
+func TestRewriteCLI(t *testing.T) {
+	src := writeTemp(t, "in.pdf", onePagePDF(t, "0 0 m 10 0 l S"))
+	wantCode(t, []string{"rewrite", src}, 2)
+
+	dir := t.TempDir()
+	out := filepath.Join(dir, "out.pdf")
+	want(t, []string{"rewrite", "-o", out, src}, 0, "", "")
+	checkRewritePDF(t, out, true)
+
+	raw := filepath.Join(dir, "raw.pdf")
+	want(t, []string{"rewrite", "-compress=false", "-o", raw, src}, 0, "", "")
+	checkRewritePDF(t, raw, false)
+}
+
+func checkRewritePDF(t *testing.T, path string, flate bool) {
+	t.Helper()
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(got, []byte("%PDF-")) {
+		t.Fatalf("%s prefix %q", path, pdfPrefix(got))
+	}
+	has := bytes.Contains(got, []byte("FlateDecode"))
+	if has != flate {
+		t.Fatalf("%s FlateDecode=%v, want %v", path, has, flate)
+	}
+}
+
+func pdfPrefix(got []byte) []byte {
+	if len(got) > 16 {
+		return got[:16]
+	}
+	return got
 }
 
 func TestRasterPDF(t *testing.T) {
