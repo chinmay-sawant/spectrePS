@@ -1,12 +1,15 @@
 BIN := bin/spectreps
 PKG := ./cmd/spectreps
+# -p is how many test binaries run at once. Default is GOMAXPROCS.
+# nproc is the machine's CPU count. Fall back to 1 if the command is missing.
+NPROC := $(shell nproc 2>/dev/null || echo 1)
 
 .PHONY: help build test lint fmt tidy clean size-check
 
 help:
 	@printf '%s\n' \
 		'build       compile $(BIN)' \
-		'test        go test ./...' \
+		'test        go test -p $(NPROC) ./...' \
 		'lint        gofmt check, golangci-lint, and size-check' \
 		'size-check  Go files over 2000 lines must be allowlisted' \
 		'fmt         gofmt -w .' \
@@ -17,7 +20,7 @@ build:
 	go build -trimpath -o $(BIN) $(PKG)
 
 test:
-	go test ./...
+	go test -p $(NPROC) ./...
 
 lint:
 	@files=$$(gofmt -l .); \
