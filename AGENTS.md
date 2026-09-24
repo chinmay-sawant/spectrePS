@@ -7,6 +7,7 @@ The product reads PostScript and PDF. It rasterizes pages, rewrites a new PDF, r
 ## Read before editing
 
 - Measured Ghostscript behavior: `documentations/ghostscript-baseline.md`
+- Which Ghostscript jobs Spectre takes: `documentations/covered-and-not-covered.md`
 - Runtime shape: `documentations/architecture.md`
 - Tree: `documentations/folder-structure.md`
 - Exported functions: `documentations/public-api.md`
