@@ -77,7 +77,7 @@ No GitHub issue exists for this note. The ledger file is `plans/v0.0.1/00-progra
 - [x] Self-assigned (`--assignee @me`)
 - [x] Labels applied
 - [ ] Related issues filled with real ticket IDs
-- [x] Filled body committed under `plans/PR/pr-release-0.0.5.md` when process-gated
+- [x] Filled body committed under `plans/PR/pr-release-0.0.1.md` when process-gated
 
 ---
 
@@ -105,5 +105,5 @@ No GitHub issue exists for this note. The ledger file is `plans/v0.0.1/00-progra
 
 | Extension | Files | Insertions | Deletions |
 | --- | ---: | ---: | ---: |
-| `.md` | 3 | 269 | 1 |
-| **Total** | **3** | **269** | **1** |
+| `.md` | 3 | 271 | 1 |
+| **Total** | **3** | **271** | **1** |
