@@ -2,6 +2,7 @@ package ps
 
 import (
 	"context"
+	"errors"
 
 	"github.com/chinmay-sawant/spectrePS/internal/graphics"
 )
@@ -289,7 +290,21 @@ func (ip *Interp) runOp(ctx context.Context, obj Object) error {
 	if obj.Op == nil {
 		return errOf("typecheck", "exec")
 	}
-	return obj.Op(ctx, ip)
+	err := obj.Op(ctx, ip)
+	return tagOp(err, obj.Name)
+}
+
+// tagOp reports the operator the program invoked.
+// Pop and other helpers name themselves. The JobError should name add, not pop.
+func tagOp(err error, opName string) error {
+	if err == nil || opName == "" {
+		return err
+	}
+	var psErr *Error
+	if errors.As(err, &psErr) {
+		psErr.Op = opName
+	}
+	return err
 }
 
 func (ip *Interp) callProc(ctx context.Context, proc *Arr) error {

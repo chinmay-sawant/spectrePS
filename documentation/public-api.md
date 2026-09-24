@@ -67,6 +67,7 @@ Omit ` at file:line:col` when the position is unknown. `Op` is the operator name
 ```go
 func (in *Instance) RunPostScript(ctx context.Context, src []byte, opt RunOptions) ([]PageImage, error)
 func (in *Instance) OpenPDF(ctx context.Context, src []byte) (*Document, error)
+func (doc *Document) PageCount() int // page leaves, 0 when doc is nil
 func (in *Instance) RasterizePage(ctx context.Context, doc *Document, pageIndex int, opt RunOptions) (PageImage, error)
 func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOptions) ([]byte, error)
 

@@ -1,7 +1,7 @@
 # v0.0.5 - Validate
 
 > **Parent:** `plans/v0.0.1/00-program.md` - program ledger
-> **Status:** not started
+> **Status:** implemented. Lint and test passed on 2026-09-25. Tag 0.0.5 is checked.
 > **Estimated effort:** 3 days
 
 ---
@@ -20,21 +20,21 @@ PostScript errors already exist as `JobError` after phase 03. PDF rejections exi
 
 ### 8.1 PostScript
 
-- [ ] `spectreps validate good.ps` exits 0 for a subset program. `spectreps validate bad.ps` exits 1 and prints the `JobError` line on stderr for a `stackunderflow`. Proof: `go test -count=1 ./internal/cli -run TestValidatePS`
+- [x] `spectreps validate good.ps` exits 0 for a subset program. `spectreps validate bad.ps` exits 1 and prints the `JobError` line on stderr for a `stackunderflow`. Proof: `go test -count=1 ./internal/cli -run TestValidatePS` exited 0 on 2026-09-25.
 
 ### 8.2 PDF
 
-- [ ] `spectreps validate good.pdf` exits 0 for a phase 06 fixture. A truncated xref exits 1 with `JobError`. An encrypted file exits 1 with `invalidaccess`. Proof: `go test -count=1 ./internal/cli -run TestValidatePDF`
+- [x] `spectreps validate good.pdf` exits 0 for a phase 06 fixture. A truncated xref exits 1 with `JobError`. An encrypted file exits 1 with `invalidaccess`. Proof: `go test -count=1 ./internal/cli -run TestValidatePDF` exited 0 on 2026-09-25.
 
 ### 8.3 Banned operator
 
-- [ ] `spectreps validate` on a program that calls `deletefile` exits 1 with `invalidaccess`. The process does not delete a temp file created next to the input. Proof: `go test -count=1 ./internal/cli -run TestValidateBanned`
+- [x] `spectreps validate` on a program that calls `deletefile` exits 1 with `invalidaccess`. The process does not delete a temp file created next to the input. Proof: `go test -count=1 ./internal/cli -run TestValidateBanned` exited 0 on 2026-09-25.
 
 ### 8.4 Closure
 
-- [ ] `make lint` passes. Record the outcome here.
-- [ ] `make test` passes. Record the outcome here.
-- [ ] Tag 0.0.5 note added to `plans/v0.0.1/09-release-records.md`.
+- [x] `make lint` passes. Outcome on 2026-09-25: exit 0. `gofmt -l .` printed nothing. `golangci-lint run ./...` exited 0. `size-check` reported 0 over-limit files.
+- [x] `make test` passes. Outcome on 2026-09-25: exit 0. Transcript is in `plans/v0.0.1/09-release-records.md` under tag 0.0.5.
+- [x] Tag 0.0.5 note added to `plans/v0.0.1/09-release-records.md`.
 
 ## Dependencies
 

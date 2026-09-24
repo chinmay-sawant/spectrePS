@@ -200,8 +200,7 @@ func cmdValidate(args []string, stderr io.Writer) int {
 	path := rest[0]
 	return withInput(stderr, path, func(ctx context.Context, in *spectreps.Instance, src []byte) error {
 		if strings.HasSuffix(path, ".pdf") {
-			_, err := in.OpenPDF(ctx, src)
-			return err
+			return validatePDF(ctx, in, src)
 		}
 		_, err := in.RunPostScript(ctx, src, spectreps.RunOptions{
 			PageWidthPt:   0,
@@ -210,6 +209,24 @@ func cmdValidate(args []string, stderr io.Writer) int {
 		})
 		return err
 	})
+}
+
+func validatePDF(ctx context.Context, in *spectreps.Instance, src []byte) error {
+	doc, err := in.OpenPDF(ctx, src)
+	if err != nil {
+		return err
+	}
+	opt := spectreps.RunOptions{
+		PageWidthPt:   0,
+		PageHeightPt:  0,
+		ResolutionDPI: 0,
+	}
+	for page := range doc.PageCount() {
+		if _, err = in.RasterizePage(ctx, doc, page, opt); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func cmdCompare(args []string, stdout, stderr io.Writer) int {

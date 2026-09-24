@@ -13,6 +13,15 @@ type Document struct {
 	file *pdf.File
 }
 
+// PageCount returns the number of page leaves.
+// A nil document reports 0.
+func (doc *Document) PageCount() int {
+	if doc == nil || doc.file == nil {
+		return 0
+	}
+	return doc.file.PageCount()
+}
+
 // OpenPDF opens a PDF and returns its document.
 func (in *Instance) OpenPDF(ctx context.Context, src []byte) (*Document, error) {
 	if ctx == nil {
