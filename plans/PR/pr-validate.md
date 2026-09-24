@@ -119,5 +119,5 @@ No GitHub issue exists for this tag. The ledger file is `plans/v0.0.1/08-validat
 | Extension | Files | Insertions | Deletions |
 | --- | ---: | ---: | ---: |
 | `.go` | 4 | 132 | 3 |
-| `.md` | 5 | 42 | 12 |
-| **Total** | **9** | **174** | **15** |
+| `.md` | 6 | 165 | 12 |
+| **Total** | **10** | **297** | **15** |
