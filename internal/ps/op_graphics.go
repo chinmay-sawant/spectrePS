@@ -4,6 +4,8 @@ import (
 	"context"
 	"math"
 	"sync"
+
+	"github.com/chinmay-sawant/spectrePS/internal/graphics"
 )
 
 const (
@@ -38,8 +40,9 @@ type matrix struct {
 
 // devPt is one device-space path point.
 type devPt struct {
-	x float64
-	y float64
+	x    float64
+	y    float64
+	move bool
 }
 
 // paintMark records one of stroke, fill, or eofill.
@@ -84,6 +87,8 @@ type gstate struct {
 	blue        float64
 	saves       []*gstateSnap
 	pages       int
+	pix         *graphics.Pixmap
+	scale       float64
 	strokeCount int
 	fillCount   int
 	eoFillCount int
@@ -160,7 +165,7 @@ func opLineto(ctx context.Context, interp *Interp) error {
 		return err
 	}
 	devX, devY := state.ctm.apply(userX, userY)
-	return state.addPoints([]devPt{{x: devX, y: devY}})
+	return state.addPoints([]devPt{{x: devX, y: devY, move: false}})
 }
 
 func opRlineto(ctx context.Context, interp *Interp) error {
@@ -177,7 +182,7 @@ func opRlineto(ctx context.Context, interp *Interp) error {
 		return err
 	}
 	devX, devY := state.ctm.apply(userX+deltaX, userY+deltaY)
-	return state.addPoints([]devPt{{x: devX, y: devY}})
+	return state.addPoints([]devPt{{x: devX, y: devY, move: false}})
 }
 
 func opCurveto(ctx context.Context, interp *Interp) error {
@@ -222,7 +227,7 @@ func opClosepath(ctx context.Context, interp *Interp) error {
 	if !state.subOpen {
 		return errOf(errNoCurrentPt, "closepath")
 	}
-	return state.addPoints([]devPt{{x: state.subX, y: state.subY}})
+	return state.addPoints([]devPt{{x: state.subX, y: state.subY, move: false}})
 }
 
 func opNewpath(ctx context.Context, interp *Interp) error {
@@ -343,6 +348,9 @@ func opShowPage(ctx context.Context, interp *Interp) error {
 		return err
 	}
 	state := gsFor(interp)
+	if state.pix != nil {
+		state.pix.ShowPage()
+	}
 	state.clearPath()
 	state.pages++
 	return nil
@@ -466,11 +474,13 @@ func newGState() *gstate {
 		fillCount:   0,
 		eoFillCount: 0,
 		marks:       nil,
+		pix:         nil,
+		scale:       0,
 	}
 }
 
 func (state *gstate) moveTo(devX, devY float64) error {
-	if err := state.addPoints([]devPt{{x: devX, y: devY}}); err != nil {
+	if err := state.addPoints([]devPt{{x: devX, y: devY, move: true}}); err != nil {
 		return err
 	}
 	state.subX = state.devX
@@ -538,6 +548,9 @@ func (state *gstate) clearPath() {
 }
 
 func (state *gstate) notePaint(mark paintMark) {
+	if state.pix != nil {
+		state.emit(mark)
+	}
 	state.marks = append(state.marks, mark)
 	last := state.marks[len(state.marks)-1]
 	switch {
@@ -549,6 +562,19 @@ func (state *gstate) notePaint(mark paintMark) {
 		state.fillCount++
 	}
 	state.clearPath()
+}
+
+func (state *gstate) emit(mark paintMark) {
+	pts := make([]graphics.Point, len(state.path))
+	for i, pt := range state.path {
+		pts[i] = graphics.Point{X: pt.x * state.scale, Y: pt.y * state.scale, Move: pt.move}
+	}
+	width := state.width * state.scale * math.Hypot(state.ctm.a, state.ctm.b)
+	if mark.kind == paintStroke {
+		state.pix.Stroke(pts, width, state.red, state.green, state.blue)
+		return
+	}
+	state.pix.Fill(pts, state.red, state.green, state.blue, mark.evenOdd)
 }
 
 func (state *gstate) snapshot() *gstateSnap {

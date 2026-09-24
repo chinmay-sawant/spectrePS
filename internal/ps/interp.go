@@ -1,6 +1,10 @@
 package ps
 
-import "context"
+import (
+	"context"
+
+	"github.com/chinmay-sawant/spectrePS/internal/graphics"
+)
 
 // Caps from the language file. Graphics caps live here so later files share one set.
 const (
@@ -59,7 +63,28 @@ func (ip *Interp) Run(ctx context.Context, src []byte) error {
 	if err != nil {
 		return err
 	}
-	return ip.ExecStream(ctx, objs)
+	if err := ip.ExecStream(ctx, objs); err != nil {
+		return err
+	}
+	return ip.finishPage()
+}
+
+// UsePixmap paints stroke, fill, and showpage into pm.
+// scale converts CTM points into device pixels. 72 dpi uses 1.
+func (ip *Interp) UsePixmap(pm *graphics.Pixmap, scale float64) {
+	state := gsFor(ip)
+	state.pix = pm
+	state.scale = scale
+}
+
+func (ip *Interp) finishPage() error {
+	state := gsFor(ip)
+	if state.pix == nil || state.pages > 0 {
+		return nil
+	}
+	state.pix.ShowPage()
+	state.pages++
+	return nil
 }
 
 // Operand returns a copy of the operand stack from bottom to top.

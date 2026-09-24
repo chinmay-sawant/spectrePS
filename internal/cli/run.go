@@ -1,13 +1,17 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"io/fs"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/chinmay-sawant/spectrePS/spectreps"
@@ -19,7 +23,10 @@ const (
 	exitUsage = 2
 	exitIO    = 3
 
-	comparePaths = 2
+	comparePaths   = 2
+	rasterFileMode = 0o600
+	rgbChannels    = 3
+	rgbaChannels   = 4
 )
 
 // Run parses args and returns the process exit code.
@@ -94,18 +101,32 @@ func cmdRaster(args []string, stderr io.Writer) int {
 		return exitUsage
 	}
 	path := rest[0]
-	return withInput(stderr, path, func(ctx context.Context, in *spectreps.Instance, src []byte) error {
-		if strings.HasSuffix(path, ".pdf") {
-			doc, err := in.OpenPDF(ctx, src)
-			if err != nil {
-				return err
-			}
-			_, err = in.RasterizePage(ctx, doc, 0, opt)
-			return err
+	in, code := newInstance(stderr)
+	if code != 0 {
+		return code
+	}
+	defer in.Close()
+	src, code := readFile(path, stderr)
+	if code != 0 {
+		return code
+	}
+	var pages []spectreps.PageImage
+	var err error
+	if strings.HasSuffix(path, ".pdf") {
+		doc, openErr := in.OpenPDF(context.Background(), src)
+		if openErr != nil {
+			return finish(stderr, openErr)
 		}
-		_, err := in.RunPostScript(ctx, src, opt)
-		return err
-	})
+		var page spectreps.PageImage
+		page, err = in.RasterizePage(context.Background(), doc, 0, opt)
+		pages = []spectreps.PageImage{page}
+	} else {
+		pages, err = in.RunPostScript(context.Background(), src, opt)
+	}
+	if err != nil {
+		return finish(stderr, err)
+	}
+	return writePages(outPath, pages, stderr)
 }
 
 func cmdRewrite(args []string, stderr io.Writer) int {
@@ -169,7 +190,7 @@ func cmdCompare(args []string, stdout, stderr io.Writer) int {
 	case "bytes":
 		return cmdCompareBytes(args[1:], stdout, stderr)
 	case "raster":
-		return cmdCompareRaster(args[1:], stderr)
+		return cmdCompareRaster(args[1:], stdout, stderr)
 	default:
 		usage(stderr)
 		return exitUsage
@@ -206,7 +227,7 @@ func cmdCompareBytes(args []string, stdout, stderr io.Writer) int {
 	return exitJob
 }
 
-func cmdCompareRaster(args []string, stderr io.Writer) int {
+func cmdCompareRaster(args []string, stdout, stderr io.Writer) int {
 	rest, opt, outPath, code := parsePageFlags("compare raster", args, stderr)
 	if code != 0 {
 		return code
@@ -215,14 +236,116 @@ func cmdCompareRaster(args []string, stderr io.Writer) int {
 		usage(stderr)
 		return exitUsage
 	}
-	return withInputs(stderr, rest, func(context.Context, *spectreps.Instance, [][]byte) error {
-		return compareRasterUnimplemented(opt, outPath)
-	})
+	_ = outPath
+	in, code := newInstance(stderr)
+	if code != 0 {
+		return code
+	}
+	defer in.Close()
+	leftSrc, code := readFile(rest[0], stderr)
+	if code != 0 {
+		return code
+	}
+	rightSrc, code := readFile(rest[1], stderr)
+	if code != 0 {
+		return code
+	}
+	res, err := rasterPair(in, leftSrc, rightSrc, opt)
+	if err != nil {
+		return finish(stderr, err)
+	}
+	if res.Equal {
+		return exitOK
+	}
+	if res.Reason == "pixel" {
+		fmt.Fprintf(stdout, "mismatch pixel %d\n", res.Offset)
+		return exitJob
+	}
+	fmt.Fprintf(stdout, "mismatch %s\n", res.Reason)
+	return exitJob
 }
 
-// CompareRaster panics with ErrNotImplemented in this phase.
-func compareRasterUnimplemented(spectreps.RunOptions, string) error {
-	return spectreps.ErrNotImplemented
+func rasterPair(
+	in *spectreps.Instance,
+	leftSrc, rightSrc []byte,
+	opt spectreps.RunOptions,
+) (spectreps.CompareResult, error) {
+	ctx := context.Background()
+	left, err := in.RunPostScript(ctx, leftSrc, opt)
+	if err != nil {
+		return spectreps.CompareResult{}, err
+	}
+	right, err := in.RunPostScript(ctx, rightSrc, opt)
+	if err != nil {
+		return spectreps.CompareResult{}, err
+	}
+	if len(left) == 0 || len(right) == 0 {
+		return spectreps.CompareResult{}, spectreps.JobError{
+			Op: "compare", Msg: "rangecheck", Filename: "", Line: 0, Column: 0,
+		}
+	}
+	return spectreps.CompareRaster(left[0], right[0]), nil
+}
+
+func writePages(outPath string, pages []spectreps.PageImage, stderr io.Writer) int {
+	if len(pages) > 1 && !strings.Contains(outPath, "%d") {
+		fmt.Fprintln(stderr, "spectreps: multiple pages need a page number in the output path")
+		return exitUsage
+	}
+	for i, page := range pages {
+		path := outPath
+		if strings.Contains(path, "%d") {
+			path = strings.ReplaceAll(path, "%d", strconv.Itoa(i+1))
+		}
+		var payload []byte
+		if strings.HasSuffix(path, ".png") {
+			var err error
+			payload, err = encodePNG(page)
+			if err != nil {
+				fmt.Fprintln(stderr, err.Error())
+				return exitIO
+			}
+		} else {
+			payload = encodePPM(page)
+		}
+		if err := os.WriteFile(path, payload, rasterFileMode); err != nil {
+			fmt.Fprintln(stderr, err.Error())
+			if errors.Is(err, fs.ErrNotExist) {
+				return exitUsage
+			}
+			return exitIO
+		}
+	}
+	return exitOK
+}
+
+func encodePPM(img spectreps.PageImage) []byte {
+	header := fmt.Sprintf("P6\n%d %d\n255\n", img.Width, img.Height)
+	body := make([]byte, 0, img.Width*img.Height*rgbChannels)
+	for row := range img.Height {
+		base := row * img.Stride
+		body = append(body, img.Pixels[base:base+img.Width*rgbChannels]...)
+	}
+	return append([]byte(header), body...)
+}
+
+func encodePNG(img spectreps.PageImage) ([]byte, error) {
+	pic := image.NewRGBA(image.Rect(0, 0, img.Width, img.Height))
+	for y := range img.Height {
+		for x := range img.Width {
+			src := y*img.Stride + x*rgbChannels
+			dst := y*pic.Stride + x*rgbaChannels
+			pic.Pix[dst] = img.Pixels[src]
+			pic.Pix[dst+1] = img.Pixels[src+1]
+			pic.Pix[dst+2] = img.Pixels[src+2]
+			pic.Pix[dst+3] = 255
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, pic); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 func parsePageFlags(name string, args []string, stderr io.Writer) ([]string, spectreps.RunOptions, string, int) {
@@ -276,23 +399,6 @@ func withInput(stderr io.Writer, path string, fn func(context.Context, *spectrep
 		return code
 	}
 	return finish(stderr, fn(context.Background(), in, src))
-}
-
-func withInputs(stderr io.Writer, paths []string, fn func(context.Context, *spectreps.Instance, [][]byte) error) int {
-	in, code := newInstance(stderr)
-	if code != 0 {
-		return code
-	}
-	defer in.Close()
-	srcs := make([][]byte, len(paths))
-	for i, path := range paths {
-		src, readCode := readFile(path, stderr)
-		if readCode != 0 {
-			return readCode
-		}
-		srcs[i] = src
-	}
-	return finish(stderr, fn(context.Background(), in, srcs))
 }
 
 func newInstance(stderr io.Writer) (*spectreps.Instance, int) {

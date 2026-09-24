@@ -83,9 +83,6 @@ func TestNotImplemented(t *testing.T) {
 	t.Run("nil context", func(t *testing.T) {
 		checkNilContext(t, in, src, opt, rewrite)
 	})
-	t.Run("CompareRaster", func(t *testing.T) {
-		checkCompareRasterPanic(t)
-	})
 }
 
 func checkNotImplemented(
@@ -96,14 +93,6 @@ func checkNotImplemented(
 	rewrite spectreps.RewriteOptions,
 ) {
 	t.Helper()
-
-	pages, err := in.RunPostScript(t.Context(), src, opt)
-	if !errors.Is(err, spectreps.ErrNotImplemented) {
-		t.Fatalf("RunPostScript() error = %v, want ErrNotImplemented", err)
-	}
-	if pages != nil {
-		t.Fatalf("RunPostScript() pages = %#v, want nil", pages)
-	}
 
 	doc, err := in.OpenPDF(t.Context(), src)
 	if !errors.Is(err, spectreps.ErrNotImplemented) {
@@ -206,14 +195,6 @@ func checkNilContext(
 	})
 }
 
-func checkCompareRasterPanic(t *testing.T) {
-	t.Helper()
-
-	requirePanicIs(t, spectreps.ErrNotImplemented, func() {
-		spectreps.CompareRaster(spectreps.PageImage{}, spectreps.PageImage{})
-	})
-}
-
 func TestCompareFiles(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -271,18 +252,6 @@ func requirePanic(t *testing.T, call func()) {
 	got, ok := recovered.(string)
 	if !ok || got != want {
 		t.Fatalf("panic = %#v, want %q", recovered, want)
-	}
-}
-
-func requirePanicIs(t *testing.T, target error, fn func()) {
-	t.Helper()
-	recovered, panicked := catchPanic(fn)
-	if !panicked {
-		t.Fatalf("no panic, want %v", target)
-	}
-	err, ok := recovered.(error)
-	if !ok || !errors.Is(err, target) {
-		t.Fatalf("panic = %#v, want errors.Is %v", recovered, target)
 	}
 }
 

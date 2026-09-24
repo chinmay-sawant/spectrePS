@@ -19,9 +19,3 @@ func CompareBytes(a, b []byte) (bool, int64, string) {
 	}
 	return true, -1, ""
 }
-
-// CompareRaster panics with ErrNotImplemented.
-// The public signature returns a result and cannot return an error.
-func CompareRaster() {
-	panic(ErrNotImplemented)
-}

@@ -1,7 +1,7 @@
 # v0.0.1 - Spectre PS program
 
 > **Parent:** `skills/phase-wise-checklist/SKILLS.md` - checklist rules
-> **Status:** tag 0.0.1 is checked. Phase 03 is checked. The next open phase is 04.
+> **Status:** tags 0.0.1 and 0.0.2 are checked. The next open phase is 06.
 > **Estimated effort:** 0.0.1 is a few days of skeleton work. The full ledger through validate is many weeks.
 
 ---

@@ -14,7 +14,10 @@ go.mod
 cmd/spectreps/main.go
 internal/cli/
 internal/engine/
+internal/graphics/
+internal/ps/
 spectreps/
+testdata/
 documentation/
 plans/v0.0.1/
 skills/phase-wise-checklist/SKILLS.md
