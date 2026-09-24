@@ -10,7 +10,7 @@
 
 Implement `documentation/language.md` under `internal/ps/`. `RunPostScript` still returns `ErrNotImplemented` until phase 04 connects a device. This phase proves the stacks with a test device that records operator calls, or with operand-stack dumps where no paint is required.
 
-Package `spectreps` is the only caller of `internal/ps` from outside that tree. `cmd/spectreps` stays on the public API.
+Package `spectreps` is the only caller of `internal/ps` from outside that tree. `internal/cli` stays on the public API.
 
 ## Executive summary
 

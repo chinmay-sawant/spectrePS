@@ -2,7 +2,7 @@
 
 Spectre PS is a Go program for the jobs Ghostscript is used for. It reads PostScript and PDF, paints pages to pixels, writes a new PDF, reports interpreter errors, and compares bytes.
 
-The command is `spectreps`. The library import path is `github.com/chinmay-sawant/spectrePS`, package name `spectreps`. The command calls that package. A later importer calls the same functions. The module does not link the system `gs` library and does not start `gs`.
+The command is `spectreps`. The library import path is `github.com/chinmay-sawant/spectrePS/spectreps`, package name `spectreps`. The command calls that package through `internal/cli`. A later importer calls the same functions. The module does not link the system `gs` library and does not start `gs`.
 
 v0.0.1 is the module, the exported function list, and file byte compare. Raster, PDF, and rewrite are later tags. Their checklists already live in `plans/v0.0.1/` so the API does not get redesigned when those tags start.
 

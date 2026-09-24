@@ -15,7 +15,7 @@ The detailed contracts stay in their own files. This note is the reason those fi
 
 ## What Spectre is
 
-Spectre PS is a Go program for jobs people use Ghostscript for. The command is `spectreps`. The library import path is `github.com/chinmay-sawant/spectrePS`, package name `spectreps`. The CLI and a later importer call the same functions. The module line is `go 1.26.4`. The remote is `https://github.com/chinmay-sawant/spectrePS.git`, branch `master`.
+Spectre PS is a Go program for jobs people use Ghostscript for. The command is `spectreps`. The library import path is `github.com/chinmay-sawant/spectrePS/spectreps`, package name `spectreps`. The CLI and a later importer call the same functions. The module line is `go 1.26.4`. The remote is `https://github.com/chinmay-sawant/spectrePS.git`, branch `master`.
 
 The program reads PostScript and PDF, paints pages to pixels, writes a new PDF, reports interpreter errors, and compares bytes. Printer drivers, PCL, and XPS are out of the ledger.
 
@@ -37,7 +37,7 @@ This is not a clean-room rewrite. A clean room is a formal split: one group stud
 | 0.0.4 | Rewrite a new PDF with Flate-compressed streams and stable bytes. |
 | 0.0.5 | `validate`, which stops on the first interpreter error. |
 
-`cmd/spectreps` imports only the public package. Interpreter code lands under `internal/` when the first real file needs it. Go rejects an outside import of `internal/`, so the exported functions have to exist before the interpreter does.
+`cmd/spectreps` calls `internal/cli`, and `internal/cli` calls the public package. `internal/engine` holds the session and file byte compare. Interpreter code lands under `internal/ps` and the other internal trees when the first real file needs it. Go rejects an outside import of `internal/`, so the exported functions have to exist before the interpreter does.
 
 ## Ghostscript jobs Spectre takes
 

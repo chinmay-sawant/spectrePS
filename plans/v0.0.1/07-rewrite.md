@@ -20,7 +20,7 @@ The writer omits wall-clock dates and uses a trailer id derived from the content
 
 ### 7.1 Vector rewrite
 
-- [ ] `internal/pdfout` implements the device seam and emits path operators for the same subset phase 06 paints. `spectreps rewrite -o out.pdf in.pdf` exits 0. Opening `out.pdf` with `OpenPDF` and rasterizing page 0 matches `RasterizePage` of the input, via `CompareRaster`. Proof: `go test -count=1 . -run TestRewritePixels`
+- [ ] `internal/pdfout` implements the device seam and emits path operators for the same subset phase 06 paints. `spectreps rewrite -o out.pdf in.pdf` exits 0. Opening `out.pdf` with `OpenPDF` and rasterizing page 0 matches `RasterizePage` of the input, via `CompareRaster`. Proof: `go test -count=1 ./spectreps -run TestRewritePixels`
 
 ### 7.2 Flate
 
@@ -28,11 +28,11 @@ The writer omits wall-clock dates and uses a trailer id derived from the content
 
 ### 7.3 Stable bytes
 
-- [ ] Two `RewritePDF` calls on the same bytes return buffers `CompareFiles` reports equal. The output contains no current timestamp. Proof: `go test -count=1 . -run TestRewriteStable`
+- [ ] Two `RewritePDF` calls on the same bytes return buffers `CompareFiles` reports equal. The output contains no current timestamp. Proof: `go test -count=1 ./spectreps -run TestRewriteStable`
 
 ### 7.4 CLI
 
-- [ ] `spectreps rewrite` without `-o` exits 2. `-compress=false` selects the uncompressed option. Proof: `go test -count=1 ./cmd/spectreps -run TestRewriteCLI`
+- [ ] `spectreps rewrite` without `-o` exits 2. `-compress=false` selects the uncompressed option. Proof: `go test -count=1 ./internal/cli -run TestRewriteCLI`
 
 ### 7.5 Closure
 

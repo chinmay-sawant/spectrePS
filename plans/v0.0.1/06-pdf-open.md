@@ -28,7 +28,7 @@ Real PDF pages are compressed. Flate decode is part of this phase, not a later o
 
 ### 6.3 Content operators
 
-- [ ] Operators `m l c h re S s f f* n q Q w RG rg g G` paint through the graphics device. A one-page path PDF rasterizes to the same pixels as the PostScript program of the same marks, checked with `CompareRaster`. Proof: `go test -count=1 . -run TestPDFPathMatchesPS`
+- [ ] Operators `m l c h re S s f f* n q Q w RG rg g G` paint through the graphics device. A one-page path PDF rasterizes to the same pixels as the PostScript program of the same marks, checked with `CompareRaster`. Proof: `go test -count=1 ./spectreps -run TestPDFPathMatchesPS`
 
 ### 6.4 Rejected constructs
 
@@ -36,7 +36,7 @@ Real PDF pages are compressed. Flate decode is part of this phase, not a later o
 
 ### 6.5 Public methods and CLI
 
-- [ ] `OpenPDF` and `RasterizePage` no longer return `ErrNotImplemented` for this subset. `spectreps raster -o out.ppm in.pdf` writes the P6 file. A bad page index is `rangecheck` and exit 1. Proof: `go test -count=1 -run 'TestRasterizePage|TestNotImplemented' .` and `go test -count=1 ./cmd/spectreps -run TestRasterPDF`
+- [ ] `OpenPDF` and `RasterizePage` no longer return `ErrNotImplemented` for this subset. `spectreps raster -o out.ppm in.pdf` writes the P6 file. A bad page index is `rangecheck` and exit 1. Proof: `go test -count=1 -run 'TestRasterizePage|TestNotImplemented' ./spectreps` and `go test -count=1 ./internal/cli -run TestRasterPDF`
 
 ### 6.6 Closure
 
