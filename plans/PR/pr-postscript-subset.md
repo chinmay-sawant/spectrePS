@@ -1,12 +1,12 @@
 ## Summary
 
-Tag 0.0.2 starts with a PostScript subset under `internal/ps`. Programs can scan, build procedures, and run the stack, math, dictionary, and control operators from `documentation/language.md`. `RunPostScript` still returns `ErrNotImplemented` until a pixmap device exists.
+Tag 0.0.2 runs the PostScript subset, paints pages, and compares those pixels. `RunPostScript` returns one `PageImage` per page. `spectreps raster` writes PPM or PNG. `spectreps compare raster` reports the first pixel mismatch.
 
 ---
 
 ## Motivation / context
 
-- Plans: `plans/v0.0.1/03-postscript-subset.md`
+- Plans: `plans/v0.0.1/03-postscript-subset.md`, `plans/v0.0.1/04-raster.md`, `plans/v0.0.1/05-compare-raster.md`
 - Issues: see **Related issues**
 
 ---
@@ -25,7 +25,15 @@ Tag 0.0.2 starts with a PostScript subset under `internal/ps`. Programs can scan
 - A name inside a procedure is looked up when the procedure runs.
 - `file`, `run`, `deletefile`, `renamefile`, and `filenameforall` return `invalidaccess`. `show` stays `undefined`.
 - Operand, execution, dictionary, and procedure-nesting caps return `stackoverflow` or `limitcheck`. A cancelled context returns `ctx.Err()`.
-- Path and matrix operators record device-space points through a fake device. `currentpoint` stays in user space.
+- Path and matrix operators record device-space points. `currentpoint` stays in user space.
+
+### Raster and compare
+
+- `internal/graphics` owns the default matrix, gsave cap, and the pixmap device. Row 0 is the top of the page.
+- `RunPostScript` returns images for a subset program. `show` returns `JobError`. A page past the pixel cap returns `limitcheck` and allocates no pixmap.
+- `spectreps raster` writes P6 PPM, or PNG when the path ends in `.png`. More than one page without `%d` exits 2.
+- `CompareRaster` checks width, then height, then RGB bytes, and ignores stride padding.
+- The first fixture is `testdata/line-bottom.ppm`.
 
 ---
 
@@ -35,10 +43,10 @@ Tag 0.0.2 starts with a PostScript subset under `internal/ps`. Programs can scan
 |------|--------|
 | **Performance** | No measured change. The interpreter is new and unbenchmarked. |
 | **Memory** | Operand stack cap is 8192 objects. Dictionaries grow with `def`. |
-| **Behavior / correctness** | `internal/ps` runs the subset. The public `RunPostScript` method is unchanged. |
-| **API / CLI** | No new exported signature. The command still reports `spectreps: not implemented` for `run`. |
+| **Behavior / correctness** | Subset programs paint. `run` on a subset program exits 0. `show` exits 1 with `JobError`. |
+| **API / CLI** | `RunPostScript` and `CompareRaster` do real work. `OpenPDF`, `RasterizePage`, and `RewritePDF` still return `ErrNotImplemented`. |
 | **Dependencies** | No third-party Go modules. |
-| **Binary size / build time** | `cmd/spectreps` does not import `internal/ps`, so the binary does not grow from this package yet. |
+| **Binary size / build time** | `make build` still produces `bin/spectreps`. The command now links the interpreter. |
 
 ---
 
@@ -68,9 +76,12 @@ go test -count=1 ./internal/ps -run TestLateLookup
 go test -count=1 ./internal/ps -run 'TestStack|TestMath|TestDict|TestControl'
 go test -count=1 ./internal/ps -run TestBanned
 go test -count=1 ./internal/ps -run TestLimits
+go test -count=1 ./internal/graphics -run TestMatrix
+go test -count=1 ./spectreps -run 'TestYFlip|TestPaint|TestPixelCap|TestRunPostScript|TestCompareRaster'
+go test -count=1 ./internal/cli -run 'TestRasterFiles|TestCompareRasterCLI|TestCompareSameOptions'
 ```
 
-Each proof command exited 0 on 2026-09-24. `make build` was not required. This change does not edit `cmd/spectreps`.
+Each proof command exited 0 on 2026-09-24. `make build` was not required for a new `cmd` file. `cmd/spectreps/main.go` is unchanged.
 
 ---
 
@@ -84,7 +95,7 @@ ok  github.com/chinmay-sawant/spectrePS/internal/ps
 
 ## Related issues
 
-No GitHub issue exists for this phase. The ledger is `plans/v0.0.1/03-postscript-subset.md`.
+No GitHub issue exists for this tag. The ledger files are `plans/v0.0.1/03-postscript-subset.md`, `plans/v0.0.1/04-raster.md`, and `plans/v0.0.1/05-compare-raster.md`.
 
 ---
 
@@ -99,7 +110,7 @@ No GitHub issue exists for this phase. The ledger is `plans/v0.0.1/03-postscript
 
 ## Follow-ups (out of scope)
 
-- Phase 04 binds the same path operators to the pixmap. `RunPostScript` stays `ErrNotImplemented` until that device exists.
+- Tag 0.0.3 opens a small PDF in `plans/v0.0.1/06-pdf-open.md`.
 
 ---
 
@@ -120,6 +131,7 @@ No GitHub issue exists for this phase. The ledger is `plans/v0.0.1/03-postscript
 
 | Extension | Files | Insertions | Deletions |
 |-----------|-------|------------|-----------|
-| `.go` | 17 | 4706 | 0 |
-| `.md` | 3 | 136 | 11 |
-| **Total** | 20 | 4842 | 11 |
+| `.go` | 30 | 5908 | 98 |
+| `.md` | 7 | 193 | 29 |
+| `.ppm` | 1 | 4 | 0 |
+| **Total** | 38 | 6105 | 127 |
