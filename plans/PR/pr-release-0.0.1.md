@@ -1,13 +1,13 @@
 ## Summary
 
-Record the first Spectre PS release note. It covers `master` through the validate merge. `spectreps version` still prints `0.0.1`, and this change does not create a git tag.
+Record the v0.0.1 release note. That is the first product release. The ledger phases 0.0.1 through 0.0.5 all ship in it. `spectreps version` prints `0.0.1`. This change does not create a git tag.
 
 ---
 
 ## Motivation / context
 
 - Plans: `plans/v0.0.1/00-program.md`
-- Release note: `plans/v0.0.1/PR/release-v0.0.5.md`
+- Release note: `plans/v0.0.1/PR/release-v0.0.1.md`
 - Issues: see **Related issues**
 
 ---
@@ -16,8 +16,8 @@ Record the first Spectre PS release note. It covers `master` through the validat
 
 ### Release note
 
-- `plans/v0.0.1/PR/release-v0.0.5.md` lists tags 0.0.1 through 0.0.5, the five merged pull requests, the build, and the deferred rows.
-- There is no previous git tag, so the note is the whole ledger rather than a delta from `v0.0.4`.
+- `plans/v0.0.1/PR/release-v0.0.1.md` is the v0.0.1 release note. It lists the five ledger phases, the merged pull requests, the build, and the deferred rows.
+- There is no previous product release. Ledger numbers 0.0.2 through 0.0.5 are build steps inside v0.0.1.
 
 ### README
 
@@ -53,7 +53,7 @@ Record the first Spectre PS release note. It covers `master` through the validat
 ### Commands
 
 ```sh
-git diff master -- README.md plans/v0.0.1/PR/release-v0.0.5.md
+git diff master -- README.md plans/v0.0.1/PR/release-v0.0.1.md
 ```
 
 ---
@@ -61,7 +61,7 @@ git diff master -- README.md plans/v0.0.1/PR/release-v0.0.5.md
 ## Screenshots / sample output
 
 ```
-plans/v0.0.1/PR/release-v0.0.5.md
+plans/v0.0.1/PR/release-v0.0.1.md
 ```
 
 ---
@@ -83,7 +83,7 @@ No GitHub issue exists for this note. The ledger file is `plans/v0.0.1/00-progra
 
 ## Follow-ups (out of scope)
 
-- Do not push a `v0.0.5` git tag until asked. The GitHub Release body is the note in this pull request.
+- Do not push a `v0.0.1` git tag until asked. The GitHub Release body is the note in this pull request.
 - Deferred rows stay in `plans/v0.0.1/10-deferred.md`.
 
 ---

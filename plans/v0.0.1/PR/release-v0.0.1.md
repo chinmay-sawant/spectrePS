@@ -1,10 +1,10 @@
-## v0.0.5
+## v0.0.1
 
-First release note for Spectre PS. There is no earlier git tag, so this note covers `master` through the validate merge at `96b6864`. The ledger calls that span tags 0.0.1 through 0.0.5. They are phase cuts in `plans/v0.0.1/`, not git tags.
+First release of Spectre PS. `spectreps version` prints `0.0.1`. There is no earlier git tag. This note covers `master` through `96b6864`.
+
+The ledger under `plans/v0.0.1/` numbered its build steps 0.0.1 through 0.0.5. Those numbers are phases inside this release. They are not product releases. v0.0.1 ships all of them.
 
 Spectre PS is a Go library and a `spectreps` command for a small slice of the jobs Ghostscript is used for. It reads a PostScript subset and a path-only PDF, paints pages to pixels, writes a new PDF, stops on the first error, and compares bytes or pixels. It does not link Ghostscript and it does not start `gs`.
-
-`spectreps version` still prints `0.0.1`. Nothing in this note bumps that constant, and no `v0.0.5` git tag has been pushed.
 
 - **License:** [MIT](https://github.com/chinmay-sawant/spectrePS/blob/master/LICENSE). Copyright (c) 2026 Chinmay Sawant.
 - **Module:** `github.com/chinmay-sawant/spectrePS`, Go 1.26.4.
@@ -17,13 +17,13 @@ Spectre PS is a Go library and a `spectreps` command for a small slice of the jo
 
 ### Highlights
 
-| Tag | What landed |
+| Phase inside v0.0.1 | What shipped |
 | --- | --- |
-| **0.0.1** | Module, `make` targets, public API, CLI, and `CompareFiles`. `cmd/spectreps` calls `internal/cli`, which calls package `spectreps`. |
-| **0.0.2** | PostScript subset in `documentation/language.md`. RGB pixmap with row 0 at the top. PPM raw and PNG. `CompareRaster`. |
-| **0.0.3** | PDF subset. Classic xref and xref streams. Flate decode. Path operators paint through the same pixmap as PostScript. |
-| **0.0.4** | `RewritePDF` writes a new PDF. Default content streams are Flate. Two calls on the same input return the same bytes. No creation date. |
-| **0.0.5** | `spectreps validate` stops on the first PostScript or PDF error. `deletefile` returns `invalidaccess` and does not delete a neighbor file. |
+| **Ledger 0.0.1** | Module, `make` targets, public API, CLI, and `CompareFiles`. `cmd/spectreps` calls `internal/cli`, which calls package `spectreps`. |
+| **Ledger 0.0.2** | PostScript subset in `documentation/language.md`. RGB pixmap with row 0 at the top. PPM raw and PNG. `CompareRaster`. |
+| **Ledger 0.0.3** | PDF subset. Classic xref and xref streams. Flate decode. Path operators paint through the same pixmap as PostScript. |
+| **Ledger 0.0.4** | `RewritePDF` writes a new PDF. Default content streams are Flate. Two calls on the same input return the same bytes. No creation date. |
+| **Ledger 0.0.5** | `spectreps validate` stops on the first PostScript or PDF error. `deletefile` returns `invalidaccess` and does not delete a neighbor file. |
 
 ---
 
@@ -90,9 +90,11 @@ func main() {
 
 ---
 
-### What landed
+### What landed in v0.0.1
 
-#### 0.0.1 Library and CLI
+The headings below follow the ledger phases. All of them ship in this release.
+
+#### Library and CLI
 
 [#1](https://github.com/chinmay-sawant/spectrePS/pull/1)
 
@@ -101,7 +103,7 @@ func main() {
 - Exit codes are 0 for success, 1 for a job error or a compare mismatch, 2 for usage, and 3 for a read or write that fails before the interpreter runs.
 - `file`, `run`, `deletefile`, `renamefile`, and `filenameforall` are banned. They return `invalidaccess`.
 
-#### 0.0.2 PostScript subset, raster, and pixel compare
+#### PostScript subset, raster, and pixel compare
 
 [#2](https://github.com/chinmay-sawant/spectrePS/pull/2)
 
@@ -112,7 +114,7 @@ func main() {
 - `spectreps raster` writes P6 PPM, or PNG when `-o` ends in `.png`. PNG file bytes are not the equality check. `CompareRaster` compares width, height, then RGB bytes, and it ignores stride padding.
 - A raster mismatch is exit 1. It is not an interpreter error.
 
-#### 0.0.3 PDF open
+#### PDF open
 
 [#3](https://github.com/chinmay-sawant/spectrePS/pull/3)
 
@@ -123,7 +125,7 @@ func main() {
 - `Tj`, `TJ`, `'`, `"`, and `Do` return `undefined`. The page is not a blank success.
 - `spectreps raster -o out.ppm in.pdf` writes page 0.
 
-#### 0.0.4 PDF rewrite
+#### PDF rewrite
 
 [#4](https://github.com/chinmay-sawant/spectrePS/pull/4)
 
@@ -132,7 +134,7 @@ func main() {
 - The trailer `/ID` comes from the stored stream bytes. The file has no `/Info`, `/CreationDate`, or `/ModDate`. Two calls on the same input return equal bytes.
 - `spectreps rewrite -o out.pdf in.pdf` writes that file. Missing `-o` exits 2. `-compress=false` selects the uncompressed option.
 
-#### 0.0.5 Validate
+#### Validate
 
 [#5](https://github.com/chinmay-sawant/spectrePS/pull/5)
 
