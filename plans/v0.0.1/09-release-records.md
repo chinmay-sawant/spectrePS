@@ -23,8 +23,8 @@ The phase files own the behavior rows. This file owns the proof that the tag was
 
 ### 9.2 Tag 0.0.2
 
-- [ ] `make lint` output pasted below after phase 05 closure.
-- [ ] `make test` output pasted below after phase 05 closure.
+- [x] `make lint` output pasted below after phase 05 closure. Outcome on 2026-09-24: exit 0.
+- [x] `make test` output pasted below after phase 05 closure. Outcome on 2026-09-24: exit 0.
 
 ### 9.3 Tag 0.0.3
 
@@ -107,6 +107,30 @@ go test ./...
 ok  	github.com/chinmay-sawant/spectrePS/internal/cli	0.009s
 ?   	github.com/chinmay-sawant/spectrePS/internal/engine	[no test files]
 ok  	github.com/chinmay-sawant/spectrePS/spectreps	0.002s
+```
+
+Exit 0.
+
+### Tag 0.0.2, 2026-09-24
+
+`make lint`
+
+```
+golangci-lint run ./...
+```
+
+Exit 0. `gofmt -l .` printed nothing before golangci-lint.
+
+`make test`
+
+```
+go test ./...
+?   	github.com/chinmay-sawant/spectrePS/cmd/spectreps	[no test files]
+ok  	github.com/chinmay-sawant/spectrePS/internal/cli	0.016s
+?   	github.com/chinmay-sawant/spectrePS/internal/engine	[no test files]
+ok  	github.com/chinmay-sawant/spectrePS/internal/graphics	0.002s
+ok  	github.com/chinmay-sawant/spectrePS/internal/ps	0.007s
+ok  	github.com/chinmay-sawant/spectrePS/spectreps	0.007s
 ```
 
 Exit 0.

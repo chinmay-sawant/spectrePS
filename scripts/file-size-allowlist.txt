@@ -1,0 +1,4 @@
+# Go files over the 2,000-line limit in AGENTS.md ("Code structure").
+# Format: <repo-relative path><TAB><line count>
+# scripts/check-file-size.sh, via `make size-check` and `make lint`, fails
+# when this list and the tree disagree.

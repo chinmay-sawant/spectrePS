@@ -14,12 +14,16 @@ go.mod
 cmd/spectreps/main.go
 internal/cli/
 internal/engine/
+internal/graphics/
+internal/ps/
 spectreps/
+testdata/
 documentation/
 plans/v0.0.1/
 skills/phase-wise-checklist/SKILLS.md
 skills/unslop/SKILL.md
 skills/PR/
+scripts/
 ```
 
 `documentation/` is the prose folder for this repository. `plans/v0.0.1/` is the execution ledger. `skills/` holds agent instructions that already live in this repo.

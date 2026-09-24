@@ -1,7 +1,7 @@
 # v0.0.2 - Raster
 
 > **Parent:** `plans/v0.0.1/00-program.md` - program ledger
-> **Status:** not started
+> **Status:** implemented. Lint and test passed on 2026-09-24.
 > **Estimated effort:** 1 week
 
 ---
@@ -20,32 +20,32 @@ The pixmap is the object `CompareRaster` will use. PPM raw is the file form of t
 
 ### 4.1 Graphics state
 
-- [ ] `internal/graphics` implements the default matrix, `translate`, `scale`, `rotate`, `concat`, `setlinewidth`, `setgray`, `setrgbcolor`, `gsave`, and `grestore` with the defaults and the gsave cap in `documentation/language.md`. Proof: `go test -count=1 ./internal/graphics -run TestMatrix`
+- [x] `internal/graphics` implements the default matrix, `translate`, `scale`, `rotate`, `concat`, `setlinewidth`, `setgray`, `setrgbcolor`, `gsave`, and `grestore` with the defaults and the gsave cap in `documentation/language.md`. Proof: `go test -count=1 ./internal/graphics -run TestMatrix` exited 0 on 2026-09-24.
 
 ### 4.2 Path and y flip
 
-- [ ] `0 0 moveto 100 0 lineto stroke` on a 200 by 200 point page at 72 dpi paints the bottom row of the pixmap, not row 0. `currentpoint` after that `moveto` is 0, 0 in user space. Proof: `go test -count=1 ./spectreps -run TestYFlip`
+- [x] `0 0 moveto 100 0 lineto stroke` on a 200 by 200 point page at 72 dpi paints the bottom row of the pixmap, not row 0. `currentpoint` after that `moveto` is 0, 0 in user space. Proof: `go test -count=1 ./spectreps -run TestYFlip` exited 0 on 2026-09-24.
 
 ### 4.3 Paint
 
-- [ ] `stroke`, `fill`, and `eofill` write RGB pixels. `eofill` uses the even-odd rule. `showpage` appends one image and clears the path. A program with no `showpage` and no paint returns one blank page. A program that paints and skips `showpage` returns one image. Proof: `go test -count=1 ./spectreps -run TestPaint`
+- [x] `stroke`, `fill`, and `eofill` write RGB pixels. `eofill` uses the even-odd rule. `showpage` appends one image and clears the path. A program with no `showpage` and no paint returns one blank page. A program that paints and skips `showpage` returns one image. Proof: `go test -count=1 ./spectreps -run TestPaint` exited 0 on 2026-09-24.
 
 ### 4.4 Caps
 
-- [ ] A page whose pixel count is above 40000000, or whose side is above 20000, returns `limitcheck` and allocates no pixmap of that size. Proof: `go test -count=1 ./spectreps -run TestPixelCap`
+- [x] A page whose pixel count is above 40000000, or whose side is above 20000, returns `limitcheck` and allocates no pixmap of that size. Proof: `go test -count=1 ./spectreps -run TestPixelCap` exited 0 on 2026-09-24.
 
 ### 4.5 PPM and PNG
 
-- [ ] `spectreps raster -o out.ppm in.ps` writes a P6 file whose body matches `PageImage.Pixels`. `spectreps raster -o out.png in.ps` writes a PNG that decodes to the same pixels. Two pages and an `-o` without `%d` exit 2. Proof: `go test -count=1 ./internal/cli -run TestRasterFiles`
+- [x] `spectreps raster -o out.ppm in.ps` writes a P6 file whose body matches `PageImage.Pixels`. `spectreps raster -o out.png in.ps` writes a PNG that decodes to the same pixels. Two pages and an `-o` without `%d` exit 2. Proof: `go test -count=1 ./internal/cli -run TestRasterFiles` exited 0 on 2026-09-24. The fixture is `testdata/line-bottom.ppm`.
 
 ### 4.6 Public method
 
-- [ ] `RunPostScript` no longer returns `ErrNotImplemented` for a program in the subset. An unsupported operator still returns `JobError`. Proof: `go test -count=1 -run 'TestRunPostScript|TestNotImplemented' ./spectreps`
+- [x] `RunPostScript` no longer returns `ErrNotImplemented` for a program in the subset. An unsupported operator still returns `JobError`. Proof: `go test -count=1 -run 'TestRunPostScript|TestNotImplemented' ./spectreps` exited 0 on 2026-09-24.
 
 ### 4.7 Closure
 
-- [ ] `make lint` passes. Record the outcome here.
-- [ ] `make test` passes. Record the outcome here.
+- [x] `make lint` passes. Outcome on 2026-09-24: exit 0. `gofmt -l .` printed nothing. `golangci-lint run ./...` exited 0.
+- [x] `make test` passes. Outcome on 2026-09-24: exit 0. Transcript is in `plans/v0.0.1/09-release-records.md` under tag 0.0.2.
 
 ## Dependencies
 

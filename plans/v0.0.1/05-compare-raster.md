@@ -1,7 +1,7 @@
 # v0.0.2 - Raster compare
 
 > **Parent:** `plans/v0.0.1/00-program.md` - program ledger
-> **Status:** not started
+> **Status:** implemented. Lint and test passed on 2026-09-24. Tag 0.0.2 is checked.
 > **Estimated effort:** 2 days
 
 ---
@@ -18,21 +18,21 @@ Tag 0.0.2 is done when two PostScript programs can be painted and their pixmaps 
 
 ### 5.1 CompareRaster
 
-- [ ] `CompareRaster` implements the width, height, and pixel rules in `documentation/public-api.md`, including stride padding that must be ignored. Proof: `go test -count=1 -run TestCompareRaster ./spectreps`
+- [x] `CompareRaster` implements the width, height, and pixel rules in `documentation/public-api.md`, including stride padding that must be ignored. Proof: `go test -count=1 -run TestCompareRaster ./spectreps` exited 0 on 2026-09-24.
 
 ### 5.2 CLI
 
-- [ ] `spectreps compare raster -r 72 -w 200 -h 200 a.ps b.ps` exits 0 when both programs paint the same pixels, and exits 1 with `mismatch pixel N` or `mismatch width` on stdout when they do not. Proof: `go test -count=1 ./internal/cli -run TestCompareRasterCLI`
+- [x] `spectreps compare raster -r 72 -w 200 -h 200 a.ps b.ps` exits 0 when both programs paint the same pixels, and exits 1 with `mismatch pixel N` or `mismatch width` on stdout when they do not. Proof: `go test -count=1 ./internal/cli -run TestCompareRasterCLI` exited 0 on 2026-09-24. The checked command uses `-w 20 -h 20`.
 
 ### 5.3 Same options
 
-- [ ] The command rasterizes both files with one `RunOptions` value. A test feeds two programs that differ only if the resolution differed, and shows a single `-r` applies to both. Proof: `go test -count=1 ./internal/cli -run TestCompareSameOptions`
+- [x] The command rasterizes both files with one `RunOptions` value. A test feeds two programs that differ only if the resolution differed, and shows a single `-r` applies to both. Proof: `go test -count=1 ./internal/cli -run TestCompareSameOptions` exited 0 on 2026-09-24.
 
 ### 5.4 Closure
 
-- [ ] `make lint` passes. Record the outcome here.
-- [ ] `make test` passes. Record the outcome here.
-- [ ] Tag 0.0.2 note added to `plans/v0.0.1/09-release-records.md` with both transcripts.
+- [x] `make lint` passes. Outcome on 2026-09-24: exit 0. `gofmt -l .` printed nothing. `golangci-lint run ./...` exited 0.
+- [x] `make test` passes. Outcome on 2026-09-24: exit 0.
+- [x] Tag 0.0.2 note added to `plans/v0.0.1/09-release-records.md` with both transcripts.
 
 ## Dependencies
 

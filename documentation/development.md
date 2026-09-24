@@ -8,7 +8,8 @@
 | --- | --- |
 | `make build` | `go build -trimpath -o bin/spectreps ./cmd/spectreps` |
 | `make test` | `go test ./...` |
-| `make lint` | `gofmt -l` must be empty, then `golangci-lint run ./...` |
+| `make lint` | `gofmt -l` must be empty, then `golangci-lint run ./...`, then `make size-check` |
+| `make size-check` | `bash scripts/check-file-size.sh` |
 | `make fmt` | `gofmt -w .` |
 | `make tidy` | `go mod tidy` |
 | `make clean` | remove `bin/` |
@@ -16,6 +17,8 @@
 `make build` compiles `./cmd/spectreps` to `bin/spectreps`. The public library is `spectreps/`. Private code is `internal/cli` and `internal/engine`. The module root has no `.go` files.
 
 `make lint` and `make test` are the gates for a phase that changes Go code. Record both commands and their outcomes in the phase file before marking that phase complete. A documentation-only change does not run them. The rule comes from `skills/phase-wise-checklist/SKILLS.md`.
+
+`make size-check` enforces the 2,000-line Go file limit from `AGENTS.md`. Overflow is recorded in `scripts/file-size-allowlist.txt`. `make lint` runs the check, so a stale record fails lint.
 
 ## Checklist
 
