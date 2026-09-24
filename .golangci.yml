@@ -1,0 +1,61 @@
+# golangci-lint configuration for Spectre PS.
+# All available linters are enabled except those listed under disable.
+# Docs: https://golangci-lint.run/usage/configuration/
+#
+# Toolchain note: this module is go 1.26 / toolchain go1.26.4.
+# golangci-lint must be built with Go >= the module version (see Makefile).
+
+run:
+  timeout: 10m
+  tests: true
+
+linters:
+  enable-all: true
+  disable:
+    # Deprecated since v1.64. usetesting replaces it and stays enabled.
+    - tenv
+    # Go 1.26: golangci-lint v1.64 embeds gofumpt v0.7, which reports clean
+    # gofmt output as unformatted. gofmt stays enabled.
+    - gofumpt
+    # depguard's default allow-list only accepts the standard library and then
+    # misfires on module paths. The import boundary is checked by the phase
+    # ledger, not by this linter.
+    - depguard
+    # gofmt is the formatter. These two demand blank lines gofmt does not.
+    - wsl
+    - nlreturn
+    # Job errors and ErrNotImplemented are returned unchanged. Wrapping them
+    # would change the CLI stderr text and hide the sentinel from errors.Is.
+    - wrapcheck
+    # Several tests share one Instance. t.Parallel on those subtests races.
+    - paralleltest
+
+linters-settings:
+  varnamelen:
+    ignore-names:
+      - err
+      - ok
+      - in
+      - fn
+      - a
+      - b
+      - w
+      - h
+      - r
+      - i
+      - n
+      - tt
+
+issues:
+  # Report every finding. The default caps hide most of an enable-all run.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    # External tests use package spectreps_test. Table fixtures leave fields zero.
+    - path: _test\.go
+      linters:
+        - testpackage
+        - exhaustruct
+
+output:
+  sort-results: true

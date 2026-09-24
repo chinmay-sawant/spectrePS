@@ -1,6 +1,6 @@
 # Spectre PS
 
-Spectre PS is a Go CLI now and a Go library on the same functions. Package `spectreps` at `github.com/chinmay-sawant/spectrePS` is the API. `cmd/spectreps` only parses arguments, calls that package, and maps errors to exit codes. Do not import `internal/` from `cmd/spectreps`. Do not start or link system Ghostscript.
+Spectre PS is a Go CLI now and a Go library on the same functions. Package `spectreps` at `github.com/chinmay-sawant/spectrePS/spectreps` is the API. `cmd/spectreps` is the process entry and calls `internal/cli`. That package parses arguments, calls the public library, and maps errors to exit codes. `internal/cli` does not import `internal/engine` or a later interpreter package. Do not start or link system Ghostscript.
 
 The product reads PostScript and PDF. It rasterizes pages, rewrites a new PDF, reports interpreter errors, and compares bytes. Printer drivers, PCL, and XPS are out of this ledger.
 

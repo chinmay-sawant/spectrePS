@@ -22,7 +22,7 @@ The module path is `github.com/chinmay-sawant/spectrePS`. The `go` line is `1.26
 
 ### 1.2 Make
 
-- [x] `Makefile` defines `help`, `build`, `test`, `lint`, `fmt`, `tidy`, and `clean`. `lint` is `gofmt -l` plus `go vet ./...`. `build` outputs `bin/spectreps` from `./cmd/spectreps`.
+- [x] `Makefile` defines `help`, `build`, `test`, `lint`, `fmt`, `tidy`, and `clean`. `lint` is `gofmt -l` plus `golangci-lint run ./...`. `build` outputs `bin/spectreps` from `./cmd/spectreps`.
 
 ### 1.3 Docs
 

@@ -63,6 +63,54 @@ ok  	github.com/chinmay-sawant/spectrePS/cmd/spectreps	0.017s
 
 Exit 0.
 
+### Layout, 2026-09-24
+
+The public library moved to `spectreps/`. The command entry stayed `cmd/spectreps`. Session, compare, and flag handling moved under `internal/`.
+
+`make lint`
+
+```
+go vet ./...
+```
+
+Exit 0. `gofmt -l .` printed nothing before `go vet`.
+
+`make test`
+
+```
+go test ./...
+?   	github.com/chinmay-sawant/spectrePS/cmd/spectreps	[no test files]
+ok  	github.com/chinmay-sawant/spectrePS/internal/cli	0.008s
+?   	github.com/chinmay-sawant/spectrePS/internal/engine	[no test files]
+ok  	github.com/chinmay-sawant/spectrePS/spectreps	0.002s
+```
+
+Exit 0.
+
+### Lint target, 2026-09-24
+
+`make lint` now runs `gofmt -l` and then `golangci-lint run ./...`.
+
+`make lint`
+
+```
+golangci-lint run ./...
+```
+
+Exit 0. `gofmt -l .` printed nothing before golangci-lint.
+
+`make test`
+
+```
+go test ./...
+?   	github.com/chinmay-sawant/spectrePS/cmd/spectreps	[no test files]
+ok  	github.com/chinmay-sawant/spectrePS/internal/cli	0.009s
+?   	github.com/chinmay-sawant/spectrePS/internal/engine	[no test files]
+ok  	github.com/chinmay-sawant/spectrePS/spectreps	0.002s
+```
+
+Exit 0.
+
 ## Dependencies
 
 The phase file named in each row.

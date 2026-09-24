@@ -26,7 +26,7 @@ Tag cuts:
 
 Ghostscript 9.55.0 on this machine interprets PostScript and PDF, rasterizes through devices such as `png16m` and `ppmraw`, and rewrites through `pdfwrite` and `ps2write`. It does not ship a compare device. Byte compare and pixel compare are Spectre commands. Compression in the first rewrite tag is Flate on the new PDF's streams, which is the `pdfwrite` path, not a raster of the input.
 
-The public API is fixed in `documentation/public-api.md` before the interpreter exists, so later phases fill methods instead of inventing a second entry point. `cmd/spectreps` never imports `internal/`.
+The public API is fixed in `documentation/public-api.md` before the interpreter exists, so later phases fill methods instead of inventing a second entry point. `cmd/spectreps` imports `internal/cli` only. The command calls package `spectreps`.
 
 v0.0.1 ships `Version`, `New`, `Close`, `CompareFiles`, and a CLI that returns `ErrNotImplemented` for every job that needs an interpreter. That is intentional. A PostScript interpreter is tag 0.0.2.
 

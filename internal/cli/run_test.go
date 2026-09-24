@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"bytes"
@@ -12,7 +12,7 @@ const notImplemented = "spectreps: not implemented\n"
 func callRun(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	code := run(args, &stdout, &stderr)
+	code := Run(args, &stdout, &stderr)
 	return code, stdout.String(), stderr.String()
 }
 
@@ -36,7 +36,7 @@ func wantCode(t *testing.T, args []string, code int) {
 func writeTemp(t *testing.T, name string, data []byte) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), name)
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
 	return path
@@ -45,15 +45,15 @@ func writeTemp(t *testing.T, name string, data []byte) string {
 func writePair(t *testing.T, a, b []byte) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
-	pa := filepath.Join(dir, "a")
-	pb := filepath.Join(dir, "b")
-	if err := os.WriteFile(pa, a, 0644); err != nil {
-		t.Fatalf("write %s: %v", pa, err)
+	pathA := filepath.Join(dir, "a")
+	pathB := filepath.Join(dir, "b")
+	if err := os.WriteFile(pathA, a, 0o600); err != nil {
+		t.Fatalf("write %s: %v", pathA, err)
 	}
-	if err := os.WriteFile(pb, b, 0644); err != nil {
-		t.Fatalf("write %s: %v", pb, err)
+	if err := os.WriteFile(pathB, b, 0o600); err != nil {
+		t.Fatalf("write %s: %v", pathB, err)
 	}
-	return pa, pb
+	return pathA, pathB
 }
 
 func TestVersion(t *testing.T) {
@@ -115,7 +115,7 @@ func TestCompareBytes(t *testing.T) {
 
 	dir := t.TempDir()
 	one := filepath.Join(dir, "a")
-	if err := os.WriteFile(one, []byte("ab"), 0644); err != nil {
+	if err := os.WriteFile(one, []byte("ab"), 0o600); err != nil {
 		t.Fatalf("write %s: %v", one, err)
 	}
 	wantCode(t, []string{"compare", "bytes", one, dir}, 3)

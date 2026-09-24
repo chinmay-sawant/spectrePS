@@ -7,7 +7,7 @@ help:
 	@printf '%s\n' \
 		'build  compile $(BIN)' \
 		'test   go test ./...' \
-		'lint   gofmt check and go vet' \
+		'lint   gofmt check and golangci-lint' \
 		'fmt    gofmt -w .' \
 		'tidy   go mod tidy' \
 		'clean  remove bin/'
@@ -24,7 +24,7 @@ lint:
 		printf '%s\n' "gofmt needed:" $$files; \
 		exit 1; \
 	fi
-	go vet ./...
+	golangci-lint run ./...
 
 fmt:
 	gofmt -w .

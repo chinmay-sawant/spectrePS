@@ -20,15 +20,15 @@ PostScript errors already exist as `JobError` after phase 03. PDF rejections exi
 
 ### 8.1 PostScript
 
-- [ ] `spectreps validate good.ps` exits 0 for a subset program. `spectreps validate bad.ps` exits 1 and prints the `JobError` line on stderr for a `stackunderflow`. Proof: `go test -count=1 ./cmd/spectreps -run TestValidatePS`
+- [ ] `spectreps validate good.ps` exits 0 for a subset program. `spectreps validate bad.ps` exits 1 and prints the `JobError` line on stderr for a `stackunderflow`. Proof: `go test -count=1 ./internal/cli -run TestValidatePS`
 
 ### 8.2 PDF
 
-- [ ] `spectreps validate good.pdf` exits 0 for a phase 06 fixture. A truncated xref exits 1 with `JobError`. An encrypted file exits 1 with `invalidaccess`. Proof: `go test -count=1 ./cmd/spectreps -run TestValidatePDF`
+- [ ] `spectreps validate good.pdf` exits 0 for a phase 06 fixture. A truncated xref exits 1 with `JobError`. An encrypted file exits 1 with `invalidaccess`. Proof: `go test -count=1 ./internal/cli -run TestValidatePDF`
 
 ### 8.3 Banned operator
 
-- [ ] `spectreps validate` on a program that calls `deletefile` exits 1 with `invalidaccess`. The process does not delete a temp file created next to the input. Proof: `go test -count=1 ./cmd/spectreps -run TestValidateBanned`
+- [ ] `spectreps validate` on a program that calls `deletefile` exits 1 with `invalidaccess`. The process does not delete a temp file created next to the input. Proof: `go test -count=1 ./internal/cli -run TestValidateBanned`
 
 ### 8.4 Closure
 

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/chinmay-sawant/spectrePS"
+	"github.com/chinmay-sawant/spectrePS/spectreps"
 )
 
 func TestVersion(t *testing.T) {
@@ -75,100 +75,142 @@ func TestNotImplemented(t *testing.T) {
 	rewrite := spectreps.DefaultRewriteOptions()
 
 	t.Run("background", func(t *testing.T) {
-		pages, err := in.RunPostScript(context.Background(), src, opt)
-		if !errors.Is(err, spectreps.ErrNotImplemented) {
-			t.Fatalf("RunPostScript() error = %v, want ErrNotImplemented", err)
-		}
-		if pages != nil {
-			t.Fatalf("RunPostScript() pages = %#v, want nil", pages)
-		}
-
-		doc, err := in.OpenPDF(context.Background(), src)
-		if !errors.Is(err, spectreps.ErrNotImplemented) {
-			t.Fatalf("OpenPDF() error = %v, want ErrNotImplemented", err)
-		}
-		if doc != nil {
-			t.Fatalf("OpenPDF() document = %#v, want nil", doc)
-		}
-
-		img, err := in.RasterizePage(context.Background(), nil, 0, opt)
-		if !errors.Is(err, spectreps.ErrNotImplemented) {
-			t.Fatalf("RasterizePage() error = %v, want ErrNotImplemented", err)
-		}
-		requireZeroPageImage(t, img)
-
-		out, err := in.RewritePDF(context.Background(), nil, rewrite)
-		if !errors.Is(err, spectreps.ErrNotImplemented) {
-			t.Fatalf("RewritePDF() error = %v, want ErrNotImplemented", err)
-		}
-		if out != nil {
-			t.Fatalf("RewritePDF() bytes = %#v, want nil", out)
-		}
+		checkNotImplemented(t, in, src, opt, rewrite)
 	})
-
 	t.Run("canceled", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-
-		pages, err := in.RunPostScript(ctx, src, opt)
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("RunPostScript() error = %v, want context.Canceled", err)
-		}
-		if pages != nil {
-			t.Fatalf("RunPostScript() pages = %#v, want nil", pages)
-		}
-
-		doc, err := in.OpenPDF(ctx, src)
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("OpenPDF() error = %v, want context.Canceled", err)
-		}
-		if doc != nil {
-			t.Fatalf("OpenPDF() document = %#v, want nil", doc)
-		}
-
-		img, err := in.RasterizePage(ctx, nil, 0, opt)
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("RasterizePage() error = %v, want context.Canceled", err)
-		}
-		requireZeroPageImage(t, img)
-
-		out, err := in.RewritePDF(ctx, nil, rewrite)
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("RewritePDF() error = %v, want context.Canceled", err)
-		}
-		if out != nil {
-			t.Fatalf("RewritePDF() bytes = %#v, want nil", out)
-		}
+		checkCanceled(t, in, src, opt, rewrite)
 	})
-
 	t.Run("nil context", func(t *testing.T) {
-		const want = "spectreps: nil context"
-		t.Run("RunPostScript", func(t *testing.T) {
-			requirePanic(t, want, func() {
-				in.RunPostScript(nil, src, opt)
-			})
-		})
-		t.Run("OpenPDF", func(t *testing.T) {
-			requirePanic(t, want, func() {
-				in.OpenPDF(nil, src)
-			})
-		})
-		t.Run("RasterizePage", func(t *testing.T) {
-			requirePanic(t, want, func() {
-				in.RasterizePage(nil, nil, 0, opt)
-			})
-		})
-		t.Run("RewritePDF", func(t *testing.T) {
-			requirePanic(t, want, func() {
-				in.RewritePDF(nil, nil, rewrite)
-			})
-		})
+		checkNilContext(t, in, src, opt, rewrite)
 	})
-
 	t.Run("CompareRaster", func(t *testing.T) {
-		requirePanicIs(t, spectreps.ErrNotImplemented, func() {
-			spectreps.CompareRaster(spectreps.PageImage{}, spectreps.PageImage{})
-		})
+		checkCompareRasterPanic(t)
+	})
+}
+
+func checkNotImplemented(
+	t *testing.T,
+	in *spectreps.Instance,
+	src []byte,
+	opt spectreps.RunOptions,
+	rewrite spectreps.RewriteOptions,
+) {
+	t.Helper()
+
+	pages, err := in.RunPostScript(t.Context(), src, opt)
+	if !errors.Is(err, spectreps.ErrNotImplemented) {
+		t.Fatalf("RunPostScript() error = %v, want ErrNotImplemented", err)
+	}
+	if pages != nil {
+		t.Fatalf("RunPostScript() pages = %#v, want nil", pages)
+	}
+
+	doc, err := in.OpenPDF(t.Context(), src)
+	if !errors.Is(err, spectreps.ErrNotImplemented) {
+		t.Fatalf("OpenPDF() error = %v, want ErrNotImplemented", err)
+	}
+	if doc != nil {
+		t.Fatalf("OpenPDF() document = %#v, want nil", doc)
+	}
+
+	img, err := in.RasterizePage(t.Context(), nil, 0, opt)
+	if !errors.Is(err, spectreps.ErrNotImplemented) {
+		t.Fatalf("RasterizePage() error = %v, want ErrNotImplemented", err)
+	}
+	requireZeroPageImage(t, img)
+
+	out, err := in.RewritePDF(t.Context(), nil, rewrite)
+	if !errors.Is(err, spectreps.ErrNotImplemented) {
+		t.Fatalf("RewritePDF() error = %v, want ErrNotImplemented", err)
+	}
+	if out != nil {
+		t.Fatalf("RewritePDF() bytes = %#v, want nil", out)
+	}
+}
+
+func checkCanceled(
+	t *testing.T,
+	in *spectreps.Instance,
+	src []byte,
+	opt spectreps.RunOptions,
+	rewrite spectreps.RewriteOptions,
+) {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	pages, err := in.RunPostScript(ctx, src, opt)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("RunPostScript() error = %v, want context.Canceled", err)
+	}
+	if pages != nil {
+		t.Fatalf("RunPostScript() pages = %#v, want nil", pages)
+	}
+
+	doc, err := in.OpenPDF(ctx, src)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("OpenPDF() error = %v, want context.Canceled", err)
+	}
+	if doc != nil {
+		t.Fatalf("OpenPDF() document = %#v, want nil", doc)
+	}
+
+	img, err := in.RasterizePage(ctx, nil, 0, opt)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("RasterizePage() error = %v, want context.Canceled", err)
+	}
+	requireZeroPageImage(t, img)
+
+	out, err := in.RewritePDF(ctx, nil, rewrite)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("RewritePDF() error = %v, want context.Canceled", err)
+	}
+	if out != nil {
+		t.Fatalf("RewritePDF() bytes = %#v, want nil", out)
+	}
+}
+
+func checkNilContext(
+	t *testing.T,
+	in *spectreps.Instance,
+	src []byte,
+	opt spectreps.RunOptions,
+	rewrite spectreps.RewriteOptions,
+) {
+	t.Helper()
+
+	requirePanic(t, func() {
+		_, err := in.RunPostScript(nil, src, opt) //nolint:staticcheck // nil context is the case under test
+		if err != nil {
+			t.Errorf("RunPostScript() error = %v", err)
+		}
+	})
+	requirePanic(t, func() {
+		_, err := in.OpenPDF(nil, src) //nolint:staticcheck // nil context is the case under test
+		if err != nil {
+			t.Errorf("OpenPDF() error = %v", err)
+		}
+	})
+	requirePanic(t, func() {
+		_, err := in.RasterizePage(nil, nil, 0, opt) //nolint:staticcheck // nil context is the case under test
+		if err != nil {
+			t.Errorf("RasterizePage() error = %v", err)
+		}
+	})
+	requirePanic(t, func() {
+		_, err := in.RewritePDF(nil, nil, rewrite) //nolint:staticcheck // nil context is the case under test
+		if err != nil {
+			t.Errorf("RewritePDF() error = %v", err)
+		}
+	})
+}
+
+func checkCompareRasterPanic(t *testing.T) {
+	t.Helper()
+
+	requirePanicIs(t, spectreps.ErrNotImplemented, func() {
+		spectreps.CompareRaster(spectreps.PageImage{}, spectreps.PageImage{})
 	})
 }
 
@@ -218,9 +260,11 @@ func requireZeroPageImage(t *testing.T, img spectreps.PageImage) {
 	}
 }
 
-func requirePanic(t *testing.T, want string, fn func()) {
+func requirePanic(t *testing.T, call func()) {
 	t.Helper()
-	recovered, panicked := catchPanic(fn)
+
+	const want = "spectreps: nil context"
+	recovered, panicked := catchPanic(call)
 	if !panicked {
 		t.Fatalf("no panic, want %q", want)
 	}

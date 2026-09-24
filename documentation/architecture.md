@@ -6,7 +6,7 @@ Ghostscript's C entry point is one instance: create it, init it, run a program, 
 
 `New` allocates an `Instance`. Job methods run on that value. `Close` releases it. `Close` is safe when no job ran. A second `Close` is safe. Callers may hold more than one instance. There is no process-wide singleton. Ghostscript's old one-instance limit is not copied.
 
-`cmd/spectreps` imports package `spectreps` and nothing under `internal/`. An external test package, `spectreps_test`, imports the same public API. Tests that need a private seam wait until that seam is the bug under test, and then they live next to the private package.
+`cmd/spectreps` imports `internal/cli` only. `internal/cli` imports package `spectreps` and calls that public API. An external test package, `spectreps_test`, imports the same public API. Tests that need a private seam wait until that seam is the bug under test, and then they live next to the private package.
 
 No cgo. No `os/exec` of `gs` or of `spectreps`.
 
@@ -30,12 +30,14 @@ A PDF rewrite device receives the same device-space marks and emits PDF operator
 
 ## Where code will live
 
-The root package stays small: options, results, errors, and methods that delegate.
+Package `spectreps` stays small: options, results, errors, and methods that delegate to `internal/engine`.
 
 | Path | Appears in | Owns |
 | --- | --- | --- |
-| `instance.go`, `errors.go`, `compare.go`, `postscript.go`, `pdf.go`, `raster.go` | phase 02 | Exported API. |
-| `cmd/spectreps/main.go` | phase 02 | Flags, exit codes. |
+| `spectreps/` | phase 02 | Exported API. |
+| `internal/engine/` | phase 02 | Session, file byte compare, not-implemented jobs. |
+| `internal/cli/` | phase 02 | Flags, exit codes. |
+| `cmd/spectreps/main.go` | phase 02 | Process entry. Calls `internal/cli`. |
 | `internal/ps/` | phase 03 | Scanner, stacks, operators. |
 | `internal/graphics/` | phase 04 | Matrix, path, color, line style. |
 | `internal/raster/` | phase 04 | RGB pixmap and PPM writer. PNG encode can sit beside it. |

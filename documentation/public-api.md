@@ -1,6 +1,6 @@
 # Public API
 
-Package `spectreps`. Import path `github.com/chinmay-sawant/spectrePS`.
+Package `spectreps`. Import path `github.com/chinmay-sawant/spectrePS/spectreps`.
 
 Phase 02 adds these signatures. `CompareFiles`, `New`, `Close`, and `Version` work in that phase. The other methods return `ErrNotImplemented` until the phase named in `plans/v0.0.1/00-program.md`.
 

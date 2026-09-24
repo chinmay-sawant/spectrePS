@@ -11,7 +11,7 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - `New` returns a non-nil instance. `Close` returns nil. A second `Close` on the same instance returns nil.
 - Two instances from two `New` calls both run. There is no process-wide singleton.
 - `Version` is `0.0.1` until a tag bumps that constant. `spectreps version` prints it and exits 0.
-- `cmd/spectreps` imports only `github.com/chinmay-sawant/spectrePS`. No Go file imports `os/exec` or uses cgo.
+- `cmd/spectreps` imports `internal/cli` only. `internal/cli` imports `github.com/chinmay-sawant/spectrePS/spectreps`. No Go file imports `os/exec` or uses cgo.
 - Unknown command, unknown flag, and a missing input file exit 2.
 - A missing input path that the program tries to read exits 3.
 - `raster` and `rewrite` without `-o` exit 2, including while the job itself is still `ErrNotImplemented`.

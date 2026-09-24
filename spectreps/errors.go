@@ -1,12 +1,13 @@
 package spectreps
 
 import (
-	"errors"
 	"fmt"
+
+	"github.com/chinmay-sawant/spectrePS/internal/engine"
 )
 
 // ErrNotImplemented is returned by interpreter methods until their phase lands.
-var ErrNotImplemented = errors.New("spectreps: not implemented")
+var ErrNotImplemented = engine.ErrNotImplemented
 
 // JobError is one interpreter error.
 // Op is the operator name without a slash. Msg is the error name without a slash.
@@ -20,8 +21,8 @@ type JobError struct {
 }
 
 // Error prints one line.
-// Example with a position: Error: /stackunderflow in add at box.ps:3:5
-// When Filename is empty the position is unknown and the " at file:line:col" tail is omitted.
+// With a filename: Error: /stackunderflow in add at box.ps:3:5
+// An empty Filename omits the " at file:line:col" tail.
 func (e JobError) Error() string {
 	text := "Error: /" + e.Msg + " in " + e.Op
 	if e.Filename == "" {
