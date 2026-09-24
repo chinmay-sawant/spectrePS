@@ -7,7 +7,7 @@
 | Target | Command |
 | --- | --- |
 | `make build` | `go build -trimpath -o bin/spectreps ./cmd/spectreps` |
-| `make test` | `go test ./...` |
+| `make test` | `go test -p $(nproc) ./...` |
 | `make lint` | `gofmt -l` must be empty, then `golangci-lint run ./...`, then `make size-check` |
 | `make size-check` | `bash scripts/check-file-size.sh` |
 | `make fmt` | `gofmt -w .` |

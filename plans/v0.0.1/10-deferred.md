@@ -12,17 +12,17 @@ Rows here are `[~]` on purpose. They are not a second active checklist. When one
 
 ## Executive summary
 
-Ghostscript 9.55.0 exposes hundreds of printer devices, plus PCL and XPS in sister products. Spectre's active ledger is PostScript, PDF, one pixmap, Flate rewrite, validate, and byte compare. Everything else waits.
+Ghostscript 9.55.0 exposes hundreds of printer devices, plus PCL and XPS in sister products. Spectre's v0.0.1 release is the PostScript subset, the path-only PDF, one pixmap, Flate rewrite, validate, and byte compare. The quick summaries and the JPEG raster moved to `plans/v0.0.2/`. Everything else waits.
 
 ## Phase 10: Deferred
 
 ### 10.1 Outputs that need an image or text model
 
 - [~] DCT encode, CCITT, and downsample on rewrite. Reason: phase 07 has no image samples to resample. Next gate: a PDF image phase that can paint `Do` for a Flate or DCT image XObject, then a new plan file for lossy rewrite.
-- [~] `pdfimage24` style output, a page raster wrapped in a PDF. Reason: it is a different device from vector `pdfwrite`, and tag 0.0.4 is the vector path. Next gate: phase 07 stable bytes, then a new plan file if a caller asks for bitmap PDFs.
-- [~] JPEG and TIFF encoders. Reason: PNG and PPM already cover viewable and raw pixels. JPEG is lossy and must not become an equality oracle. Next gate: phase 04 PNG row checked, then a new plan file.
+- [~] `pdfimage24` style output, a page raster wrapped in a PDF. Detail moved to `plans/v0.0.2/3-pdfimage.md`. The active rows are there. This row stays deferred here so the v0.0.1 ledger does not grow a second checklist.
+- [~] JPEG and TIFF encoders. JPEG detail moved to `plans/v0.0.2/2-jpeg-raster.md`. TIFF stays here. Reason: TIFF encode is `golang.org/x/image/tiff`, not the standard library, and a new module requirement is its own plan row. Next gate: that dependency row, then a new plan file. JPEG must not become an equality oracle.
 - [~] Text extraction in the style of `txtwrite`, `show`, and PDF `Tj`. Reason: fonts are a separate machine from the path engine. Next gate: phase 04 y-flip test checked, then a new plan file. Until then those operators return errors, not blank pages.
-- [~] `bbox` and `inkcov` devices. Reason: both are summaries of a painted page, and the pixmap has to exist first. Next gate: phase 05, then a new plan file.
+- [~] `bbox` and `inkcov` devices. Detail moved to `plans/v0.0.2/1-bbox-inkcov.md`. The active rows are there. This row stays deferred here so the v0.0.1 ledger does not grow a second checklist.
 
 ### 10.2 PDF variants
 
@@ -36,4 +36,4 @@ Ghostscript 9.55.0 exposes hundreds of printer devices, plus PCL and XPS in sist
 
 ## Dependencies
 
-Each row names its next gate. No active phase file repeats these rows.
+Each row names its next gate. A row that names a `plans/v0.0.2/` file has its checklist there. Do not add a second copy of those rows here.
