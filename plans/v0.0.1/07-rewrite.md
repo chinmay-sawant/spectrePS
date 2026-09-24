@@ -8,7 +8,7 @@
 
 ## Overview
 
-`RewritePDF` writes a new PDF for a document this module can rasterize. `documentations/devices.md` is the contract. Stream compression is Flate. Bytes are stable across two calls.
+`RewritePDF` writes a new PDF for a document this module can rasterize. `documentation/devices.md` is the contract. Stream compression is Flate. Bytes are stable across two calls.
 
 This is the compression job. It is not a raster wrapped in a PDF. `pdfimage24` style output is a different device and is deferred.
 

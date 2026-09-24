@@ -8,7 +8,7 @@
 
 ## Overview
 
-Implement `documentations/language.md` under `internal/ps/`. `RunPostScript` still returns `ErrNotImplemented` until phase 04 connects a device. This phase proves the stacks with a test device that records operator calls, or with operand-stack dumps where no paint is required.
+Implement `documentation/language.md` under `internal/ps/`. `RunPostScript` still returns `ErrNotImplemented` until phase 04 connects a device. This phase proves the stacks with a test device that records operator calls, or with operand-stack dumps where no paint is required.
 
 Package `spectreps` is the only caller of `internal/ps` from outside that tree. `cmd/spectreps` stays on the public API.
 
@@ -20,7 +20,7 @@ The reader scans `{ ... }` into an executable array and does not run it. Names a
 
 ### 3.1 Scanner
 
-- [ ] `internal/ps` scans integers, reals, executable names, literal names, comments, parenthesis strings with the escapes listed in `documentations/language.md`, and hex strings. An int token outside int32 is `rangecheck` at scan time. Proof: `go test -count=1 ./internal/ps -run TestScan`
+- [ ] `internal/ps` scans integers, reals, executable names, literal names, comments, parenthesis strings with the escapes listed in `documentation/language.md`, and hex strings. An int token outside int32 is `rangecheck` at scan time. Proof: `go test -count=1 ./internal/ps -run TestScan`
 
 ### 3.2 Procedures
 
@@ -36,7 +36,7 @@ The reader scans `{ ... }` into an executable array and does not run it. Names a
 
 ### 3.5 Stack, math, dict, control
 
-- [ ] Stack, math, compare, array, dictionary, and control operators from `documentations/language.md` match the error names in that file. `div` pushes a real. Division by zero is `undefinedresult`. Integer overflow is `rangecheck`. `copy` is the count form only. Proof: `go test -count=1 ./internal/ps -run 'TestStack|TestMath|TestDict|TestControl'`
+- [ ] Stack, math, compare, array, dictionary, and control operators from `documentation/language.md` match the error names in that file. `div` pushes a real. Division by zero is `undefinedresult`. Integer overflow is `rangecheck`. `copy` is the count form only. Proof: `go test -count=1 ./internal/ps -run 'TestStack|TestMath|TestDict|TestControl'`
 
 ### 3.6 Banned operators
 

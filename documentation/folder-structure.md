@@ -9,14 +9,14 @@ AGENTS.md
 Makefile
 README.md
 go.mod
-documentations/
+documentation/
 plans/v0.0.1/
 skills/phase-wise-checklist/SKILLS.md
 skills/unslop/SKILL.md
 skills/PR/
 ```
 
-`documentations/` is the prose folder for this repository. `plans/v0.0.1/` is the execution ledger. `skills/` holds agent instructions that already live in this repo.
+`documentation/` is the prose folder for this repository. `plans/v0.0.1/` is the execution ledger. `skills/` holds agent instructions that already live in this repo.
 
 ## What phase 02 adds
 

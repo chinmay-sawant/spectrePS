@@ -2,7 +2,7 @@
 
 This is the contract for tag 0.0.2. A program that stays inside this file runs. A name this file does not list returns `undefined`, except the banned operators, which return `invalidaccess`.
 
-The input is PostScript source bytes. Spectre does not invent a second page-description language. PDF content operators are specified in `documentations/devices.md`, because they are a different syntax on the same graphics engine.
+The input is PostScript source bytes. Spectre does not invent a second page-description language. PDF content operators are specified in `documentation/devices.md`, because they are a different syntax on the same graphics engine.
 
 ## Tokens
 

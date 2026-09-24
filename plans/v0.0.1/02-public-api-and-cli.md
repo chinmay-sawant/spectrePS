@@ -8,7 +8,7 @@
 
 ## Overview
 
-Tag 0.0.1 code. Export the API from `documentations/public-api.md`, implement `New`, `Close`, `Version`, and `CompareFiles`, and stub every interpreter method with `ErrNotImplemented`. The CLI maps those results to the exit codes in `documentations/cli.md`.
+Tag 0.0.1 code. Export the API from `documentation/public-api.md`, implement `New`, `Close`, `Version`, and `CompareFiles`, and stub every interpreter method with `ErrNotImplemented`. The CLI maps those results to the exit codes in `documentation/cli.md`.
 
 Tests live in `api_test.go` as `package spectreps_test`, plus `cmd/spectreps` tests that run the binary.
 
@@ -20,11 +20,11 @@ This phase is what makes a later library possible. The interpreter is still abse
 
 ### 2.1 Instance
 
-- [ ] `instance.go` implements `New` and `Close` as specified in `documentations/public-api.md`. Two `Close` calls on one instance both return nil. Proof: `go test -count=1 -run TestNewClose .`
+- [ ] `instance.go` implements `New` and `Close` as specified in `documentation/public-api.md`. Two `Close` calls on one instance both return nil. Proof: `go test -count=1 -run TestNewClose .`
 
 ### 2.2 Errors
 
-- [ ] `errors.go` defines `ErrNotImplemented` and `JobError` with the one-line text form from `documentations/public-api.md`. Proof: `go test -count=1 -run TestJobErrorText .`
+- [ ] `errors.go` defines `ErrNotImplemented` and `JobError` with the one-line text form from `documentation/public-api.md`. Proof: `go test -count=1 -run TestJobErrorText .`
 
 ### 2.3 Stubs
 
@@ -32,11 +32,11 @@ This phase is what makes a later library possible. The interpreter is still abse
 
 ### 2.4 File byte compare
 
-- [ ] `CompareFiles` follows the equal, mismatch, prefix, and empty rules in `documentations/public-api.md`. Proof: `go test -count=1 -run TestCompareFiles .`
+- [ ] `CompareFiles` follows the equal, mismatch, prefix, and empty rules in `documentation/public-api.md`. Proof: `go test -count=1 -run TestCompareFiles .`
 
 ### 2.5 CLI
 
-- [ ] `cmd/spectreps/main.go` implements the commands in `documentations/cli.md`. `version` exits 0 and prints the `Version` constant. A missing file or unknown flag exits 2. `compare bytes` exits 0 for equal files and 1 for a mismatch, printing `mismatch byte N` on stdout. `run` on a readable file exits 1 and prints `spectreps: not implemented` on stderr. `raster` without `-o` exits 2. Proof: `go test -count=1 ./cmd/spectreps`
+- [ ] `cmd/spectreps/main.go` implements the commands in `documentation/cli.md`. `version` exits 0 and prints the `Version` constant. A missing file or unknown flag exits 2. `compare bytes` exits 0 for equal files and 1 for a mismatch, printing `mismatch byte N` on stdout. `run` on a readable file exits 1 and prints `spectreps: not implemented` on stderr. `raster` without `-o` exits 2. Proof: `go test -count=1 ./cmd/spectreps`
 
 ### 2.6 Import boundary
 

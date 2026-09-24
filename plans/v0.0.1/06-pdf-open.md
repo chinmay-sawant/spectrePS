@@ -8,7 +8,7 @@
 
 ## Overview
 
-`OpenPDF` and `RasterizePage` accept the PDF subset in `documentations/devices.md`. Content operators call `internal/graphics`. They do not call the PostScript scanner.
+`OpenPDF` and `RasterizePage` accept the PDF subset in `documentation/devices.md`. Content operators call `internal/graphics`. They do not call the PostScript scanner.
 
 Unsupported text and image operators fail the page. They do not paint a blank page and return nil error.
 

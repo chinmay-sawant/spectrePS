@@ -5,6 +5,7 @@ Read these in order when changing behavior.
 | File | What it decides |
 | --- | --- |
 | `ghostscript-baseline.md` | What Ghostscript 9.55.0 on this machine does, and what the 10.08 manual says. |
+| `copyright-and-rewrite.md` | Why Spectre is an independent implementation, and the copyright, trademark, and patent record. |
 | `covered-and-not-covered.md` | Which Ghostscript jobs Spectre takes, and which it leaves. |
 | `test.md` | The tests those covered jobs need. |
 | `architecture.md` | Instance, front ends, graphics engine, device, library boundary. |

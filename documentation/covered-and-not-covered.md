@@ -8,7 +8,7 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 
 ## Covered
 
-- Interpret PostScript. Spectre's slice is a small operator set, not LanguageLevel 3. See `documentations/language.md`.
+- Interpret PostScript. Spectre's slice is a small operator set, not LanguageLevel 3. See `documentation/language.md`.
 - Open a PDF and rasterize pages. Spectre's slice is path operators plus Flate streams, not PDF 1.7 or PDF 2.0.
 - Rasterize to an image. Spectre writes PPM and PNG. Ghostscript also writes JPEG, TIFF, BMP, PCX, fax, and PSD.
 - Rewrite a PDF as a new file and compress streams. Spectre uses Flate only.
@@ -35,7 +35,7 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 - GhostPCL (PCL and PXL input), GhostXPS, GhostPDL image inputs, and Ghostscript Office (Word, PowerPoint, Excel).
 - The bundled URW fonts.
 
-Ghostscript has no file-compare command. Byte compare and pixel compare are Spectre features. They are specified in `documentations/devices.md`.
+Ghostscript has no file-compare command. Byte compare and pixel compare are Spectre features. They are specified in `documentation/devices.md`.
 
 ## Sources
 

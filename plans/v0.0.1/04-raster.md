@@ -8,7 +8,7 @@
 
 ## Overview
 
-`RunPostScript` returns `[]PageImage` for the subset in `documentations/language.md`. Layout, y flip, caps, PPM raw, and PNG are specified in `documentations/devices.md`.
+`RunPostScript` returns `[]PageImage` for the subset in `documentation/language.md`. Layout, y flip, caps, PPM raw, and PNG are specified in `documentation/devices.md`.
 
 The first checked-in fixture goes in `testdata/`. Generate it with Spectre, then assert against those bytes. Do not call `/usr/bin/gs` from the test.
 
@@ -20,7 +20,7 @@ The pixmap is the object `CompareRaster` will use. PPM raw is the file form of t
 
 ### 4.1 Graphics state
 
-- [ ] `internal/graphics` implements the default matrix, `translate`, `scale`, `rotate`, `concat`, `setlinewidth`, `setgray`, `setrgbcolor`, `gsave`, and `grestore` with the defaults and the gsave cap in `documentations/language.md`. Proof: `go test -count=1 ./internal/graphics -run TestMatrix`
+- [ ] `internal/graphics` implements the default matrix, `translate`, `scale`, `rotate`, `concat`, `setlinewidth`, `setgray`, `setrgbcolor`, `gsave`, and `grestore` with the defaults and the gsave cap in `documentation/language.md`. Proof: `go test -count=1 ./internal/graphics -run TestMatrix`
 
 ### 4.2 Path and y flip
 

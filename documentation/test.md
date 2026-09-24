@@ -1,6 +1,6 @@
 # Tests for covered jobs
 
-These are the tests for the jobs in `documentations/covered-and-not-covered.md`. Each bullet is one case. The expected result is the contract in `documentations/language.md`, `documentations/devices.md`, `documentations/cli.md`, and `documentations/public-api.md`.
+These are the tests for the jobs in `documentation/covered-and-not-covered.md`. Each bullet is one case. The expected result is the contract in `documentation/language.md`, `documentation/devices.md`, `documentation/cli.md`, and `documentation/public-api.md`.
 
 Tests call package `spectreps` or the `spectreps` binary. They do not run `/usr/bin/gs`. Fixtures are Spectre output, checked in under `testdata/` when the first raster or PDF case lands. PNG file bytes are not an equality oracle. The oracle is `PageImage`, or a PPM raw body when the header is part of the case.
 

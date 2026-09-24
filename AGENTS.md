@@ -6,16 +6,17 @@ The product reads PostScript and PDF. It rasterizes pages, rewrites a new PDF, r
 
 ## Read before editing
 
-- Measured Ghostscript behavior: `documentations/ghostscript-baseline.md`
-- Which Ghostscript jobs Spectre takes: `documentations/covered-and-not-covered.md`
-- Tests for those jobs: `documentations/test.md`
-- Runtime shape: `documentations/architecture.md`
-- Tree: `documentations/folder-structure.md`
-- Exported functions: `documentations/public-api.md`
-- Commands and exit codes: `documentations/cli.md`
-- PostScript subset, errors, limits, banned operators: `documentations/language.md`
-- Raster, rewrite, compare, validate: `documentations/devices.md`
-- Make targets and checklist rules: `documentations/development.md`
+- How Spectre is written, and the copyright record: `documentation/copyright-and-rewrite.md`
+- Measured Ghostscript behavior: `documentation/ghostscript-baseline.md`
+- Which Ghostscript jobs Spectre takes: `documentation/covered-and-not-covered.md`
+- Tests for those jobs: `documentation/test.md`
+- Runtime shape: `documentation/architecture.md`
+- Tree: `documentation/folder-structure.md`
+- Exported functions: `documentation/public-api.md`
+- Commands and exit codes: `documentation/cli.md`
+- PostScript subset, errors, limits, banned operators: `documentation/language.md`
+- Raster, rewrite, compare, validate: `documentation/devices.md`
+- Make targets and checklist rules: `documentation/development.md`
 - Active ledger: `plans/v0.0.1/00-program.md`
 
 ## While implementing

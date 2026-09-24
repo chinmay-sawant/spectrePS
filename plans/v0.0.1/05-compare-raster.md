@@ -8,7 +8,7 @@
 
 ## Overview
 
-Implement `CompareRaster` from `documentations/public-api.md` and the `compare raster` command from `documentations/cli.md`.
+Implement `CompareRaster` from `documentation/public-api.md` and the `compare raster` command from `documentation/cli.md`.
 
 ## Executive summary
 
@@ -18,7 +18,7 @@ Tag 0.0.2 is done when two PostScript programs can be painted and their pixmaps 
 
 ### 5.1 CompareRaster
 
-- [ ] `CompareRaster` implements the width, height, and pixel rules in `documentations/public-api.md`, including stride padding that must be ignored. Proof: `go test -count=1 -run TestCompareRaster .`
+- [ ] `CompareRaster` implements the width, height, and pixel rules in `documentation/public-api.md`, including stride padding that must be ignored. Proof: `go test -count=1 -run TestCompareRaster .`
 
 ### 5.2 CLI
 

@@ -14,7 +14,7 @@ No cgo. No `os/exec` of `gs` or of `spectreps`.
 
 PostScript and PDF do not share a parser.
 
-The PostScript front end scans tokens and executes them with three stacks: operand, dictionary, and execution. Procedure bodies are the exception to immediate execution. `documentations/language.md` states the rule.
+The PostScript front end scans tokens and executes them with three stacks: operand, dictionary, and execution. Procedure bodies are the exception to immediate execution. `documentation/language.md` states the rule.
 
 A PDF file is a graph of objects, an xref table, and a page tree. Page content streams use a different operator spelling (`m`, `l`, `c`, `S`, `f`) and a different set of stacks. Those operators call the same graphics engine the PostScript path operators call.
 
@@ -46,7 +46,7 @@ Directories are created with their first file. `internal/` is the right place fo
 
 ## Safety
 
-Banned operators are installed and return `invalidaccess`, so a test can tell "disabled" from "unknown name". The list is in `documentations/language.md`.
+Banned operators are installed and return `invalidaccess`, so a test can tell "disabled" from "unknown name". The list is in `documentation/language.md`.
 
 Every job takes a `context.Context`. A cancelled context stops the job and returns `ctx.Err()`. Stack depth, pixel count, and path points have hard caps in the same language file. Crossing a cap returns `limitcheck`.
 
