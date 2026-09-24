@@ -72,7 +72,7 @@ External tests use `package spectreps_test`, so they only see the exported API.
 ## Validate
 
 - `spectreps validate` on a subset PostScript program exits 0.
-- `spectreps validate` on a PostScript `stackunderflow` exits 1. stderr is one line, `Error: /stackunderflow in add at <file>:<line>:<col>`.
+- `spectreps validate` on a PostScript `stackunderflow` exits 1. stderr is one line, `Error: /stackunderflow in add`. The `at file:line:col` tail is omitted because this subset does not record a source position.
 - `spectreps validate` on a phase-06 PDF fixture exits 0. A truncated xref exits 1 with `JobError`. An encrypted file exits 1 with `invalidaccess`.
 - `validate` does not write an output file and does not write PDF/A metadata.
 

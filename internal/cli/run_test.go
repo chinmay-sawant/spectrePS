@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/chinmay-sawant/spectrePS/spectreps"
@@ -156,6 +157,93 @@ func TestValidate(t *testing.T) {
 	wantCode(t, []string{"validate", filepath.Join(t.TempDir(), "missing.ps")}, 2)
 	path := writeTemp(t, "in.ps", []byte("show"))
 	want(t, []string{"validate", path}, 1, "", "Error: /undefined in show\n")
+}
+
+func TestValidatePS(t *testing.T) {
+	good := writeTemp(t, "good.ps", []byte("1 2 add"))
+	want(t, []string{"validate", good}, 0, "", "")
+	bad := writeTemp(t, "bad.ps", []byte("add"))
+	want(t, []string{"validate", bad}, 1, "", "Error: /stackunderflow in add\n")
+}
+
+func TestValidatePDF(t *testing.T) {
+	good := writeTemp(t, "good.pdf", onePagePDF(t, "0 0 m 10 0 l S"))
+	want(t, []string{"validate", good}, 0, "", "")
+
+	broken := writeTemp(t, "cut.pdf", onePagePDF(t, "q")[:20])
+	code, _, stderr := callRun(t, "validate", broken)
+	if code != 1 || len(stderr) < len("Error:") || stderr[:len("Error:")] != "Error:" {
+		t.Fatalf("truncated xref: code=%d stderr=%q", code, stderr)
+	}
+
+	locked := writeTemp(t, "enc.pdf", encryptedPDF(t))
+	want(t, []string{"validate", locked}, 1, "", "Error: /invalidaccess in Encrypt\n")
+
+	text := writeTemp(t, "text.pdf", onePagePDF(t, "(Hi) Tj"))
+	want(t, []string{"validate", text}, 1, "", "Error: /undefined in Tj\n")
+}
+
+func TestValidateBanned(t *testing.T) {
+	dir := t.TempDir()
+	keep := filepath.Join(dir, "keep.txt")
+	if err := os.WriteFile(keep, []byte("stay"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join(dir, "in.ps")
+	prog := []byte(psString(keep) + " deletefile\n")
+	if err := os.WriteFile(src, prog, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before := dirFiles(t, dir)
+	want(t, []string{"validate", src}, 1, "", "Error: /invalidaccess in deletefile\n")
+	if got := dirFiles(t, dir); got != before {
+		t.Fatalf("dir files = %q, want %q", got, before)
+	}
+	body, err := os.ReadFile(keep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "stay" {
+		t.Fatalf("keep.txt = %q", body)
+	}
+}
+
+func encryptedPDF(t *testing.T) []byte {
+	t.Helper()
+	src := onePagePDF(t, "q")
+	old := []byte("/Root 1 0 R >>")
+	next := []byte("/Root 1 0 R /Encrypt << /Filter /Standard >> >>")
+	if !bytes.Contains(src, old) {
+		t.Fatal("trailer marker missing")
+	}
+	return bytes.Replace(src, old, next, 1)
+}
+
+func psString(path string) string {
+	var b strings.Builder
+	b.WriteByte('(')
+	for i := range len(path) {
+		switch path[i] {
+		case '\\', '(', ')':
+			b.WriteByte('\\')
+		}
+		b.WriteByte(path[i])
+	}
+	b.WriteByte(')')
+	return b.String()
+}
+
+func dirFiles(t *testing.T, dir string) string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	return strings.Join(names, "\n")
 }
 
 func TestCompareBytes(t *testing.T) {
