@@ -10,7 +10,9 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 
 - Interpret PostScript. Spectre's slice is a small operator set, not LanguageLevel 3. See `documentation/language.md`.
 - Open a PDF and rasterize pages. Spectre's slice is path operators plus Flate streams, not PDF 1.7 or PDF 2.0.
-- Rasterize to an image. Spectre writes PPM and PNG. Ghostscript also writes JPEG, TIFF, BMP, PCX, fax, and PSD.
+- Rasterize to an image. Spectre writes PPM, PNG, and JPEG. Ghostscript also writes TIFF, BMP, PCX, fax, and PSD.
+- Report the painted box in points and the RGB mark coverage of a page, in the style of `bbox` and `inkcov`. Spectre's coverage is RGB occupancy, not a CMYK report.
+- Wrap each painted page in a new PDF as one 24-bit RGB image, in the style of `pdfimage24`. Spectre uses Flate image streams.
 - Rewrite a PDF as a new file and compress streams. Spectre uses Flate only.
 - Stop on the first broken-file error, the same idea as `-dPDFSTOPONERROR`.
 - A library call and a CLI over that call, the same split as `gsapi` and the `gs` binary.
@@ -27,8 +29,8 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 - PDF/X creation.
 - PDF to PostScript (`pdf2ps`, `ps2write`) and EPS rewrite (`eps2write`, `ps2epsi`).
 - XPS output (`xpswrite`), DOCX output (`docxwrite`), and PCL-XL output (`pxlmono`, `pxlcolor`).
-- A page raster wrapped in a PDF (`pdfimage8`, `pdfimage24`, `pdfimage32`, PCLm).
-- Bounding box (`bbox`), ink coverage (`inkcov`), and spot-color separations (`tiffsep`).
+- A gray or CMYK page raster wrapped in a PDF (`pdfimage8`, `pdfimage32`) and PCLm output.
+- Spot-color separations (`tiffsep`).
 - On-screen display.
 - Page selection, PDF info (`-dPDFINFO`), linearized PDF, and output encryption.
 - Printer devices, duplex, N-up, and PJL.
