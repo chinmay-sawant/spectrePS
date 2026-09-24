@@ -112,6 +112,6 @@ No GitHub issue exists for this plan. The parent ledger is `plans/v0.0.1/10-defe
 
 | Extension | Files | Insertions | Deletions |
 | --- | ---: | ---: | ---: |
-| `.md` | 7 | 213 | 6 |
+| `.md` | 8 | 330 | 6 |
 | No extension | 1 | 5 | 2 |
-| **Total** | **8** | **218** | **8** |
+| **Total** | **9** | **335** | **8** |
