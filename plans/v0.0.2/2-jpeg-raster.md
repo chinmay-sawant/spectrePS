@@ -1,7 +1,7 @@
 # v0.0.2 - JPEG raster
 
 > **Parent:** `plans/v0.0.2/00-program.md` - quick-win ledger
-> **Status:** not started
+> **Status:** implemented. Lint and test passed on 2026-09-25.
 > **Estimated effort:** 1 day
 
 ---
@@ -24,11 +24,11 @@ A path that ends in `.jpg` or `.jpeg` encodes the same `PageImage` as PNG. The d
 
 ### 2.1 Encode
 
-- [ ] `internal/cli` `writePages` calls `image/jpeg.Encode` when the path ends in `.jpg` or `.jpeg`. Quality comes from `-jpegq`, default 75, clamped to 1 through 100. The pixmap is RGB with alpha 255, the same conversion `encodePNG` already uses. PPM remains the fallback for every other suffix. Proof: `go test -count=1 ./internal/cli -run TestRasterJPEG`.
+- [x] `internal/cli` `writePages` calls `image/jpeg.Encode` when the path ends in `.jpg` or `.jpeg`. Quality comes from `-jpegq`, default 75, clamped to 1 through 100. The pixmap is RGB with alpha 255, the same conversion `encodePNG` already uses. PPM remains the fallback for every other suffix. Proof: `go test -count=1 ./internal/cli -run TestRasterJPEG` exited 0 on 2026-09-25.
 
 ### 2.2 Not an oracle
 
-- [ ] The JPEG test checks the SOI bytes `FF D8`, a successful `jpeg.Decode`, and width and height. It does not compare the JPEG file to a second encoder with `CompareFiles`. `CompareRaster` on the pixmap is unchanged. Proof: the same `TestRasterJPEG` run.
+- [x] The JPEG test checks the SOI bytes `FF D8`, a successful `jpeg.Decode`, and width and height. It does not compare the JPEG file to a second encoder with `CompareFiles`. `CompareRaster` on the pixmap is unchanged. Proof: the same `TestRasterJPEG` run exited 0 on 2026-09-25.
 
 ## Dependencies
 
