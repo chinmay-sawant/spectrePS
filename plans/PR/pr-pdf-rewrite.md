@@ -120,5 +120,5 @@ No GitHub issue exists for this tag. The ledger file is `plans/v0.0.1/07-rewrite
 | Extension | Files | Insertions | Deletions |
 | --- | ---: | ---: | ---: |
 | `.go` | 17 | 1008 | 36 |
-| `.md` | 5 | 43 | 13 |
-| **Total** | **22** | **1051** | **49** |
+| `.md` | 6 | 167 | 13 |
+| **Total** | **23** | **1175** | **49** |
