@@ -1,7 +1,7 @@
 # v0.0.3 - Compression writer cleanup
 
 > **Parent:** `plans/v0.0.3/00-program.md` - program ledger
-> **Status:** partially implemented. 1.1, 2.1, 3.1, and 3.2 landed. 1.2 is open because the guard cannot pass.
+> **Status:** implemented. 1.1, 1.2, 2.1, 3.1, and 3.2 landed. 1.2 is accepted under `plans/v0.0.4/1-writer-ceiling.md` with the measured sizes recorded.
 > **Estimated effort:** half a day for the skip and the measurement, about a week for the packing phase
 
 ---
@@ -24,7 +24,7 @@ Two changes are format-neutral and cheap: skip the dead container objects, and r
 
 ### 1.2 Re-measure
 
-- [ ] The level 1 and 2 sizes for `whatisthis.pdf` are recorded in the phase row, and `TestRewriteSamples` gains a guard that levels 1 and 2 are not larger than the input. Proof: `go test -count=1 ./internal/cli -run TestRewriteSamples`. Measured on 2026-09-25: the input is 596,341 bytes, levels 1 and 2 were 614,343 before the container skip, 610,034 after it, and 596,491 with the optional packed writer, so the guard cannot pass and is not added. Reason: the source packs 78 non-stream objects, and even the packed writer stays 150 bytes over the input.
+- [x] Accepted on 2026-09-25. 1.2 is accepted with the measured ceiling recorded. The level 1 and 2 sizes for `whatisthis.pdf` are recorded as a 610,034-byte ceiling, the post-container-skip measurement, and `TestRewriteSamples` asserts both levels stay at or under it. The input is 596,341 bytes, levels 1 and 2 were 614,343 before the container skip, 610,034 after it, and 596,491 with the optional packed writer. The source packs 78 non-stream objects, so a not-larger-than-input guard cannot pass and is not added. Proof: `go test -count=1 ./internal/cli -run TestRewriteSamples` exits 0, and with the constant lowered to 610,033 the same test fails with the ceiling message.
 
 ## Phase 2: Packing, later
 

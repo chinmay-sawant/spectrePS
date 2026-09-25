@@ -136,7 +136,7 @@ The formula and both worked examples are in `documentation/devices.md`. The chan
 | Code | When |
 | --- | --- |
 | 0 | Success. `compare` exits 0 when `Equal` is true. |
-| 1 | `JobError`, `ErrNotImplemented`, or a compare mismatch. |
+| 1 | `JobError` or a compare mismatch. |
 | 2 | Usage. Missing file, unknown flag, unknown command, missing `-o`. |
 | 3 | A read or write failed before the interpreter ran. |
 
@@ -154,14 +154,4 @@ or
 mismatch pixel 120
 ```
 
-or
-
-```
-mismatch width
-```
-
-stderr stays empty on a clean mismatch so scripts can diff stdout. Interpreter errors go to stderr and exit 1.
-
-## Phase 02 behavior
-
-`version`, usage errors, and `compare bytes` work. `run`, `raster`, `rewrite`, `validate`, and `compare raster` exit 1 with `spectreps: not implemented` on stderr until their phases land. They still parse flags, so a missing `-o` on `raster` is exit 2 even in phase 02.
+`compare bytes` prints `mismatch byte N`, or `mismatch length N` when one file is a prefix of the other. `compare raster` prints `mismatch pixel N`, or `mismatch length` when the selected page counts differ. Both inputs get the same `RunOptions` value and the same `-pages` selection, so their page sizes always agree and a width or height mismatch cannot reach the CLI. `CompareRaster` can still report `width` or `height` to a library caller. stderr stays empty on a clean mismatch so scripts can diff stdout. Interpreter errors go to stderr and exit 1.

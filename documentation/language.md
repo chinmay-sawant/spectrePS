@@ -121,7 +121,7 @@ Pipe paths such as `%pipe%...` never run, because `file` returns `invalidaccess`
 | Pixels per page | 40000000 |
 | Side of a page, pixels | 20000 |
 
-A default letter page at 72 dpi is 612 by 792 pixels. A letter page at 300 dpi is under the pixel cap. A letter page at 600 dpi is over the cap and returns `limitcheck`.
+A default letter page at 72 dpi is 612 by 792 pixels. A letter page at 300 dpi is under the pixel cap. A letter page at 600 dpi is 5100 by 6600, which is 33,660,000 pixels and still under the 40,000,000 cap. The area cap is crossed at 655 dpi, and a letter page there returns `limitcheck`.
 
 ## Out of this tag
 
