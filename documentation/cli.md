@@ -37,7 +37,15 @@ Shared options for `run`, `raster`, `pdfimage`, `bbox`, `inkcov`, and `compare r
 | `-jpegq` | JPEG quality, clamped to 1 through 100 | 75 |
 | `-tiffcompress` | TIFF compression, `none` or `deflate` | `deflate` |
 
-`run` and `compare raster` do not accept `-jpegq` or `-tiffcompress`.
+`pdfimage` adds one flag:
+
+| Flag | Meaning | Default |
+| --- | --- |
+| `-colorspace` | Image stream color space: `rgb`, `gray`, or `cmyk` | `rgb` |
+
+Any other `-colorspace` value exits 2. `rgb` keeps the 24-bit RGB bytes from earlier tags.
+
+`run` and `compare raster` do not accept `-jpegq`, `-tiffcompress`, or `-colorspace`.
 
 `bbox` and `inkcov` write their report to stdout and do not write a file.
 
@@ -82,7 +90,7 @@ The three fractions are RGB occupancy with five digits after the point. They are
 
 `rewrite` writes one PDF.
 
-`pdfimage` writes one PDF with one 24-bit RGB image page per input page. The input is a PostScript file or a PDF. A PDF input paints every page with `RasterizePage`, and any other input uses `RunPostScript`. The `-o` path is required and does not use `%d`. `-r 0` writes 72 dpi.
+`pdfimage` writes one PDF with one image page per input page. `-colorspace` selects 24-bit RGB, 8-bit DeviceGray, or 32-bit DeviceCMYK image streams, and `rgb` is the default. The input is a PostScript file or a PDF. A PDF input paints every page with `RasterizePage`, and any other input uses `RunPostScript`. The `-o` path is required and does not use `%d`. `-r 0` writes 72 dpi.
 
 ## Exit codes
 

@@ -85,6 +85,10 @@ External tests use `package spectreps_test`, so they only see the exported API.
 ## Bitmap PDF
 
 - `ImagePDF` and `WriteImages` emit one `/Subtype /Image` XObject per page with `/ColorSpace /DeviceRGB`, `/BitsPerComponent 8`, and `/Filter /FlateDecode`. The stored stream is the tightly packed RGB rows, so stride padding is dropped.
+- `ImagePDFColor` and `WriteImagesColor` keep those bytes for `ImageColorRGB` and `ImageRGB`, and add `/DeviceGray` with one byte per pixel and `/DeviceCMYK` with four. The test decodes both streams and compares each with the conversion below.
+- Gray is `round(0.299*R + 0.587*G + 0.114*B)` per pixel. Pure red `(255, 0, 0)` decodes to the byte `76`.
+- CMYK is `K = 1 - max(r, g, b)` with `C = (1 - r - K) / (1 - K)` and the same for M and Y, each rounded to a byte, and `C = M = Y = 0` when `K >= 1`. Pure red decodes to `0 255 255 0`.
+- `spectreps pdfimage -colorspace gray|cmyk` writes those streams, `-colorspace rgb` is the same as the default, and any other value exits 2.
 - `/MediaBox` is `[0 0 width*72/dpi height*72/dpi]` points. `dpi` of 0 or less selects 72.
 - The content stream paints `/Im0 Do` and the page resources carry the XObject. `Do` still returns `undefined` when Spectre opens the file, so the test decodes the image stream from the bytes instead of rasterizing the output.
 - Two `ImagePDF` calls on the same pages return buffers `CompareFiles` reports equal. The bytes contain no `CreationDate`, `ModDate`, or `/Info`. Both trailer `/ID` strings are the SHA-256 of the concatenated image streams.

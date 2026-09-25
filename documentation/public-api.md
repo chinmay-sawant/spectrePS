@@ -29,6 +29,14 @@ type PageImage struct {
     Pixels []byte // RGB8, row 0 is the top, len == Height*Stride, Stride >= Width*3
 }
 
+type ImageColor int
+
+const (
+    ImageColorRGB ImageColor = iota
+    ImageColorGray
+    ImageColorCMYK
+)
+
 type Document struct { /* unexported */ }
 
 type RewriteOptions struct {
@@ -84,6 +92,7 @@ func (doc *Document) PageCount() int // page leaves, 0 when doc is nil
 func (in *Instance) RasterizePage(ctx context.Context, doc *Document, pageIndex int, opt RunOptions) (PageImage, error)
 func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOptions) ([]byte, error)
 func (in *Instance) ImagePDF(ctx context.Context, pages []PageImage, dpi float64) ([]byte, error)
+func (in *Instance) ImagePDFColor(ctx context.Context, pages []PageImage, dpi float64, color ImageColor) ([]byte, error)
 
 func CompareFiles(a, b []byte) CompareResult
 func CompareRaster(a, b PageImage) CompareResult
@@ -127,5 +136,7 @@ A cancelled `ctx` returns `ctx.Err()` and no partial success. `nil` context is a
 `pageIndex` is zero-based. A negative index or an index past the last page returns `rangecheck`.
 
 `ImagePDF` writes a new PDF with one 24-bit RGB Flate image per `PageImage`. `dpi` is the resolution the pages were painted at, and zero or less selects 72. The content stream paints `/Im0 Do`, but the PDF interpreter still returns `undefined` for `Do`, so Spectre cannot rasterize its own image PDF yet. The output is not `pdfwrite`.
+
+`ImagePDF` calls `ImagePDFColor` with `ImageColorRGB`, so its bytes do not change. `ImageColorGray` writes one 8-bit sample per pixel with `/DeviceGray`. `ImageColorCMYK` writes four 8-bit samples per pixel with `/DeviceCMYK`. Both use `/Filter /FlateDecode`. The conversion formulas and the pure red example are in `documentation/devices.md`.
 
 `DefaultRewriteOptions` turns stream compression on. The zero `RewriteOptions` leaves it off, so a test can ask for uncompressed streams on purpose. The CLI uses `DefaultRewriteOptions`.
