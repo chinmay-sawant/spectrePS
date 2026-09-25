@@ -4,7 +4,7 @@ Spectre PS is a Go library and CLI for the jobs Ghostscript is used for. It read
 
 The command is `spectreps`. The library import path is `github.com/chinmay-sawant/spectrePS/spectreps`, package name `spectreps`. The command calls that package through `internal/cli`, and an external importer calls the same functions.
 
-v0.0.1 is the first release: the PostScript subset, the path-only PDF, PPM and PNG raster, Flate rewrite, validate, and byte and pixel compare. v0.0.2 adds `bbox`, `inkcov`, JPEG and TIFF raster, page ranges, gray and CMYK image PDF, and PDF compression levels 1 to 5. `spectreps version` prints `0.0.1` until a tag bumps that constant.
+v0.0.1 is the first release: the PostScript subset, the path-only PDF, PPM and PNG raster, Flate rewrite, validate, and byte and pixel compare. v0.0.2 adds `bbox`, `inkcov`, JPEG and TIFF raster, page ranges, gray and CMYK image PDF, and PDF compression levels 1 to 5. `spectreps version` prints `0.0.2`.
 
 ## Build
 

@@ -2,7 +2,7 @@
 
 This file is the product inventory: what Spectre supports today and what waits. `documentation/covered-and-not-covered.md` maps the same ground against Ghostscript. `plans/v0.0.1/10-deferred.md` is the ledger for the work that waits, with a next gate on each row.
 
-The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster, page selection, PDF inputs in `compare raster`, gray and CMYK image PDF, and PDF compression levels 1 to 5. `spectreps version` prints `0.0.1` until a tag bumps that constant.
+The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster, page selection, PDF inputs in `compare raster`, gray and CMYK image PDF, and PDF compression levels 1 to 5. `spectreps version` prints `0.0.2`.
 
 ## Input
 
@@ -57,7 +57,7 @@ The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster
 
 | Feature | Why it waits | Next gate |
 | --- | --- | --- |
-| Images inside a PDF, `Do` | The PDF interpreter has no image XObject model. | A plan file for image XObjects. |
+| Painting `Do` and reading images into a raster | The reader decodes image XObjects, but the content interpreter still returns `undefined` for `Do`. | A plan file for the `Do` operator and the image marker seam. |
 | CCITT and JPEG2000 image streams on rewrite | `DecodeImage` reads Flate and DCT only, so those streams copy through unchanged. | A CCITT or JPX decoder. |
 | Text extraction, `show`, `Tj` | Fonts are a separate machine from the path engine. | A new plan file after the font decision. |
 | PDF/A-1b, PDF/A-2b, PDF/A-3b creation | Needs a named level, a named policy, and metadata. The file is not a conformance certificate. | A plan file that states the level and the policy. |
