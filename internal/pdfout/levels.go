@@ -30,12 +30,16 @@ const (
 	keyParms      = "DecodeParms"
 	keyWidth      = "Width"
 	keyHeight     = "Height"
+	keyBits       = "BitsPerComponent"
 	keyColorSpace = "ColorSpace"
 	keySubtype    = "Subtype"
 	keySMask      = "SMask"
 
+	bitsImage = 8
+
 	filterFlate     = "FlateDecode"
 	filterDCT       = "DCTDecode"
+	filterCCITT     = "CCITTFaxDecode"
 	subtypeImage    = "Image"
 	spaceDeviceRGB  = "DeviceRGB"
 	spaceDeviceGray = "DeviceGray"
@@ -70,8 +74,9 @@ func imagePolicy(level int) (levelImage, bool) {
 // LevelOverrides returns complete replacement bodies for the objects one
 // compression level changes.
 // Level 1 re-Flates every uncompressed page content stream. Level 2 also
-// re-encodes Flate and raw image streams losslessly. Levels 3 through 5 also
-// re-encode images as DCT, resampling a longest side above the level cap.
+// re-encodes Flate, raw, and CCITT image streams losslessly. Levels 3 through
+// 5 also re-encode images as DCT, resampling a longest side above the level
+// cap.
 // An image Spectre cannot decode, and an image with an /SMask, is copied
 // unchanged. Level 0 does not use this function.
 // A canceled context returns ctx.Err() and a nil map.
@@ -157,8 +162,8 @@ func flateOverride(val pdf.Value, stored []byte) []byte {
 	return pdf.SerializeValue(pdf.StreamVal(dict, stored))
 }
 
-// flateImages re-encodes Flate image streams and Flates raw image streams
-// without resampling.
+// flateImages re-encodes Flate and CCITT image streams and Flates raw image
+// streams without resampling.
 func flateImages(file *pdf.File, overrides map[int][]byte) error {
 	nums, err := file.ImageObjectNums()
 	if err != nil {
@@ -187,7 +192,7 @@ func flateImageObject(file *pdf.File, num int, overrides map[int][]byte) error {
 	if !hasFilter {
 		return flateRawImage(val, num, overrides)
 	}
-	if filter != filterFlate {
+	if filter != filterFlate && filter != filterCCITT {
 		return nil
 	}
 	return reflateImage(file, val, num, overrides)
@@ -204,7 +209,8 @@ func flateRawImage(val pdf.Value, num int, overrides map[int][]byte) error {
 	return nil
 }
 
-// reflateImage decodes a Flate image and writes it back as lossless Flate RGB.
+// reflateImage decodes a Flate or CCITT image and writes it back as lossless
+// Flate RGB.
 func reflateImage(file *pdf.File, val pdf.Value, num int, overrides map[int][]byte) error {
 	pic, err := file.DecodeImage(num)
 	if err != nil {
@@ -218,6 +224,7 @@ func reflateImage(file *pdf.File, val pdf.Value, num int, overrides map[int][]by
 	dict := streamDict(val)
 	dict[keyFilter] = pdf.NameVal(filterFlate)
 	dict[keyColorSpace] = pdf.NameVal(spaceDeviceRGB)
+	dict[keyBits] = pdf.IntVal(bitsImage)
 	delete(dict, keyParms)
 	overrides[num] = pdf.SerializeValue(pdf.StreamVal(dict, stored))
 	return nil
@@ -280,6 +287,7 @@ func writeDCTImage(
 	dict[keyHeight] = pdf.IntVal(int64(height))
 	dict[keyFilter] = pdf.NameVal(filterDCT)
 	dict[keyColorSpace] = pdf.NameVal(imageColorName(pic))
+	dict[keyBits] = pdf.IntVal(bitsImage)
 	delete(dict, keyParms)
 	overrides[num] = pdf.SerializeValue(pdf.StreamVal(dict, stored))
 	return nil
