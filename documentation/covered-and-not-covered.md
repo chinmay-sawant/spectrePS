@@ -26,9 +26,9 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 ## Not covered
 
 - Full PostScript LanguageLevel 3, including filters other than Flate, `%pipe%`, and `%disk`.
-- Full PDF 1.7 and PDF 2.0, including transparency, optional content, encryption, and passwords.
+- Full PDF 1.7 and PDF 2.0, including transparency, optional content, encryption, and passwords. The pixmap alpha and separable blend modes are in place behind the optional `AlphaMarker` seam, and the PDF `gs`, soft mask, and group operators are not.
 - OCR (`pdfocr`, Tesseract). Font programs beyond the subset in `documentation/fonts.md`: Type 1 `/FontFile`, bare CFF, Type 3, vertical writing, color fonts, and variable fonts.
-- Images inside a PDF on the reading side beyond `Do` on `/Subtype /Image`. `Do` paints RGB and gray image XObjects. `/SMask`, `/Mask`, `/ImageMask`, and `/Decode` arrays are refused, not approximated. Rewrite decodes CCITT G4 and G3 and JPEG2000 image streams: level 2 re-encodes CCITT losslessly as Flate, and levels 3 through 5 re-encode both as DCT.
+- Images inside a PDF on the reading side beyond `Do` on `/Subtype /Image`. `Do` paints RGB, gray, CMYK, Indexed, ICCBased, CalRGB, CalGray, Separation, and DeviceN image XObjects through the preview RGB conversion. `/SMask`, `/Mask`, `/ImageMask`, and `/Decode` arrays are refused, not approximated. Rewrite decodes CCITT G4 and G3 and JPEG2000 image streams: level 2 re-encodes CCITT losslessly as Flate, and levels 3 through 5 re-encode both as DCT.
 - Font embedding and subsetting.
 - PDF/A-1, PDF/A-2, PDF/A-3, and PDF/A-4e creation. Spectre writes a PDF/A-4 or 4f claim only. It does not embed missing fonts or convert color, and it produces no certificate.
 - PDF/UA-2 conformance checking, certification, tag generation, reading order, and role assignment. Spectre preserves an existing tree and preflights a machine-checkable subset; it says preflight only.
@@ -36,7 +36,7 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 - EPS rewrite (`eps2write`, `ps2epsi`) and PostScript output for text, fonts, or images.
 - XPS output (`xpswrite`), DOCX output (`docxwrite`), and PCL-XL output (`pxlmono`, `pxlcolor`).
 - PCLm output.
-- Spot-color separations (`tiffsep`).
+- Spot-color separations (`tiffsep`). The reader resolves Separation and DeviceN to the RGB preview, and no plate accumulator or `tiffsep` device is written.
 - On-screen display.
 - PDF info (`-dPDFINFO`), linearized PDF, and output encryption.
 - Printer devices, duplex, N-up, and PJL.

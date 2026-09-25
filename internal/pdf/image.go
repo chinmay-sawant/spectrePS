@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"image"
 	"image/jpeg"
+	"math"
 	"slices"
 )
 
@@ -56,7 +57,9 @@ func (file *File) ImageObjectNums() ([]int, error) {
 }
 
 // DecodeImage decodes one image XObject. num comes from ImageObjectNums.
-// FlateDecode supports DeviceRGB and DeviceGray at 8 bits per component.
+// FlateDecode supports DeviceRGB, DeviceGray, DeviceCMYK, Indexed, Separation,
+// DeviceN, ICCBased, CalRGB, and CalGray at 8 bits per component, and converts
+// every sample to the preview RGB.
 // DCTDecode decodes through image/jpeg.
 // CCITTFaxDecode decodes Group 4 and Group 3 into Gray at 1 bit per component.
 // JPXDecode decodes through the pure-Go JPEG2000 decoder and ignores the
@@ -69,15 +72,27 @@ func (file *File) DecodeImage(num int) (image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	return DecodeImageValue(stream)
+	return file.decodeImageValue(stream, opImage)
 }
 
-// DecodeImageValue decodes one resolved image XObject value. The value is the
-// stream form of DecodeImage, so a resolved object and its number return the
-// same pixels. Direct and indirect XObjects both work.
+// DecodeImageValue decodes one resolved image XObject value with the Image
+// operator name on an error. The value is the stream form of DecodeImage, so a
+// resolved object and its number return the same pixels when the color space
+// is direct. An indirect color space needs DecodeImageValueOp and a file.
 func DecodeImageValue(val Value) (image.Image, error) {
+	return (*File)(nil).decodeImageValue(val, opImage)
+}
+
+// DecodeImageValueOp decodes one resolved image XObject value and reports an
+// error with the caller's operator name. The content interpreter passes "Do"
+// so an unsupported color space keeps the paint operator name.
+func (file *File) DecodeImageValueOp(val Value, opName string) (image.Image, error) {
+	return file.decodeImageValue(val, opName)
+}
+
+func (file *File) decodeImageValue(val Value, opName string) (image.Image, error) {
 	if !hasImageSubtype(val) {
-		return nil, NewError(opImage, errUndefined)
+		return nil, NewError(opName, errUndefined)
 	}
 	filter, err := imageFilterName(val)
 	if err != nil {
@@ -89,17 +104,17 @@ func DecodeImageValue(val Value) (image.Image, error) {
 	if filter == nameCCITT {
 		return decodeCCITTImage(val)
 	}
-	width, height, space, err := imageParams(val)
+	width, height, space, err := imageParams(file, val, opName)
 	if err != nil {
 		return nil, err
 	}
 	if filter == nameDCT {
-		return decodeDCTImage(val)
+		return decodeDCTImage(val, space, opName)
 	}
 	if filter != opFlate {
 		return nil, NewError(filter, errUndefined)
 	}
-	return decodeFlateImage(val, width, height, space)
+	return decodeFlateImage(val, width, height, space, opName)
 }
 
 func (file *File) imageStream(num int) (Value, error) {
@@ -124,16 +139,23 @@ func hasImageSubtype(val Value) bool {
 	return ok && name == nameImage
 }
 
-func imageParams(stream Value) (int, int, string, error) {
+// imageParams reads /Width, /Height, /BitsPerComponent, and /ColorSpace. The
+// color space resolves to its sample count and preview RGB conversion. A
+// missing parameter or an unsupported space is undefined in opName.
+func imageParams(file *File, stream Value, opName string) (int, int, colorSpace, error) {
 	width, okWidth := stream.IntEntry(keyWidth)
 	height, okHeight := stream.IntEntry(keyHeight)
 	bits, okBits := stream.IntEntry(keyBits)
 	if !okWidth || !okHeight || !okBits || width <= 0 || height <= 0 || bits != bitsEight {
-		return 0, 0, "", NewError(opImage, errUndefined)
+		return 0, 0, colorSpace{}, NewError(opName, errUndefined)
 	}
-	space, okSpace := stream.NameEntry(keyColorSpace)
-	if !okSpace || (space != colorRGB && space != colorGray) {
-		return 0, 0, "", NewError(opImage, errUndefined)
+	entry, okEntry := stream.ValueEntry(keyColorSpace)
+	if !okEntry || entry.Kind == KindNull {
+		return 0, 0, colorSpace{}, NewError(opName, errUndefined)
+	}
+	space, err := file.resolveColorSpace(entry, opName)
+	if err != nil {
+		return 0, 0, colorSpace{}, err
 	}
 	return width, height, space, nil
 }
@@ -151,47 +173,128 @@ func imageFilterName(stream Value) (string, error) {
 	return "", NewError(opImage, errUndefined)
 }
 
-func decodeDCTImage(stream Value) (image.Image, error) {
+func decodeDCTImage(stream Value, space colorSpace, opName string) (image.Image, error) {
 	pic, err := jpeg.Decode(bytes.NewReader(stream.Stream))
 	if err != nil {
 		return nil, NewError(opImage, errSyntax)
 	}
-	return pic, nil
+	return previewDecoded(pic, space, opName)
 }
 
-func decodeFlateImage(stream Value, width, height int, space string) (image.Image, error) {
+// previewDecoded converts one decoded image to the preview RGB the color
+// space names. A CMYK space needs a CMYK source, an Indexed or gray space a
+// gray source, and any other space takes the decoded RGB channels. A source
+// that does not match the declared sample count is undefined in opName.
+func previewDecoded(pic image.Image, space colorSpace, opName string) (image.Image, error) {
+	if space.components == cmykComponents {
+		cmyk, ok := pic.(*image.CMYK)
+		if !ok {
+			return nil, NewError(opName, errUndefined)
+		}
+		return previewCMYK(cmyk, space), nil
+	}
+	if space.components == 1 {
+		gray, ok := pic.(*image.Gray)
+		if !ok {
+			return nil, NewError(opName, errUndefined)
+		}
+		return previewGray(gray, space), nil
+	}
+	return previewRGBImage(pic, space), nil
+}
+
+// previewCMYK converts a CMYK source through the preview rule.
+func previewCMYK(pic *image.CMYK, space colorSpace) image.Image {
+	bounds := pic.Bounds()
+	out := image.NewRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
+	values := make([]float64, cmykComponents)
+	for row := range bounds.Dy() {
+		for col := range bounds.Dx() {
+			at := row*pic.Stride + col*cmykComponents
+			for part := range cmykComponents {
+				values[part] = float64(pic.Pix[at+part]) / colorSampleScale
+			}
+			red, green, blue := space.rgb(values)
+			setPreviewPixel(out, row, col, red, green, blue)
+		}
+	}
+	return out
+}
+
+// previewGray converts a gray source: a DeviceGray or CalGray sample scales by
+// 1/255, and an Indexed sample is the table index.
+func previewGray(pic *image.Gray, space colorSpace) image.Image {
+	values := make([]float64, 1)
+	bounds := pic.Bounds()
+	out := image.NewRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
+	for row := range bounds.Dy() {
+		for col := range bounds.Dx() {
+			values[0] = space.sampleValue(pic.GrayAt(bounds.Min.X+col, bounds.Min.Y+row).Y)
+			red, green, blue := space.rgb(values)
+			setPreviewPixel(out, row, col, red, green, blue)
+		}
+	}
+	return out
+}
+
+// previewRGBImage converts any source through its RGBA channels.
+func previewRGBImage(pic image.Image, space colorSpace) image.Image {
+	bounds := pic.Bounds()
+	out := image.NewRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
+	values := make([]float64, rgbComponents)
+	for row := range bounds.Dy() {
+		for col := range bounds.Dx() {
+			red, green, blue, _ := pic.At(bounds.Min.X+col, bounds.Min.Y+row).RGBA()
+			values[0] = float64(byte(red>>byteShift)) / colorSampleScale
+			values[1] = float64(byte(green>>byteShift)) / colorSampleScale
+			values[2] = float64(byte(blue>>byteShift)) / colorSampleScale
+			previewRed, previewGreen, previewBlue := space.rgb(values)
+			setPreviewPixel(out, row, col, previewRed, previewGreen, previewBlue)
+		}
+	}
+	return out
+}
+
+// decodeFlateImage converts one decoded Flate sample stream to the preview.
+// The byte count must match width by height by components exactly.
+func decodeFlateImage(stream Value, width, height int, space colorSpace, opName string) (image.Image, error) {
 	raw, err := decodeStream(stream)
 	if err != nil {
 		return nil, err
 	}
-	planes := rgbComponents
-	if space == colorGray {
-		planes = 1
+	planes := space.components
+	if planes <= 0 || int64(width)*int64(height)*int64(planes) != int64(len(raw)) {
+		return nil, NewError(opName, errUndefined)
 	}
-	if int64(width)*int64(height)*int64(planes) != int64(len(raw)) {
-		return nil, NewError(opImage, errUndefined)
-	}
-	if space == colorGray {
-		return grayImage(raw, width, height), nil
-	}
-	return rgbImage(raw, width, height), nil
-}
-
-func grayImage(raw []byte, width, height int) image.Image {
-	pic := image.NewGray(image.Rect(0, 0, width, height))
-	copy(pic.Pix, raw)
-	return pic
-}
-
-func rgbImage(raw []byte, width, height int) image.Image {
 	pic := image.NewRGBA(image.Rect(0, 0, width, height))
-	for idx := range width * height {
-		src := idx * rgbComponents
-		dst := idx * rgbaComponents
-		pic.Pix[dst] = raw[src]
-		pic.Pix[dst+1] = raw[src+1]
-		pic.Pix[dst+2] = raw[src+2]
-		pic.Pix[dst+3] = opaqueAlpha
+	values := make([]float64, planes)
+	for index := range width * height {
+		at := index * planes
+		for part := range planes {
+			values[part] = space.sampleValue(raw[at+part])
+		}
+		red, green, blue := space.rgb(values)
+		setPreviewPixel(pic, index/width, index%width, red, green, blue)
 	}
-	return pic
+	return pic, nil
+}
+
+// setPreviewPixel stores one preview RGB value, rounded to a byte.
+func setPreviewPixel(pic *image.RGBA, row, col int, red, green, blue float64) {
+	at := row*pic.Stride + col*rgbaComponents
+	pic.Pix[at] = previewByte(red)
+	pic.Pix[at+1] = previewByte(green)
+	pic.Pix[at+2] = previewByte(blue)
+	pic.Pix[at+3] = opaqueAlpha
+}
+
+// previewByte rounds one preview channel to a byte.
+func previewByte(value float64) byte {
+	if value < 0 {
+		value = 0
+	}
+	if value > 1 {
+		value = 1
+	}
+	return byte(math.Round(value * colorSampleScale))
 }

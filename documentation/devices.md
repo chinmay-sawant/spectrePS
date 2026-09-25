@@ -77,18 +77,30 @@ The reader walks the xref for in-use objects whose dictionary has `/Subtype /Ima
 
 Four stream forms decode:
 
-- `/FlateDecode` with `/DeviceRGB` or `/DeviceGray` at 8 bits per component, through the same zlib path as content streams. A predictor above 1 is rejected.
-- `/DCTDecode` through `image/jpeg`.
+- `/FlateDecode` at 8 bits per component, through the same zlib path as content streams. The color space resolves through the reading-side rules below, and every sample converts to the preview RGB. A predictor above 1 is rejected.
+- `/DCTDecode` through `image/jpeg`. A gray source needs a gray space, a CMYK source a CMYK space, and any other source converts through its RGBA channels.
 - `/CCITTFaxDecode` with `/DeviceGray` at 1 bit per component, through `golang.org/x/image/ccitt`. `/K < 0` is Group 4, `/K == 0` with `/EndOfLine true` is Group 3, and `/K > 0` is undefined. `/Columns` and `/Rows` default to `/Width` and `/Height`, `/BlackIs1` inverts the samples, and `/EncodedByteAlign` byte-aligns the codes. `Columns * Rows` above the 32 MiB decoded cap returns `limitcheck` before allocation.
 - `/JPXDecode` through `github.com/mrjoshuak/go-jpeg2000`, a pure-Go decoder. `/ColorSpace` and `/BitsPerComponent` are optional and ignored for JPX: the codestream carries the color and the precision, so the branch runs before the shared parameter check. A header that declares more decoded sample bytes than the 32 MiB Flate cap returns `limitcheck` before the decoder allocates.
 
-Any other filter, color space, or bit depth returns `undefined`, as does a Flate stream whose byte count does not match width by height by components. JPEG is lossy, so decoded pixels are not a byte oracle for the source; a JPEG2000 stream may be lossless or lossy. A failed decode returns `syntaxerror` or `limitcheck`, never a blank image.
+Any other filter or bit depth returns `undefined`, as does a Flate stream whose byte count does not match width by height by components. JPEG is lossy, so decoded pixels are not a byte oracle for the source; a JPEG2000 stream may be lossless or lossy. A failed decode returns `syntaxerror` or `limitcheck`, never a blank image.
+
+### Reading-side color spaces
+
+`imageParams` resolves `/ColorSpace` to a sample count and a preview RGB conversion. These forms resolve:
+
+- DeviceRGB, DeviceGray, and DeviceCMYK, including the abbreviated names RGB, G, and CMYK.
+- Indexed over any base space. The lookup is a string or a stream, and an index past hival clamps to hival.
+- ICCBased. `/Alternate` wins. Without one, `/N` 1, 3, or 4 previews as gray, RGB, or CMYK. The profile bytes are never read, so a real profile transform is out of this subset.
+- CalRGB as RGB and CalGray as gray. The white point, gamma, and matrix entries are ignored.
+- Separation and DeviceN. The tint transform evaluates as a type 2 exponential interpolation or a type 4 PostScript calculator function. A type 0 sampled or type 3 stitching function is undefined.
+
+A device sample scales by 1/255, and an Indexed sample is the index. Any other space, a malformed array, and a cycle through indirect references return `undefined` with the operator name, `Image` or `Do`.
 
 ## Painting images
 
 The content interpreter resolves `Do` in the page's `/XObject` resources. `/Resources` inherits from the nearest `/Pages` ancestor, and the `/XObject` subdictionary, the image entry, and the image itself may each be indirect. An image decodes once per name per painted page.
 
-An image paints into its unit square: `(0,0)` is the lower left and `(1,1)` is the upper right. The square maps through the current matrix (`cm`), then scales by the paint scale. The pixmap stamps it with nearest-neighbor sampling, image row 0 is the top of the square, and the alpha channel is ignored. `Marker.DrawImage(pic image.Image, ctm Matrix, scale float64)` is the device seam, and the pixmap and the rewrite recorder implement it.
+An image paints into its unit square: `(0,0)` is the lower left and `(1,1)` is the upper right. The square maps through the current matrix (`cm`), then scales by the paint scale. The pixmap stamps it with nearest-neighbor sampling, image row 0 is the top of the square, and the alpha channel is ignored. A CMYK, Indexed, Separation, or ICCBased image decodes to the preview RGB before it stamps, so `DrawImage` receives RGB pixels. `Marker.DrawImage(pic image.Image, ctm Matrix, scale float64)` is the device seam, and the pixmap and the rewrite recorder implement it.
 
 A missing name, an entry whose `/Subtype` is not `/Image`, an image with an `/SMask`, and a decode error all return `undefined` with the `Do` operator name. Level 0 of `RewritePDF` cannot write image pixels, so a page that paints one returns `undefined in Do` instead of dropping or outlining the image. The pass-through writer at levels 1 through 5 copies the image unchanged.
 
@@ -182,6 +194,16 @@ Worked example. Pure red is `(255, 0, 0)`.
 - Gray: `round(0.299*255 + 0.587*0 + 0.114*0)` is `round(76.245)`, so the stream stores `76`.
 - CMYK: `r = 1`, `g = 0`, `b = 0`, so `K = 1 - 1 = 0`, `C = (1 - 1 - 0) / 1 = 0`, `M = (1 - 0 - 0) / 1 = 1`, and `Y = 1`. The stream stores `0 255 255 0`.
 
+The reader reverses the CMYK rule. Divide each channel by 255, so C, M, Y, and K run 0 through 1, then:
+
+```
+r = (1 - C) * (1 - K)
+g = (1 - M) * (1 - K)
+b = (1 - Y) * (1 - K)
+```
+
+Each channel scales by 255 and rounds to the nearest byte. Worked example: the quadruple `0 255 255 0` is pure red, and `255 0 0 0` is cyan `(0, 255, 255)`. This is the inverse of the K-first rule above, so a red pixel written as CMYK reads back red.
+
 ## Validate
 
 `validate` runs the interpreter in stop-on-first-error mode.
@@ -213,14 +235,14 @@ The preflight refuses the claim with a `JobError` whose `Op` is `PDFA` and whose
 | `font-not-embedded` | A font dictionary with no `/FontFile`, `/FontFile2`, or `/FontFile3` on its descriptor. A Type 3 font is exempt. |
 | `lzwdecode` | A stream filter chain that names `LZWDecode`. |
 | `filter-not-allowed` | A filter name outside the ISO 32000-2 filter table, including `Crypt`. |
-| `cmyk-without-profile` | A dictionary color space that names `DeviceCMYK`. The output intent is RGB, so no matching CMYK profile exists. |
+| `cmyk-without-profile` | A color space value that names `DeviceCMYK`, including the alternate of a `/Separation`, `/DeviceN`, or ICCBased space nested in a page `/ColorSpace` resource. The output intent is RGB, so no matching CMYK profile exists. |
 | `alternates-not-allowed` | An image dictionary with `/Alternates`. |
 | `opi-not-allowed` | An image dictionary with `/OPI`. |
 | `blend-mode-not-allowed` | A `/BM` entry whose value is not `Normal`. |
 | `embedded-files-need-4f` | `PDFA4` on an input whose catalog has `/Names /EmbeddedFiles`. |
 | `4f-needs-embedded-files` | `PDFA4F` on an input with no `/Names /EmbeddedFiles`. |
 
-The scan walks every in-use object, not only the page tree, so an unused font or stream can still refuse the claim. The scan reads dictionaries and not content streams, so a `k` or `K` color operator in page content is not caught. The preflight does not embed fonts, convert color, or decode LZW.
+The scan walks every in-use object, not only the page tree, so an unused font or stream can still refuse the claim. The scan reads dictionaries and not content streams, so a `k` or `K` color operator in page content is not caught. A page or form `/Resources /ColorSpace` dictionary is dictionary-level and is reached, so a nested separation is caught. The preflight does not embed fonts, convert color, or decode LZW.
 
 `make pdfa-check` runs `verapdf --flavour 4` over the PDFs under `sampledata/pdfa/` and skips when the CLI is absent. A `negative/` subfolder is excluded. On 2026-09-25, veraPDF 1.30.2 reported both `path-a4.pdf`, a Spectre write, and the copied `compliant-a4.pdf` valid for PDF/A-4 with 0 failed jobs. That is veraPDF's verdict for those files, not a Spectre certificate.
 
@@ -254,6 +276,39 @@ Those operators map to the same path and color operations as `moveto` `lineto` `
 `Do` paints an image XObject and returns `undefined` with the `Do` operator name when the name or image cannot decode. The text operators paint and extract through the font machine above. A font with no outline source paints as `invalidfont`, and a Type 1, bare CFF, or non-Identity Type0 font is out of this tag. A page that uses an unsupported operator does not rasterize as a blank success.
 
 Encrypted files return `invalidaccess`. Unknown filters return `undefined`.
+
+## Alpha and blend modes
+
+The pixmap implements an optional seam beside `Marker`, so the rewrite recorder keeps refusing effects that level 0 cannot write:
+
+```go
+type BlendMode uint8
+
+const (
+    BlendNormal BlendMode = iota
+    BlendMultiply
+    BlendScreen
+    BlendOverlay
+    BlendDarken
+    BlendLighten
+    BlendColorDodge
+    BlendColorBurn
+    BlendHardLight
+    BlendSoftLight
+    BlendDifference
+    BlendExclusion
+)
+
+type AlphaMarker interface {
+    SetFillAlpha(alpha float64)
+    SetStrokeAlpha(alpha float64)
+    SetBlendMode(mode BlendMode)
+}
+```
+
+A fill or stroke mark composites as `out = blend(src, dst)*a + dst*(1-a)` per channel, rounded to the nearest byte. `SetFillAlpha` and `SetStrokeAlpha` clamp to 0 through 1, and the pixmap starts at alpha 1 and `BlendNormal`. The 12 separable modes use the ISO 32000-1 table 136 formulas. The four non-separable modes, Hue, Saturation, Color, and Luminosity, have no constant here. `blendModeName` in `internal/pdf` maps a `/BM` name to the enum and returns false for those four, so the PDF layer refuses them by name.
+
+The rewrite recorder does not implement `AlphaMarker`, so `Emit` keeps refusing a page that needs an alpha or blend effect. The `gs` operator and the `/ExtGState` lookup are a later phase-2 row, so no content operator sets the seam yet.
 
 ## Shared device interface inside the module
 

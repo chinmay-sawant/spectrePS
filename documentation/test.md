@@ -50,6 +50,13 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - `-tiffcompress none` writes uncompressed TIFF and `-tiffcompress deflate` writes Deflate strips. The default is `deflate`, so two runs with the same input and the default return equal TIFF bytes. An unknown value exits 2 and writes no file. `run` and `compare raster` reject `-tiffcompress` with exit 2.
 - Two pages and an `-o` path with no `%d` exit 2. `%d` is the one-based number of the emitted page. A range that selects input pages 2 and 3 writes `page-1` and `page-2`.
 
+## Alpha and blend
+
+- The pixmap implements the optional `graphics.AlphaMarker` seam. A fill composites with the fill alpha and a stroke with the stroke alpha: `out = src*a + dst*(1-a)` per channel, rounded. Alpha 0 leaves the pixel, alpha 1 with `BlendNormal` replaces it, and an out-of-range alpha clamps to 0 or 1. Fill alpha does not leak into a stroke.
+- The 12 separable blend modes paint with the ISO 32000-1 formulas. Over a backdrop of byte 200 and a source of byte 100 the exact bytes are Normal 100, Multiply 78, Screen 222, Overlay 188, Darken 100, Lighten 200, ColorDodge 255, ColorBurn 115, HardLight 157, SoftLight 191, Difference 100, and Exclusion 143. An unknown mode composites as Normal, and Multiply with fill alpha 0.5 over the same backdrop is 139.
+- `blendModeName` in `internal/pdf` maps the 12 separable names and returns false for Hue, Saturation, Color, and Luminosity, so the PDF layer refuses those four by name.
+- The rewrite recorder does not implement `AlphaMarker`, so `Emit` keeps refusing an alpha or non-Normal blend effect. The `gs` operator and the `/ExtGState` lookup are not wired yet, so no content operator sets the seam.
+
 ## Box and ink coverage
 
 - `MeasureBox` returns the union of marked pixel edges in points, origin at the lower left. A pixel marks when any of R, G, or B is not 255. Stride padding is ignored, and `dpi` of 0 or less selects 72.
@@ -74,6 +81,10 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - A fixture that uses an xref stream and a Flate object stream opens, and the page count is right.
 - Content operators `m l c h re S s f f* n q Q cm w RG rg g G` paint through the same device as the PostScript path operators. A one-page path PDF and the PostScript program of the same marks compare equal with `CompareRaster`.
 - `Do` resolves a name in the page's `/XObject` resources, requires `/Subtype /Image`, decodes the image once per name, and stamps it into the unit square through the CTM and the paint scale. `/Resources` on a `/Pages` ancestor is inherited. A missing name, a non-image subtype, an image with an `/SMask`, and a decode error each return `JobError` with `Do` and `undefined`. The rejected page is not a blank success.
+- An image `/ColorSpace` resolves to a sample count and a preview RGB conversion for DeviceRGB, DeviceGray, DeviceCMYK, Indexed over a string or stream table, ICCBased through `/Alternate` or `/N`, CalRGB, CalGray, Separation, and DeviceN. DeviceCMYK previews with `r = (1-C)(1-K)`, and the writer's K-first RGB to CMYK rule is its inverse. A CMYK Flate image, an Indexed Flate image, and a Separation Flate image decode to exact preview bytes. An index past hival clamps to hival, and a lookup shorter than `(hival+1) * base components` is `undefined`.
+- The tint transform evaluator runs type 2 exponential interpolation and type 4 PostScript calculator functions, including arithmetic, comparison, `if`/`ifelse`, and the stack operators. A type 0 sampled or type 3 stitching function returns `undefined`, and a malformed calculator program returns `undefined` at resolve time. A type 4 code stream decodes under the 32 MiB cap.
+- A DCT source must match the declared sample count: a CMYK space needs an `*image.CMYK` source, and a gray or Indexed space needs an `*image.Gray` source. A mismatch is `undefined`. Go's `image/jpeg` encoder writes no CMYK stream, so the CMYK DCT preview is checked at the conversion seam and the CMYK Flate image is checked end to end.
+- An unsupported image color space returns `undefined` with the `Image` operator from `DecodeImage` and with `Do` from `DecodeImageValueOp`.
 - An encrypted file returns `invalidaccess`. An unknown stream filter returns `undefined`. A truncated xref returns `JobError`.
 - `RasterizePage` with a negative index, or an index past the last page, returns `rangecheck`.
 - `spectreps raster -o out.ppm in.pdf` writes the P6 file for a path-only fixture.
@@ -109,6 +120,7 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - The XMP packet is static UTF-8 with `pdfaid:part` 4, `pdfaid:rev` 2020, and the `F` letter for 4f. It carries no dates, and two calls return equal bytes.
 - The generated ICC profile is a D50 sRGB matrix-shaper with the `desc`, `cprt`, `wtpt`, `rXYZ`, `gXYZ`, `bXYZ`, `rTRC`, `gTRC`, and `bTRC` tags. The output intent is `/S /GTS_PDFA1` with `/DestOutputProfile` and no `/DestOutputProfileRef`.
 - The preflight refuses a font with no embedded file, `LZWDecode`, a filter outside the ISO 32000-2 table, `DeviceCMYK`, `/Alternates`, `/OPI`, and a `/BM` other than `Normal`. Every refusal is a `JobError` with `Op` `PDFA` and the failed rule in `Msg`.
+- A `/Separation` or `/DeviceN` whose alternate names `DeviceCMYK`, nested in a page or form `/Resources /ColorSpace` dictionary through a name, an array, or a reference, refuses with `cmyk-without-profile`. An ICCBased profile whose `/Alternate` names `DeviceCMYK` refuses too, and a separation over `DeviceRGB` passes.
 - `PDFA4` is refused when the catalog carries `/Names /EmbeddedFiles`, and `PDFA4F` is refused when it does not.
 - `RewritePDF` with a PDF/A mode returns bytes that open with the same page count. Two calls on the same document return equal buffers, and the output carries no `CreationDate`, `ModDate`, or `xmp:MetadataDate`.
 - `spectreps rewrite -pdfa 4|4f` writes the file and exits 0, a refusal exits 1 with `Error: /rule in PDFA`, and any other `-pdfa` value exits 2. A refusal writes no output file.

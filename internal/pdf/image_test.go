@@ -135,8 +135,8 @@ func TestImageXObjectUnsupported(t *testing.T) {
 		},
 		{
 			name: "color space",
-			dict: "/Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceCMYK " +
-				"/BitsPerComponent 8",
+			dict: "/Subtype /Image /Width 2 /Height 2 /ColorSpace /Pattern " +
+				"/BitsPerComponent 8 /Filter /FlateDecode",
 			raw: []byte("x"),
 			op:  opImage,
 		},
