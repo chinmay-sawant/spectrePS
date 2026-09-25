@@ -54,19 +54,21 @@ type paintMark struct {
 
 // gstateSnap is the graphics state saved by gsave, without the save stack.
 type gstateSnap struct {
-	ctm     matrix
-	path    []devPt
-	hasPt   bool
-	devX    float64
-	devY    float64
-	subX    float64
-	subY    float64
-	subOpen bool
-	width   float64
-	gray    float64
-	red     float64
-	green   float64
-	blue    float64
+	ctm      matrix
+	path     []devPt
+	hasPt    bool
+	devX     float64
+	devY     float64
+	subX     float64
+	subY     float64
+	subOpen  bool
+	width    float64
+	gray     float64
+	red      float64
+	green    float64
+	blue     float64
+	fontName string
+	fontSize float64
 }
 
 // gstate is the phase 03 path recorder.
@@ -85,6 +87,8 @@ type gstate struct {
 	red         float64
 	green       float64
 	blue        float64
+	fontName    string
+	fontSize    float64
 	saves       []*gstateSnap
 	pages       int
 	pix         *graphics.Pixmap
@@ -120,6 +124,7 @@ func registerGraphicsOps(interp *Interp) {
 	interp.Install("concat", opConcat)
 	interp.Install("setmatrix", opSetMatrix)
 	interp.Install("currentmatrix", opCurrentMatrix)
+	registerTextOps(interp)
 }
 
 func opMoveto(ctx context.Context, interp *Interp) error {
@@ -468,6 +473,8 @@ func newGState() *gstate {
 		red:         0,
 		green:       0,
 		blue:        0,
+		fontName:    "",
+		fontSize:    baseFontSize,
 		saves:       nil,
 		pages:       0,
 		strokeCount: 0,
@@ -579,19 +586,21 @@ func (state *gstate) emit(mark paintMark) {
 
 func (state *gstate) snapshot() *gstateSnap {
 	return &gstateSnap{
-		ctm:     state.ctm,
-		path:    append([]devPt(nil), state.path...),
-		hasPt:   state.hasPt,
-		devX:    state.devX,
-		devY:    state.devY,
-		subX:    state.subX,
-		subY:    state.subY,
-		subOpen: state.subOpen,
-		width:   state.width,
-		gray:    state.gray,
-		red:     state.red,
-		green:   state.green,
-		blue:    state.blue,
+		ctm:      state.ctm,
+		path:     append([]devPt(nil), state.path...),
+		hasPt:    state.hasPt,
+		devX:     state.devX,
+		devY:     state.devY,
+		subX:     state.subX,
+		subY:     state.subY,
+		subOpen:  state.subOpen,
+		width:    state.width,
+		gray:     state.gray,
+		red:      state.red,
+		green:    state.green,
+		blue:     state.blue,
+		fontName: state.fontName,
+		fontSize: state.fontSize,
 	}
 }
 
@@ -609,6 +618,8 @@ func (state *gstate) restore(snap *gstateSnap) {
 	state.red = snap.red
 	state.green = snap.green
 	state.blue = snap.blue
+	state.fontName = snap.fontName
+	state.fontSize = snap.fontSize
 }
 
 func (mat matrix) apply(userX, userY float64) (float64, float64) {

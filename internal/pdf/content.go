@@ -13,10 +13,14 @@ import (
 type (
 	tokenKind int
 
+	itemKind int
+
 	ctok struct {
 		kind tokenKind
 		num  float64
 		text string
+		str  []byte
+		arr  []item
 	}
 
 	scanner struct {
@@ -43,34 +47,41 @@ type (
 		red     float64
 		green   float64
 		blue    float64
+		text    textState
 	}
 
 	item struct {
-		num    float64
-		isNum  bool
-		name   string
-		isName bool
+		kind itemKind
+		num  float64
+		name string
+		str  []byte
+		arr  []item
 	}
 
 	runner struct {
-		marker   graphics.Marker
-		scale    float64
-		xobjects map[string]Value
-		images   map[string]image.Image
-		stack    []item
-		path     []point
-		hasPt    bool
-		curX     float64
-		curY     float64
-		subX     float64
-		subY     float64
-		subOpen  bool
-		ctm      graphics.Matrix
-		width    float64
-		red      float64
-		green    float64
-		blue     float64
-		saves    []*snapshot
+		marker     graphics.Marker
+		scale      float64
+		xobjects   map[string]Value
+		images     map[string]image.Image
+		fonts      map[string]*Font
+		sink       GlyphSink
+		stack      []item
+		path       []point
+		hasPt      bool
+		curX       float64
+		curY       float64
+		subX       float64
+		subY       float64
+		subOpen    bool
+		ctm        graphics.Matrix
+		width      float64
+		red        float64
+		green      float64
+		blue       float64
+		saves      []*snapshot
+		text       textState
+		textMatrix graphics.Matrix
+		textLine   graphics.Matrix
 	}
 )
 
@@ -79,6 +90,16 @@ const (
 	tokOperand
 	tokOperator
 	ctokName
+	ctokString
+	ctokArray
+)
+
+const (
+	itemNumber itemKind = iota
+	itemName
+	itemString
+	itemArray
+	itemOther
 )
 
 const (
@@ -105,7 +126,10 @@ func Paint(ctx context.Context, content []byte, marker graphics.Marker, scale fl
 
 // emptyOptions returns options with no page resources.
 func emptyOptions() PaintOptions {
-	return PaintOptions{Resources: Resources{XObjects: nil}}
+	return PaintOptions{
+		Resources: Resources{XObjects: nil, Fonts: nil},
+		Text:      TextOptions{Fonts: nil, Sink: nil},
+	}
 }
 
 // PaintWith runs one PDF content stream with the page resources the
@@ -125,6 +149,11 @@ func PaintWith(
 	}
 	run := newRunner(marker, scale)
 	run.xobjects = opt.Resources.XObjects
+	run.fonts = opt.Resources.Fonts
+	if opt.Text.Fonts != nil {
+		run.fonts = opt.Text.Fonts
+	}
+	run.sink = opt.Text.Sink
 	lex := scanner{src: content, pos: 0}
 	return run.play(ctx, &lex)
 }
@@ -135,6 +164,8 @@ func newRunner(marker graphics.Marker, scale float64) *runner {
 		scale:    scale,
 		xobjects: nil,
 		images:   nil,
+		fonts:    nil,
+		sink:     nil,
 		stack:    nil,
 		path:     nil,
 		hasPt:    false,
@@ -149,6 +180,12 @@ func newRunner(marker graphics.Marker, scale float64) *runner {
 		green:    0,
 		blue:     0,
 		saves:    nil,
+		text: textState{
+			font: nil, fontName: "", size: 0, hscale: 1,
+			leading: 0, charSpacing: 0, wordSpacing: 0, rise: 0,
+		},
+		textMatrix: graphics.Identity(),
+		textLine:   graphics.Identity(),
 	}
 }
 
@@ -172,12 +209,7 @@ func (run *runner) play(ctx context.Context, lex *scanner) error {
 
 func (run *runner) take(tok ctok) error {
 	if tok.kind != tokOperator {
-		run.stack = append(run.stack, item{
-			num:    tok.num,
-			isNum:  tok.kind == tokNumber,
-			name:   tok.text,
-			isName: tok.kind == ctokName,
-		})
+		run.stack = append(run.stack, itemOf(tok))
 		return nil
 	}
 	if handled, err := run.takePath(tok.text); handled {
@@ -190,6 +222,9 @@ func (run *runner) take(tok ctok) error {
 		return err
 	}
 	if handled, err := run.takeState(tok.text); handled {
+		return err
+	}
+	if handled, err := run.takeText(tok.text); handled {
 		return err
 	}
 	return NewError(tok.text, errUndefined)
@@ -273,23 +308,16 @@ func (lex *scanner) one() (ctok, error) {
 	case '/':
 		return lex.name()
 	case '(':
-		return lex.skipped(lex.skipString)
+		return lex.literalToken()
 	case '<':
-		return lex.skipped(lex.skipAngle)
+		return lex.angleToken()
 	case '[':
-		return lex.skipped(lex.skipArray)
+		return lex.arrayToken()
 	case ']', ')', '>', '{', '}':
 		return zeroToken(), contentSyntax()
 	default:
 		return lex.scanWord()
 	}
-}
-
-func (lex *scanner) skipped(skip func() error) (ctok, error) {
-	if err := skip(); err != nil {
-		return zeroToken(), err
-	}
-	return operandToken(), nil
 }
 
 func (lex *scanner) scanWord() (ctok, error) {
@@ -357,51 +385,96 @@ func (lex *scanner) skipWord() {
 	}
 }
 
-func (lex *scanner) skipString() error {
+// literalToken scans one string in parentheses and decodes its escapes.
+func (lex *scanner) literalToken() (ctok, error) {
+	raw, err := lex.literal()
+	if err != nil {
+		return zeroToken(), err
+	}
+	return stringToken(raw), nil
+}
+
+// literal scans one string in parentheses. Nesting counts, escapes decode,
+// and an end-of-line marker becomes a line feed.
+func (lex *scanner) literal() ([]byte, error) {
 	lex.pos++
+	buf := make([]byte, 0)
 	depth := 1
-	for lex.pos < len(lex.src) && depth > 0 {
+	for depth > 0 {
+		if lex.pos >= len(lex.src) {
+			return nil, contentSyntax()
+		}
 		cur := lex.src[lex.pos]
 		lex.pos++
-		next, bad := lex.stringStep(cur, depth)
-		if bad {
-			return contentSyntax()
+		next, err := lex.literalByte(cur, depth, &buf)
+		if err != nil {
+			return nil, err
 		}
 		depth = next
 	}
-	if depth != 0 {
-		return contentSyntax()
-	}
-	return nil
+	return buf, nil
 }
 
-func (lex *scanner) stringStep(cur byte, depth int) (int, bool) {
-	if cur == '\\' {
-		return depth, !lex.skipEscape()
+// literalByte appends one string byte and returns the new nesting depth.
+func (lex *scanner) literalByte(cur byte, depth int, buf *[]byte) (int, error) {
+	switch {
+	case cur == '\\':
+		got, keep, err := lex.escape()
+		if err != nil {
+			return depth, err
+		}
+		if keep {
+			*buf = append(*buf, got)
+		}
+		return depth, nil
+	case cur == '(':
+		*buf = append(*buf, cur)
+		return depth + 1, nil
+	case cur == ')':
+		return closeLiteral(depth, buf), nil
+	case cur == '\r':
+		lex.skipLF()
+		*buf = append(*buf, '\n')
+		return depth, nil
+	default:
+		*buf = append(*buf, cur)
+		return depth, nil
 	}
-	if cur == '(' {
-		return depth + 1, false
-	}
-	if cur == ')' {
-		return depth - 1, false
-	}
-	return depth, false
 }
 
-func (lex *scanner) skipEscape() bool {
+// escape reads one backslash escape. The second result is false for a line
+// continuation, which contributes no byte.
+func (lex *scanner) escape() (byte, bool, error) {
 	if lex.pos >= len(lex.src) {
-		return false
+		return 0, false, contentSyntax()
 	}
 	cur := lex.src[lex.pos]
 	lex.pos++
-	if cur == '\r' {
+	if named, ok := namedEscape(cur); ok {
+		return named, true, nil
+	}
+	switch cur {
+	case '\n':
+		return 0, false, nil
+	case '\r':
 		lex.skipLF()
-		return true
+		return 0, false, nil
 	}
 	if contentOctal(cur) {
-		lex.skipOctal()
+		return lex.octalByte(cur), true, nil
 	}
-	return true
+	return cur, true, nil
+}
+
+func (lex *scanner) octalByte(first byte) byte {
+	value := int(first - '0')
+	extra := octalExtra
+	for extra > 0 && lex.pos < len(lex.src) && contentOctal(lex.src[lex.pos]) {
+		value = value*octalBase + int(lex.src[lex.pos]-'0')
+		lex.pos++
+		extra--
+	}
+	return byte(value & byteMask)
 }
 
 func (lex *scanner) skipLF() {
@@ -410,12 +483,61 @@ func (lex *scanner) skipLF() {
 	}
 }
 
-func (lex *scanner) skipOctal() {
-	extra := octalExtra
-	for extra > 0 && lex.pos < len(lex.src) && contentOctal(lex.src[lex.pos]) {
-		lex.pos++
-		extra--
+func (lex *scanner) skipString() error {
+	_, err := lex.literal()
+	return err
+}
+
+func (lex *scanner) angleToken() (ctok, error) {
+	if lex.startsPair('<') {
+		if err := lex.skipDict(); err != nil {
+			return zeroToken(), err
+		}
+		return operandToken(), nil
 	}
+	raw, err := lex.hex()
+	if err != nil {
+		return zeroToken(), err
+	}
+	return stringToken(raw), nil
+}
+
+// hex scans one hex string. An odd final nibble is stored as if a 0 followed it.
+func (lex *scanner) hex() ([]byte, error) {
+	lex.pos++
+	buf := make([]byte, 0)
+	high := byte(0)
+	odd := false
+	for lex.pos < len(lex.src) {
+		cur := lex.src[lex.pos]
+		lex.pos++
+		if cur == '>' {
+			if odd {
+				buf = append(buf, high<<nibbleShift)
+			}
+			return buf, nil
+		}
+		if contentSpace(cur) {
+			continue
+		}
+		nib, ok := hexValue(cur)
+		if !ok {
+			return nil, contentSyntax()
+		}
+		if !odd {
+			high = nib
+			odd = true
+			continue
+		}
+		buf = append(buf, high<<nibbleShift|nib)
+		odd = false
+	}
+	return nil, contentSyntax()
+}
+
+func (lex *scanner) skipHex() error {
+	_, err := lex.hex()
+	return err
 }
 
 func (lex *scanner) skipAngle() error {
@@ -425,16 +547,99 @@ func (lex *scanner) skipAngle() error {
 	return lex.skipHex()
 }
 
-func (lex *scanner) skipHex() error {
-	lex.pos++
-	for lex.pos < len(lex.src) {
-		if lex.src[lex.pos] == '>' {
-			lex.pos++
-			return nil
-		}
-		lex.pos++
+// arrayToken scans one array operand.
+func (lex *scanner) arrayToken() (ctok, error) {
+	items, err := lex.arrayItems()
+	if err != nil {
+		return zeroToken(), err
 	}
-	return contentSyntax()
+	return arrayOfToken(items), nil
+}
+
+// arrayItems scans the elements of an array. Strings, numbers, and names are
+// kept. A dictionary becomes an empty element, so TJ rejects it as typecheck.
+func (lex *scanner) arrayItems() ([]item, error) {
+	lex.pos++
+	items := make([]item, 0)
+	for {
+		lex.skipIgnored()
+		if lex.pos >= len(lex.src) {
+			return nil, contentSyntax()
+		}
+		if lex.src[lex.pos] == ']' {
+			lex.pos++
+			return items, nil
+		}
+		element, err := lex.arrayElem()
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, element)
+	}
+}
+
+func (lex *scanner) arrayElem() (item, error) {
+	switch lex.src[lex.pos] {
+	case '(':
+		return lex.arrayLiteral()
+	case '<':
+		return lex.arrayAngle()
+	case '[':
+		return lex.arrayNested()
+	case '/':
+		return lex.arrayName()
+	default:
+		return lex.arrayWord()
+	}
+}
+
+func (lex *scanner) arrayLiteral() (item, error) {
+	raw, err := lex.literal()
+	if err != nil {
+		return otherItem(), err
+	}
+	return stringItem(raw), nil
+}
+
+func (lex *scanner) arrayAngle() (item, error) {
+	if lex.startsPair('<') {
+		if err := lex.skipDict(); err != nil {
+			return otherItem(), err
+		}
+		return otherItem(), nil
+	}
+	raw, err := lex.hex()
+	if err != nil {
+		return otherItem(), err
+	}
+	return stringItem(raw), nil
+}
+
+func (lex *scanner) arrayNested() (item, error) {
+	nested, err := lex.arrayItems()
+	if err != nil {
+		return otherItem(), err
+	}
+	return arrayItem(nested), nil
+}
+
+func (lex *scanner) arrayName() (item, error) {
+	tok, err := lex.name()
+	if err != nil {
+		return otherItem(), err
+	}
+	return nameItem(tok.text), nil
+}
+
+func (lex *scanner) arrayWord() (item, error) {
+	tok, err := lex.scanWord()
+	if err != nil {
+		return otherItem(), err
+	}
+	if tok.kind == tokNumber {
+		return numberItem(tok.num), nil
+	}
+	return otherItem(), nil
 }
 
 func (lex *scanner) skipDict() error {
@@ -723,6 +928,7 @@ func (run *runner) snap() *snapshot {
 		red:     run.red,
 		green:   run.green,
 		blue:    run.blue,
+		text:    run.text,
 	}
 }
 
@@ -739,6 +945,7 @@ func (run *runner) apply(saved *snapshot) {
 	run.red = saved.red
 	run.green = saved.green
 	run.blue = saved.blue
+	run.text = saved.text
 }
 
 func (run *runner) setWidth() error {
@@ -823,7 +1030,7 @@ func (run *runner) popNum(opName string) (float64, error) {
 	}
 	last := run.stack[count-1]
 	run.stack = run.stack[:count-1]
-	if !last.isNum {
+	if last.kind != itemNumber {
 		return 0, NewError(opName, errType)
 	}
 	return last.num, nil
@@ -837,30 +1044,106 @@ func (run *runner) popName(opName string) (string, error) {
 	}
 	last := run.stack[count-1]
 	run.stack = run.stack[:count-1]
-	if !last.isName {
+	if last.kind != itemName {
 		return "", NewError(opName, errType)
 	}
 	return last.name, nil
 }
 
+// popStr pops one string operand. Anything else is typecheck.
+func (run *runner) popStr(opName string) ([]byte, error) {
+	count := len(run.stack)
+	if count == 0 {
+		return nil, NewError(opName, errUnderflow)
+	}
+	last := run.stack[count-1]
+	run.stack = run.stack[:count-1]
+	if last.kind != itemString {
+		return nil, NewError(opName, errType)
+	}
+	return last.str, nil
+}
+
+// popItems pops one array operand. Anything else is typecheck.
+func (run *runner) popItems(opName string) ([]item, error) {
+	count := len(run.stack)
+	if count == 0 {
+		return nil, NewError(opName, errUnderflow)
+	}
+	last := run.stack[count-1]
+	run.stack = run.stack[:count-1]
+	if last.kind != itemArray {
+		return nil, NewError(opName, errType)
+	}
+	return last.arr, nil
+}
+
+// itemOf converts one scanned token to the operand it pushes.
+func itemOf(tok ctok) item {
+	switch tok.kind {
+	case tokNumber:
+		return numberItem(tok.num)
+	case ctokName:
+		return nameItem(tok.text)
+	case ctokString:
+		return stringItem(tok.str)
+	case ctokArray:
+		return arrayItem(tok.arr)
+	case tokOperand, tokOperator:
+		return otherItem()
+	default:
+		return otherItem()
+	}
+}
+
+func numberItem(value float64) item {
+	return item{kind: itemNumber, num: value, name: "", str: nil, arr: nil}
+}
+
+func nameItem(name string) item {
+	return item{kind: itemName, num: 0, name: name, str: nil, arr: nil}
+}
+
+func stringItem(raw []byte) item {
+	return item{kind: itemString, num: 0, name: "", str: raw, arr: nil}
+}
+
+func arrayItem(items []item) item {
+	return item{kind: itemArray, num: 0, name: "", str: nil, arr: items}
+}
+
+func otherItem() item {
+	return item{kind: itemOther, num: 0, name: "", str: nil, arr: nil}
+}
+
 func zeroToken() ctok {
-	return ctok{kind: tokNumber, num: 0, text: ""}
+	return ctok{kind: tokNumber, num: 0, text: "", str: nil, arr: nil}
 }
 
 func numberToken(num float64) ctok {
-	return ctok{kind: tokNumber, num: num, text: ""}
+	return ctok{kind: tokNumber, num: num, text: "", str: nil, arr: nil}
 }
 
 func operandToken() ctok {
-	return ctok{kind: tokOperand, num: 0, text: ""}
+	return ctok{kind: tokOperand, num: 0, text: "", str: nil, arr: nil}
 }
 
 func operatorToken(text string) ctok {
-	return ctok{kind: tokOperator, num: 0, text: text}
+	return ctok{kind: tokOperator, num: 0, text: text, str: nil, arr: nil}
 }
 
 func nameToken(text string) ctok {
-	return ctok{kind: ctokName, num: 0, text: text}
+	return ctok{kind: ctokName, num: 0, text: text, str: nil, arr: nil}
+}
+
+// stringToken returns one string operand. The bytes are decoded.
+func stringToken(raw []byte) ctok {
+	return ctok{kind: ctokString, num: 0, text: "", str: raw, arr: nil}
+}
+
+// arrayOfToken returns one array operand.
+func arrayOfToken(items []item) ctok {
+	return ctok{kind: ctokArray, num: 0, text: "", str: nil, arr: items}
 }
 
 func contentSyntax() error {

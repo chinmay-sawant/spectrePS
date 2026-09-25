@@ -90,8 +90,8 @@ func TestRun(t *testing.T) {
 	path := writeTemp(t, "in.ps", []byte("1 2 add"))
 	want(t, []string{"run", path}, 0, "", "")
 	want(t, []string{"run", "-w", "200", "-h", "100", "-r", "72", path}, 0, "", "")
-	bad := writeTemp(t, "bad.ps", []byte("show"))
-	want(t, []string{"run", bad}, 1, "", "Error: /undefined in show\n")
+	bad := writeTemp(t, "bad.ps", []byte("save"))
+	want(t, []string{"run", bad}, 1, "", "Error: /undefined in save\n")
 }
 
 func TestRaster(t *testing.T) {
@@ -396,8 +396,8 @@ func TestRasterPDF(t *testing.T) {
 
 func TestValidate(t *testing.T) {
 	wantCode(t, []string{"validate", filepath.Join(t.TempDir(), "missing.ps")}, 2)
-	path := writeTemp(t, "in.ps", []byte("show"))
-	want(t, []string{"validate", path}, 1, "", "Error: /undefined in show\n")
+	path := writeTemp(t, "in.ps", []byte("save"))
+	want(t, []string{"validate", path}, 1, "", "Error: /undefined in save\n")
 }
 
 func TestValidatePS(t *testing.T) {

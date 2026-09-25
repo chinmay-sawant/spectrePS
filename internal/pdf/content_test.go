@@ -130,11 +130,9 @@ func TestPaintUndefined(t *testing.T) {
 		{src: "/Im Do", opName: "Do", want: nameUndefined},
 		{src: "1 Do", opName: "Do", want: nameType},
 		{src: "<< /Im /X >> Do", opName: "Do", want: nameType},
-		{src: "TJ", opName: "TJ", want: nameUndefined},
-		{src: "'", opName: "'", want: nameUndefined},
-		{src: `"`, opName: `"`, want: nameUndefined},
 		{src: "[ (Hi) 20 ] TJ", opName: "TJ", want: nameUndefined},
-		{src: "<4869> Tj", opName: "Tj", want: nameUndefined},
+		{src: "(Hi) '", opName: "'", want: nameUndefined},
+		{src: "1 1 (Hi) \"", opName: "\"", want: nameUndefined}, {src: "<4869> Tj", opName: "Tj", want: nameUndefined},
 	}
 	for _, tt := range cases {
 		t.Run(tt.src, func(t *testing.T) {

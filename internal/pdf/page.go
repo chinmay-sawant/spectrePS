@@ -156,7 +156,10 @@ func (file *File) PaintPage(ctx context.Context, index int, marker graphics.Mark
 	if err != nil {
 		return err
 	}
-	return PaintWith(ctx, content, marker, scale, PaintOptions{Resources: res})
+	return PaintWith(ctx, content, marker, scale, PaintOptions{
+		Resources: res,
+		Text:      TextOptions{Fonts: nil, Sink: nil},
+	})
 }
 
 func (file *File) walkRoot() ([]pageLeaf, error) {

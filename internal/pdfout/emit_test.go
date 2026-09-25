@@ -51,9 +51,9 @@ func checkEmitLine(t *testing.T) {
 
 func checkEmitUndefined(t *testing.T) {
 	t.Helper()
-	_, err := Emit(t.Context(), []byte("Tj"))
+	_, err := Emit(t.Context(), []byte("1 Tr"))
 	var job *pdf.Error
-	if !errors.As(err, &job) || job.Error() != "undefined" {
+	if !errors.As(err, &job) || job.Error() != errUndefined {
 		t.Fatalf("error = %v, want undefined", err)
 	}
 }

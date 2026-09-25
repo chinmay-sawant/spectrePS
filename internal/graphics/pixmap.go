@@ -151,6 +151,41 @@ func (p *Pixmap) imagePixel(toImage Matrix, width, height, col, row int) (int, i
 	return int(posX * float64(width)), height - 1 - int(posY*float64(height)), true
 }
 
+// DrawGlyph blends one glyph coverage mask. Mask row 0 is the top row, and
+// the mask's bottom-left pixel sits at device pixel (originX, originY).
+// Alpha 0 leaves the pixel and 255 replaces it with the color.
+func (p *Pixmap) DrawGlyph(mask *image.Alpha, originX, originY int, red, green, blue float64) {
+	if mask == nil {
+		return
+	}
+	bounds := mask.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+	redByte, greenByte, blueByte := colorByte(red), colorByte(green), colorByte(blue)
+	baseRow := p.h - height - originY
+	for row := range height {
+		for col := range width {
+			alpha := mask.AlphaAt(bounds.Min.X+col, bounds.Min.Y+row).A
+			p.blend(originX+col, baseRow+row, redByte, greenByte, blueByte, alpha)
+		}
+	}
+}
+
+func (p *Pixmap) blend(col, row int, red, green, blue, alpha byte) {
+	if alpha == 0 || col < 0 || row < 0 || col >= p.w || row >= p.h {
+		return
+	}
+	offset := row*p.w*bytesPerPixel + col*bytesPerPixel
+	p.pix[offset] = blendByte(p.pix[offset], red, int(alpha))
+	p.pix[offset+1] = blendByte(p.pix[offset+1], green, int(alpha))
+	p.pix[offset+2] = blendByte(p.pix[offset+2], blue, int(alpha))
+}
+
+// blendByte returns dst scaled by the coverage plus src, rounded.
+func blendByte(dst, src byte, alpha int) byte {
+	return byte((int(dst)*(colorScale-alpha) + int(src)*alpha + colorScale/halfWidth) / colorScale)
+}
+
 // imageSpan returns the half-open pixel ranges the mapped unit square covers.
 func (p *Pixmap) imageSpan(mat Matrix) (int, int, int, int) {
 	minX, minY, maxX, maxY := unitBox(mat)
