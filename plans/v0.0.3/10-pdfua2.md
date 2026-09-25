@@ -20,7 +20,18 @@ An already-conforming PDF/UA-2 file survives a level 1 to 5 rewrite with its tre
 
 ### 1.1 Scope decision
 
-- [ ] The phase row states preserve and preflight, the interface changes (`validate` gains the checks, `rewrite` refuses to drop tags, `Document` gains tagged and structure accessors), and the claim wording. Proof: the row records the decision.
+- [x] The phase row states preserve and preflight, the interface changes (`validate` gains the checks, `rewrite` refuses to drop tags, `Document` gains tagged and structure accessors), and the claim wording. Proof: the decision is recorded below, 2026-09-25.
+
+**Scope decision, 2026-09-25.** Preserve and preflight, not create and not certify. Spectre keeps an existing structure tree through a pass-through rewrite and checks the machine-checkable subset. It does not write tags, does not guess reading order, and does not claim PDF/UA-2 or any other conformance. The claim wording is "preflight only". "Compliant" and "certified" stay out of the CLI, the docs, and the API text.
+
+Interface changes:
+
+- `validate` gains the PDF/UA-2 machine checks in phase 5 through `internal/pdfa`. The checks read the typed structure model; they do not rasterize.
+- `rewrite` refuses to drop tags. Level 0 builds a new path-only file, so a tagged input returns `JobError` `/tagged in RewritePDF`. Levels 1 through 5 use the pass-through writer, which copies the structure objects, and a tagged input keeps its source header version so a PDF 2.0 file does not leave as a 1.4 shell.
+- `pdfimage` refuses a tagged PDF with `/tagged in ImagePDF`, because an image PDF has no tags to keep and the command would otherwise drop them silently.
+- `Document` gains `Tagged()`, backed by `File.HasStructTree()`. The typed structure model lives on `File` (`StructTree`, `MarkInfo`, `Header`), where `internal/pdfa` reads it. The public structure accessor waits for phase 5, when the preflight result shape is known.
+
+`Write` and `WriteImages` take page and image values and never see a source document. The refusal sits at the source-aware entry points: `RewritePDF` level 0 and the `pdfimage` command. Tag generation stays out of this ledger.
 
 ## Phase 2: Structure tree model
 
