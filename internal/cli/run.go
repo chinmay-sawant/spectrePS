@@ -86,7 +86,8 @@ spectreps pdfimage [-w points] [-h points] [-r dpi] [-colorspace rgb|gray|cmyk] 
 spectreps bbox [-w points] [-h points] [-r dpi] [-pages range] file
 spectreps inkcov [-w points] [-h points] [-r dpi] [-pages range] file
 spectreps ink_cov [-w points] [-h points] [-r dpi] [-pages range] file
-spectreps rewrite [-compress] [-level N] [-pdfa 4|4f] [-subset-fonts] [-tags [-claim] [-tag-title title] [-tag-lang lang]] -o path file.pdf
+spectreps rewrite [-compress] [-level N] [-pdfa 4|4f] [-subset-fonts]
+                 [-tags [-claim] [-tag-title title] [-tag-lang lang]] -o path file.pdf
 spectreps ps -o path file.pdf
 spectreps validate file
 spectreps text [-pages range] file.pdf
