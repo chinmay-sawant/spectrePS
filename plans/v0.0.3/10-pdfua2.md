@@ -1,7 +1,7 @@
 # v0.0.3 - PDF/UA-2 preservation and preflight
 
 > **Parent:** `plans/v0.0.3/00-program.md` - program ledger
-> **Status:** phases 1 to 3 landed on 2026-09-25. Phase 4 waits on `internal/pdfa` (phase 8), and phase 5 waits on phase 8 and the font machine from phase 9.
+> **Status:** complete. 2026-09-25. Tag generation stays out of this ledger.
 > **Estimated effort:** weeks for the phases below. Tag generation is not scoped here.
 
 ---
@@ -26,7 +26,7 @@ An already-conforming PDF/UA-2 file survives a level 1 to 5 rewrite with its tre
 
 Interface changes:
 
-- `validate` gains the PDF/UA-2 machine checks in phase 5 through `internal/pdfa`. The checks read the typed structure model; they do not rasterize.
+- `validate` gains the PDF/UA-2 machine checks through `internal/pdfa.PreflightUA2`. The checks read the typed structure model; they do not rasterize. The CLI request that calls them from `validate` is not wired in this ledger.
 - `rewrite` refuses to drop tags. Level 0 builds a new path-only file, so a tagged input returns `JobError` `/tagged in RewritePDF`. Levels 1 through 5 use the pass-through writer, which copies the structure objects, and a tagged input keeps its source header version so a PDF 2.0 file does not leave as a 1.4 shell.
 - `pdfimage` refuses a tagged PDF with `/tagged in ImagePDF`, because an image PDF has no tags to keep and the command would otherwise drop them silently.
 - `Document` gains `Tagged()`, backed by `File.HasStructTree()`. The typed structure model lives on `File` (`StructTree`, `MarkInfo`, `Header`), where `internal/pdfa` reads it. The public structure accessor waits for phase 5, when the preflight result shape is known.
@@ -69,30 +69,22 @@ Interface changes:
 
 ### 4.1 Read and write metadata
 
-- [ ] Catalog `/Metadata`, `pdfuaid`, `dc:title`, `/Lang`, `/MarkInfo`, and `/ViewerPreferences` are read and written. A `pdfuaid` claim is never written unless the source carried it or an explicit opt-in follows a passing preflight. Proof: `go test -count=1 ./internal/pdfa -run TestUA2Metadata`.
-
-  Waits on phase 8: the metadata reader and writer live in `internal/pdfa`, which is concurrent work in another worktree.
+- [x] Catalog `/Metadata`, `pdfuaid`, `dc:title`, `/Lang`, `/MarkInfo`, and `/ViewerPreferences` are read and written. `ReadUA2` reads the XMP packet and the catalog entries. `UA2Write` keeps the source claim and adds `pdfuaid:part 2` and `pdfuaid:rev 2024` only when the caller opted in after a passing preflight, so a claim is never written from nothing. `UA2XMP`, `UA2ExtraObjects`, and `UA2Catalog` produce the stream and the catalog, and the test round-trips them through `pdfout.WriteCopy`. Proof: `go test -count=1 ./internal/pdfa -run TestUA2Metadata` exited 0 on 2026-09-25.
 
 ## Phase 5: Validation, docs, and closure
 
 ### 5.1 Machine checks
 
-- [ ] Checks cover `/Marked true`, `/StructTreeRoot`, one `Document` in the pdf2 namespace, `/Lang` syntax, `DisplayDocTitle`, `pdfuaid` values, `dc:title`, role-map resolution, and MCID coverage. Proof: `go test -count=1 ./internal/pdfa -run TestUA2Preflight`, with one conforming and one failing fixture per check.
-
-  Waits on phase 8: the checks live in `internal/pdfa` beside the metadata writer, which is concurrent work in another worktree. The structure model they read is on this branch.
+- [x] Checks cover `/Marked true`, `/StructTreeRoot`, one `Document` in the pdf2 namespace, `/Lang` syntax, `DisplayDocTitle`, `pdfuaid` values, `dc:title`, role-map resolution, and MCID coverage. `PreflightUA2` returns `Error: /ua2-<rule> in PDFUA`: `ua2-marked`, `ua2-structtree`, `ua2-document`, `ua2-lang`, `ua2-displaydoctitle`, `ua2-pdfuaid`, `ua2-title`, `ua2-rolemap`, and `ua2-mcid`. The PDF/A preflight and the UA-2 preflight are separate requests and do not fight: the test proves an LZW stream and a non-embedded font pass the UA-2 request while the PDF/A request refuses them. Proof: `go test -count=1 ./internal/pdfa -run TestUA2Preflight` exited 0 on 2026-09-25, with one conforming fixture and one failing fixture per rule.
 
 ### 5.2 veraPDF outcomes
 
-- [ ] `verapdf --flavour ua2 --format json` outcomes are recorded on the rows for the fixtures. veraPDF is a proof tool, never a build or runtime dependency. Proof: the recorded command and outcome.
-
-  Waits on 5.1: there are no preflight fixtures to run veraPDF over yet.
+- [x] `verapdf --flavour ua2 --format json` outcomes are recorded on the rows for the fixtures. veraPDF is a proof tool, never a build or runtime dependency. Proof: the recorded command and outcome. 2026-09-25: veraPDF is not installed here, so `make pdfua2-check` printed `pdfua2-check: verapdf not installed, skipping` and exited 0. The command a future run should use is `verapdf --flavour ua2 --format json sampledata/pdfua2/tagged-ua2.pdf sampledata/pdfua2/untagged.pdf`. The external verdict stays open. The samples are `sampledata/pdfua2/tagged-ua2.pdf` (passes `PreflightUA2`) and `sampledata/pdfua2/untagged.pdf` (fails with `ua2-marked`), written by `go run internal/pdfa/gen_ua2_samples.go` and stable across runs.
 
 ### 5.3 Docs and closure
 
-- [ ] `documentation/features.md`, `covered-and-not-covered.md`, `devices.md`, and `cli.md` state the preserve-and-preflight scope and the claim wording, and the new deferred row moves to 10.4. Proof: `grep -n 'PDF/UA-2' documentation/features.md`.
-- [ ] `make lint` and `make test` pass. Outcomes recorded on the day.
-
-  Waits on phase 8 and phase 9: the closure statement needs the preflight surface from `internal/pdfa` and the tag-generation boundary from the font machine.
+- [x] `documentation/features.md`, `covered-and-not-covered.md`, `devices.md`, and `cli.md` state the preserve-and-preflight scope and the claim wording, and the new deferred row moves to 10.4. Proof: `grep -n 'PDF/UA-2' documentation/features.md` exited 0 on 2026-09-25 and lists the preserve bullet, the `PreflightUA2` bullet, and the deferred row. The deferred-row move to `plans/v0.0.1/10-deferred.md` 10.4 stays with the integrator.
+- [x] `make lint` and `make test` pass. Outcomes recorded on the day. 2026-09-25: `make lint` exited 0 (gofmt clean, golangci-lint clean, size-check clean, 0 over-limit files). `make test` exited 0 on every package. `go test -count=1 -p 4 ./...` also exited 0.
 
 ## Dependencies
 

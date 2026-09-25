@@ -127,6 +127,10 @@ The structure model is `internal/pdf/structtree.go`. It parses `/MarkInfo`, `/St
 
 The font check is dictionary-level only. A font passes when it has `/ToUnicode`, or when it is a simple font with a standard `/Encoding`. Otherwise an `/ActualText` on the structure element or an ancestor covers the run. Spectre does not decode glyphs. The claim is preflight only, never certification.
 
+`internal/pdfa` adds the PDF/UA-2 metadata and the machine checks. `ReadUA2` reads the catalog `/Metadata` packet with the `pdfuaid` values and `dc:title`, plus `/Lang`, `/MarkInfo`, and `/ViewerPreferences`. `UA2Write` keeps the source claim and adds `pdfuaid:part 2` and `pdfuaid:rev 2024` only when the caller opted in after a passing preflight. `UA2XMP`, `UA2ExtraObjects`, and `UA2Catalog` produce the stream and the catalog.
+
+`PreflightUA2` is the UA-2 request, separate from the PDF/A preflight. It returns `Error: /ua2-<rule> in PDFUA` for `ua2-marked`, `ua2-structtree`, `ua2-document`, `ua2-lang`, `ua2-displaydoctitle`, `ua2-pdfuaid`, `ua2-title`, `ua2-rolemap`, and `ua2-mcid`. A PDF/A-only problem such as an LZW stream or a non-embedded font does not fail the UA-2 request, and the UA-2 checks never run for a PDF/A request. The claim is preflight only, never certification.
+
 ## PostScript output
 
 `WritePostScript` builds a date-free PostScript program from drawing operations on a `Document`. It borrows `pdf.Paint`, so each page carries the same path subset as `RewritePDF` level 0, re-emitted as `setrgbcolor` or `setgray`, `setlinewidth`, `m` and `l`, and `S`, `f`, or `f*`. Coordinates are 72 dpi points.

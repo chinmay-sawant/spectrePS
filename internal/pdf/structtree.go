@@ -37,9 +37,15 @@ const (
 	keyEncoding       = "Encoding"
 	keyBaseEncoding   = "BaseEncoding"
 
-	nsDefaultSSN = "http://iso.org/pdf/ssn"
-	nsPDF20SSN   = "http://iso.org/pdf2/ssn"
-	nsMathML     = "http://www.w3.org/1998/Math/MathML"
+	// The standard structure namespace names. NamespaceDefault is the
+	// default (PDF 1.7) namespace and NamespacePDF20 is the PDF 2.0 namespace.
+	NamespaceDefault = "http://iso.org/pdf/ssn"
+	NamespacePDF20   = "http://iso.org/pdf2/ssn"
+	NamespaceMathML  = "http://www.w3.org/1998/Math/MathML"
+
+	nsDefaultSSN = NamespaceDefault
+	nsPDF20SSN   = NamespacePDF20
+	nsMathML     = NamespaceMathML
 
 	documentType = "Document"
 )

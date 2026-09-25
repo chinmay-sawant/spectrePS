@@ -34,6 +34,7 @@ func rewritePDFA(ctx context.Context, file *pdf.File, opt RewriteOptions) ([]byt
 	}
 	copyOpt := pdfout.CopyOptions{
 		Overrides:       overrides,
+		PackObjects:     false,
 		AppendObjects:   pdfa.ExtraObjects(mode, first),
 		CatalogOverride: catalog,
 		PDFA:            true,
