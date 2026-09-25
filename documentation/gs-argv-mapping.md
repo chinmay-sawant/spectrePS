@@ -6,7 +6,7 @@ The commands and flags below are the current CLI. `-pages` landed in v0.0.2, and
 
 ## Devices and output suffixes
 
-Ghostscript picks a device with `-sDEVICE=name`. Spectre has no device flag. `spectreps raster` picks the encoder from the `-o` suffix, and the other jobs are separate subcommands.
+Ghostscript picks a device with `-sDEVICE=name`. `spectreps raster -format` picks the encoder, the `-o` suffix is the fallback, and `spectreps gs` maps `-sDEVICE` onto the same choice. The other jobs are separate subcommands.
 
 | `gs -sDEVICE=` | Spectre | Notes |
 | --- | --- | --- |
@@ -21,7 +21,7 @@ Ghostscript picks a device with `-sDEVICE=name`. Spectre has no device flag. `sp
 
 `-dJPEGQ=N` maps to `-jpegq N` on the `jpeg` row. Spectre clamps the quality to 1 through 100 and defaults to 75.
 
-Every other device name is rejected. That includes the grayscale and mono raster devices (`pnggray`, `pngmono`, `jpeggray`, `pgmraw`), alpha and color-space variants (`pngalpha`, `pam`, `pamcmyk32`), the TIFF family (`tiff24nc` and the rest), the bit devices (`bit`, `bitrgb`, `bitcmyk`), text devices (`txtwrite`), PostScript writers (`ps2write`, `eps2write`), and the printer devices. Spectre selects an encoder from the output path, so a device name has no place to go.
+Every other device name is rejected. That includes the grayscale and mono raster devices (`pnggray`, `pngmono`, `jpeggray`, `pgmraw`), alpha and color-space variants (`pngalpha`, `pam`, `pamcmyk32`), the TIFF family beyond `tiff24nc`, the bit devices (`bit`, `bitrgb`, `bitcmyk`), text devices (`txtwrite`), PostScript writers (`ps2write`, `eps2write`), and the printer devices. `spectreps gs` maps the eight names above; every other `-sDEVICE` value exits 2.
 
 > TIFF landed in phase 2 of `plans/v0.0.2/4-quick-wins.md` as `.tif` and `.tiff` output on `raster`. The gs mode maps `-sDEVICE=tiff24nc` onto it.
 
@@ -49,7 +49,7 @@ Every other device name is rejected. That includes the grayscale and mono raster
 - `-dLastPage=M` alone is `-pages 1-M`.
 - `-dFirstPage=N` alone has no exact match. `-pages N` selects one page, not N through the end.
 
-> Landed. `-pages A-B` is row 1.2 of `plans/v0.0.2/4-quick-wins.md`. Its grammar is 1-based and inclusive, a single `N` selects one page, and an omitted flag selects every page. It applies to `raster`, `bbox`, `inkcov`, `pdfimage`, and `compare raster`. A range outside the document returns `rangecheck`. For a PostScript input the run executes every page and the filter applies after it, so a failing page inside the range still fails the command. The binary still rejects `-dFirstPage` and `-dLastPage` as unknown flags, exit 2.
+> Landed. `-pages A-B` is row 1.2 of `plans/v0.0.2/4-quick-wins.md`. Its grammar is 1-based and inclusive, a single `N` selects one page, and an omitted flag selects every page. It applies to `raster`, `bbox`, `inkcov`, `pdfimage`, and `compare raster`. A range outside the document returns `rangecheck`. For a PostScript input the run executes every page and the filter applies after it, so a failing page inside the range still fails the command. `spectreps gs` maps `-dFirstPage` and `-dLastPage` onto `-pages`; a token outside its allowlist exits 2.
 
 ## Batch, pause, and quiet
 
@@ -74,11 +74,11 @@ These do not map and are not planned to map:
 | Switch | Reason |
 | --- | --- |
 | `-c` | It runs PostScript code from the command line. Spectre takes a file path and does not evaluate inline programs. |
-| `-f` | It marks the end of options and names the input in `gs`. Spectre takes the input as a positional argument after the subcommand. A leading `-f` is an unknown flag and exits 2. |
-| `-sDEVICE=<name>` | Any name without a row in the device table above. Spectre selects the encoder from `-o`, and no device flag exists. |
-| `-dPDFA`, `-dPDFA=1|2|3` | This is a `gs` argv name and Spectre accepts no `gs` argv. The rewrite profile is `spectreps rewrite -pdfa 4|4f`, which claims PDF/A-4 and refuses a known violation instead of keeping the claim. |
+| `-f` | It names the input for `spectreps gs`, in place of the positional file. The other subcommands take the input as a positional argument after the flag list. |
+| `-sDEVICE=<name>` | Any name without a row in the device table above. `spectreps gs` maps the eight allowlisted names and exits 2 on the rest. |
+| `-dPDFA`, `-dPDFA=1|2|3` | Not in the `gs` allowlist. The rewrite profile is `spectreps rewrite -pdfa 4|4f`, which claims PDF/A-4 and refuses a known violation instead of keeping the claim. |
 | `-dNOPAUSE` beyond batch | There is no interactive mode, so the pause behavior has no equivalent. |
-| The rest of the grammar | `-d`, `-s`, `-I`, `-P`, `-Z`, `--`, and every other `gs` token. A second flag grammar would fork the CLI, so it stays out. |
+| The rest of the grammar | `-d`, `-s`, `-I`, `-P`, `-Z`, `--`, and every other `gs` token. `spectreps gs` accepts only the allowlist in `documentation/gs-argv-grammar.md` and exits 2 on everything else. |
 
 The binary accepts only the allowlisted switches, through `spectreps gs`, and rejects everything else at the first unknown or rejected switch with exit 2. A switch outside the grammar keeps the exit 2 it has in the mapping table. The rewrite in this file stays the readable form for scripts that do not need a `gs` command line.
 

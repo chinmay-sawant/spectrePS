@@ -25,7 +25,7 @@ spectreps gs [switches] file.ps|file.pdf
 
 `gs` is the bounded compatibility mode. It accepts only the switches in `documentation/gs-argv-grammar.md` and routes the job to the commands above. Any other switch exits 2 with a message that names it.
 
-`version` prints `0.0.2`. Exit 0.
+`version` prints `0.0.3`. Exit 0.
 
 Shared options for `run`, `raster`, `pdfimage`, `bbox`, `inkcov`, `ink_cov`, and `compare raster`:
 
@@ -39,12 +39,15 @@ Shared options for `run`, `raster`, `pdfimage`, `bbox`, `inkcov`, `ink_cov`, and
 
 `-pages` accepts `A-` to run to the last page and `-B` to start at page 1. A start below 1 or past the last page exits 1 with `Error: /rangecheck in pages`. An end past the last page clamps to the last page. A malformed value exits 2. `run` accepts `-pages` and ignores it, the same way it accepts and ignores `-o`. For PostScript the interpreter runs every page first and the range filters the result, so a failing page outside the range still fails the command. For a PDF only the selected pages are painted.
 
-`raster` adds two flags:
+`raster` adds three flags:
 
 | Flag | Meaning | Default |
 | --- | --- | --- |
 | `-jpegq` | JPEG quality, clamped to 1 through 100 | 75 |
 | `-tiffcompress` | TIFF compression, `none` or `deflate` | `deflate` |
+| `-format` | Encoder, `ppm`, `png`, `jpeg`, or `tiff`, and it overrides the `-o` suffix | from the suffix |
+
+A `-format` value outside the four names exits 2. A `spectreps gs` device sets the same choice, so a device wins over the `-o` suffix.
 
 `pdfimage` adds one flag:
 

@@ -9,8 +9,8 @@ import (
 )
 
 func TestVersion(t *testing.T) {
-	if got := spectreps.Version(); got != "0.0.2" {
-		t.Fatalf("Version() = %q, want %q", got, "0.0.2")
+	if got := spectreps.Version(); got != "0.0.3" {
+		t.Fatalf("Version() = %q, want %q", got, "0.0.3")
 	}
 }
 
