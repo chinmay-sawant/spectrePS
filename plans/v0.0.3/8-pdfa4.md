@@ -1,7 +1,7 @@
 # v0.0.3 - PDF/A-4 output
 
 > **Parent:** `plans/v0.0.3/00-program.md` - program ledger
-> **Status:** not started.
+> **Status:** complete. 2026-09-25.
 > **Estimated effort:** one phase, about two sessions. The ICC profile and the first clean validator run are the long pole.
 
 ---
@@ -20,7 +20,7 @@ PDF/A-4 base is the default claim, with 4f offered only when the input already c
 
 ### 1.1 Target decision
 
-- [ ] The phase row names PDF/A-4 base as the default and the refusal policy, with the claim wording. Proof: the row records the decision and the doc grep in 5.1 shows it.
+- [x] The phase row names PDF/A-4 base as the default and the refusal policy, with the claim wording. Proof: the row records the decision and the doc grep in 5.1 shows it. Decision 2026-09-25: `PDFA4` (`-pdfa 4`) is the default claim. `PDFA4F` (`-pdfa 4f`) is offered only when the input already carries `/Names /EmbeddedFiles`. PDF/A-4e and the earlier parts stay out of scope. The policy mirrors Ghostscript `PDFACompatibilityPolicy` 2: a known violation refuses the claim with `Error: /rule in PDFA`. The wording is "profile preflight", never compliant or certified, and the result is not a certificate. The 5.1 grep shows that wording in `documentation/cli.md`, `devices.md`, `covered-and-not-covered.md`, and `features.md`.
 
 ## Phase 2: Writer and metadata
 
@@ -60,11 +60,11 @@ PDF/A-4 base is the default claim, with 4f offered only when the input already c
 
 ### 5.1 veraPDF and docs
 
-- [ ] `make pdfa-check` runs `verapdf --flavour 4` over `sampledata/pdfa/` and skips when the CLI is absent; the command and outcome are written into the row. `documentation/features.md`, `covered-and-not-covered.md`, `devices.md`, `cli.md`, and `test.md` state the target and the claim wording. Proof: `make pdfa-check` plus `grep -n 'PDF/A-4' documentation/*.md`.
+- [x] `make pdfa-check` runs `verapdf --flavour 4` over `sampledata/pdfa/` and skips when the CLI is absent; the command and outcome are written into the row. `documentation/features.md`, `covered-and-not-covered.md`, `devices.md`, `cli.md`, and `test.md` state the target and the claim wording. Proof: `make pdfa-check` plus `grep -n 'PDF/A-4' documentation/*.md`. Outcomes 2026-09-25: `make pdfa-check` printed `pdfa-check: verapdf not installed, skipping` and exited 0. veraPDF is not installed here, so the external verdict is open. With a stub `verapdf` first on PATH, the target called `verapdf --flavour 4 sampledata/pdfa/path-a4.pdf`. The grep lists hits in all five named docs plus `copyright-and-rewrite.md`, `public-api.md`, and `gs-argv-mapping.md`; the wording is "profile preflight" and no doc calls the output compliant or certified. The checked-in sample `sampledata/pdfa/path-a4.pdf` was written by `spectreps rewrite -pdfa 4 -o sampledata/pdfa/path-a4.pdf sampledata/compress/path.pdf`.
 
 ### 5.2 Closure
 
-- [ ] `make lint` and `make test` pass. Outcomes recorded on the day.
+- [x] `make lint` and `make test` pass. Outcomes recorded on the day. 2026-09-25: `make lint` exited 0 (gofmt clean, golangci-lint clean, size-check clean, 0 over-limit files). `make test` exited 0 on all eight packages. `go test -count=1 -p 4 ./...` also exited 0.
 
 ## Dependencies
 

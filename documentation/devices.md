@@ -117,7 +117,41 @@ Worked example. Pure red is `(255, 0, 0)`.
 
 For PostScript, any `JobError` fails the command. For PDF, repair-and-continue is not the default of this command. A bad xref, a bad stream, or an unsupported operator fails the command with that `JobError`. Rendering commands may later warn and continue. `validate` does not.
 
-`validate` does not write PDF/A metadata and does not claim conformance. PDF/A creation, if it is ever added, is a rewrite option and still not a certificate.
+`validate` does not write PDF/A metadata and does not run the PDF/A preflight. PDF/A creation is the rewrite option below, and its result is not a certificate.
+
+## PDF/A-4 profile preflight
+
+`RewritePDF` with `RewriteOptions.PDFA` set writes a pass-through rewrite and appends a PDF/A-4 claim. `PDFA4` is the base claim and `PDFA4F` claims PDF/A-4f. PDF/A-4e stays out of scope.
+
+The claim is a profile preflight, not a certificate. Every line in this file and in the CLI treats it as a claim.
+
+The writer changes three things:
+
+- The header becomes `%PDF-2.0` followed by a marker line whose four bytes are above byte 127. The trailer keeps `/ID` and writes no `/Encrypt`.
+- The catalog gains `/Metadata` on an XMP stream and `/OutputIntents` on one output intent. Every other catalog entry is copied unchanged, and every other source object is copied by the pass-through writer.
+- The XMP stream is a static UTF-8 packet with `pdfaid:part` 4 and `pdfaid:rev` 2020. PDF/A-4f adds the `F` conformance letter. The packet carries no dates.
+
+The output intent is `/S /GTS_PDFA1`. It carries `/DestOutputProfile` on a generated D50 sRGB matrix-shaper ICC profile and writes no `/DestOutputProfileRef`. The profile is built in `internal/pdfa`, not copied from another file.
+
+`RewriteOptions.Level` still selects stream and image handling. Level 0 copies streams unchanged, and levels 1 through 5 use the level table above. A PDF/A rewrite uses the pass-through writer and never the level 0 path re-emitter, so text and fonts are copied.
+
+The preflight refuses the claim with a `JobError` whose `Op` is `PDFA` and whose `Msg` is the failed rule:
+
+| Rule | Refusal |
+| --- | --- |
+| `font-not-embedded` | A font dictionary with no `/FontFile`, `/FontFile2`, or `/FontFile3` on its descriptor. A Type 3 font is exempt. |
+| `lzwdecode` | A stream filter chain that names `LZWDecode`. |
+| `filter-not-allowed` | A filter name outside the ISO 32000-2 filter table, including `Crypt`. |
+| `cmyk-without-profile` | A dictionary color space that names `DeviceCMYK`. The output intent is RGB, so no matching CMYK profile exists. |
+| `alternates-not-allowed` | An image dictionary with `/Alternates`. |
+| `opi-not-allowed` | An image dictionary with `/OPI`. |
+| `blend-mode-not-allowed` | A `/BM` entry whose value is not `Normal`. |
+| `embedded-files-need-4f` | `PDFA4` on an input whose catalog has `/Names /EmbeddedFiles`. |
+| `4f-needs-embedded-files` | `PDFA4F` on an input with no `/Names /EmbeddedFiles`. |
+
+The scan walks every in-use object, not only the page tree, so an unused font or stream can still refuse the claim. The scan reads dictionaries and not content streams, so a `k` or `K` color operator in page content is not caught. The preflight does not embed fonts, convert color, or decode LZW.
+
+Two rewrites of the same input and mode return equal bytes, because the packet, the profile, and the trailer `/ID` are fixed.
 
 ## PDF subset for the first PDF tag
 

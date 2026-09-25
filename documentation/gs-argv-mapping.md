@@ -75,7 +75,7 @@ These do not map and are not planned to map:
 | `-c` | It runs PostScript code from the command line. Spectre takes a file path and does not evaluate inline programs. |
 | `-f` | It marks the end of options and names the input in `gs`. Spectre takes the input as a positional argument after the subcommand. A leading `-f` is an unknown flag and exits 2. |
 | `-sDEVICE=<name>` | Any name without a row in the device table above. Spectre selects the encoder from `-o`, and no device flag exists. |
-| `-dPDFA`, `-dPDFA=1|2|3` | Spectre does not create PDF/A and `validate` does not certify it. PDF/A stays deferred in `plans/v0.0.1/10-deferred.md` row 10.2. |
+| `-dPDFA`, `-dPDFA=1|2|3` | This is a `gs` argv name and Spectre accepts no `gs` argv. The rewrite profile is `spectreps rewrite -pdfa 4|4f`, which claims PDF/A-4 and refuses a known violation instead of keeping the claim. |
 | `-dNOPAUSE` beyond batch | There is no interactive mode, so the pause behavior has no equivalent. |
 | The rest of the grammar | `-d`, `-s`, `-I`, `-P`, `-Z`, `--`, and every other `gs` token. A second flag grammar would fork the CLI, so it stays out. |
 

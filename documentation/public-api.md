@@ -39,9 +39,18 @@ const (
 
 type Document struct { /* unexported */ }
 
+type PDFAMode int
+
+const (
+    PDFANone PDFAMode = iota
+    PDFA4
+    PDFA4F
+)
+
 type RewriteOptions struct {
     CompressStreams bool
     Level           int // 0 re-emits the path subset, 1 through 5 pass through
+    PDFA            PDFAMode // zero leaves the claim off
 }
 
 func DefaultRewriteOptions() RewriteOptions // CompressStreams true at level 0
@@ -143,3 +152,5 @@ A cancelled `ctx` returns `ctx.Err()` and no partial success. `nil` context is a
 `DefaultRewriteOptions` turns stream compression on at level 0. The zero `RewriteOptions` leaves it off, so a test can ask for uncompressed streams on purpose. The CLI uses `DefaultRewriteOptions` when no flag is given.
 
 `RewriteOptions.Level` selects the writer. Level 0 re-emits the path subset and keeps `CompressStreams` as the Flate switch. Levels 1 through 5 use the pass-through writer: content Spectre cannot interpret is copied, level 1 Flates uncompressed content streams, level 2 re-encodes Flate and raw image streams losslessly, and levels 3 through 5 re-encode images as DCT with a longest-side cap. A level outside 0 through 5 returns `rangecheck`. The caps and qualities are in `documentation/devices.md`.
+
+`RewriteOptions.PDFA` appends a PDF/A-4 claim. `PDFA4` is the base claim and `PDFA4F` is the embedded-file claim. A claim uses the pass-through writer at the selected level, runs the profile preflight, and returns a `JobError` with `Op` `PDFA` and the failed rule in `Msg` when the input carries a known violation. The claim is a profile preflight, not a certificate. The rules and the writer changes are in `documentation/devices.md`.

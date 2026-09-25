@@ -15,6 +15,7 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 - Report the painted box in points and the RGB mark coverage of a page, in the style of `bbox` and `inkcov`. Spectre's coverage is RGB occupancy, not a CMYK report.
 - Wrap each painted page in a new PDF as one image, in the style of `pdfimage24`, `pdfimage8`, and `pdfimage32`. Spectre uses Flate image streams and the RGB, gray, and CMYK spaces.
 - Rewrite a PDF as a new file, compress streams, and re-encode images. Spectre Flates content, re-encodes Flate and raw image streams losslessly at level 2, and DCT-encodes images with a longest-side cap at levels 3 through 5. CCITT and JPEG2000 streams copy unchanged.
+- Write a PDF/A-4 claim, in the style of `-dPDFA` policy 2. `-pdfa 4` claims the base profile and `-pdfa 4f` claims the embedded-file profile. Spectre appends a static XMP packet and an sRGB output intent, and the profile preflight refuses a known violation instead of keeping the claim. The result is a claim, not a certificate.
 - Stop on the first broken-file error, the same idea as `-dPDFSTOPONERROR`.
 - A library call and a CLI over that call, the same split as `gsapi` and the `gs` binary.
 - Block file write, rename, and delete by default, which is the rough idea of SAFER.
@@ -26,7 +27,7 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 - Fonts, `show`, text extraction (`txtwrite`, `ps2ascii`), and OCR (`pdfocr`, Tesseract).
 - Images inside a PDF on the reading side. `Do` still returns `undefined`, and rewrite copies CCITT and JPEG2000 image streams unchanged.
 - Font embedding and subsetting.
-- PDF/A-1b, PDF/A-2b, and PDF/A-3b creation.
+- PDF/A-1, PDF/A-2, PDF/A-3, and PDF/A-4e creation. Spectre writes a PDF/A-4 or 4f claim only. It does not embed missing fonts or convert color, and it produces no certificate.
 - PDF/X creation.
 - PDF to PostScript (`pdf2ps`, `ps2write`) and EPS rewrite (`eps2write`, `ps2epsi`).
 - XPS output (`xpswrite`), DOCX output (`docxwrite`), and PCL-XL output (`pxlmono`, `pxlcolor`).

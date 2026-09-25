@@ -33,7 +33,7 @@ type CopyOptions struct {
 	PDFA bool
 }
 
-// WriteCopy builds a classic PDF 1.4 file from every in-use source object.
+// WriteCopy builds a copied PDF from every in-use source object.
 // An object uses the override when present, then the stored source bytes, then
 // pdf.SerializeValue. A free or missing number stays free.
 // AppendObjects are written after the source numbers, and CatalogOverride

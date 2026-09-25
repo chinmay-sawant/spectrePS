@@ -32,6 +32,7 @@ The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster
 - `spectreps rewrite -level 0` writes a new PDF from a path-only PDF. Content streams carry the same path subset. `-compress` selects Flate content streams and defaults to true. Bytes are stable across two calls, and the file carries no wall-clock date. A missing `-level` selects 0.
 - `spectreps rewrite -level 1` through `-level 5` use the pass-through writer, so text, fonts, and content Spectre cannot interpret are copied. Level 1 Flates uncompressed content streams. Level 2 also re-encodes Flate and raw image streams losslessly, with no resample. Levels 3 through 5 also re-encode images as DCT with a longest-side cap and a quality. The caps and qualities are the table in `documentation/devices.md`.
 - `spectreps pdfimage` wraps each painted page in a new PDF as one image XObject, 8 bits per component, `/Filter /FlateDecode`. `-colorspace rgb|gray|cmyk` picks `/DeviceRGB` at 24 bits, `/DeviceGray` at 8 bits, or `/DeviceCMYK` at 32 bits, and defaults to `rgb`. `/MediaBox` comes from the pixel size and the paint dpi. A `.pdf` input paints the selected pages with `RasterizePage`; any other input uses `RunPostScript`. Bytes are stable, and the trailer `/ID` is the SHA-256 of the image streams.
+- `spectreps rewrite -pdfa 4|4f` writes a pass-through rewrite with a PDF/A-4 claim. The header becomes `%PDF-2.0` with a binary marker, the catalog gains `/Metadata` and `/OutputIntents`, and the XMP packet carries `pdfaid:part` 4, `pdfaid:rev` 2020, and the `F` letter for 4f. `-pdfa 4` is the base claim and `-pdfa 4f` is the embedded-file claim. The command runs the profile preflight first and refuses a known violation with exit 1 and `Error: /rule in PDFA`. The claim is a profile preflight, not a certificate.
 - The bitmap PDF says nothing about `Do` on the reading side. Spectre still returns `undefined` for `Do`, so it cannot rasterize its own image PDF yet.
 
 ## Compare and validate
@@ -61,7 +62,6 @@ The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster
 | CCITT image streams on rewrite | `DecodeImage` reads Flate and DCT only, so those streams copy through unchanged. | `plans/v0.0.3/2-ccitt-decode.md`. |
 | JPEG2000 image streams on rewrite | The standard library and `golang.org/x/image` have no JPX decoder. | `plans/v0.0.3/3-jpeg2000-decode.md`. |
 | Text extraction, `show`, `Tj` | Fonts are a separate machine from the path engine. | `plans/v0.0.3/9-text-and-fonts.md`. |
-| PDF/A-4 creation | Needs a named level, a refusal policy, and metadata. The file is not a conformance certificate. | `plans/v0.0.3/8-pdfa4.md`. |
 | PDF/UA-2 preservation and preflight | Tag generation needs the text and font machine, and the reader has no structure tree model. | `plans/v0.0.3/10-pdfua2.md`. |
 | PDF to PostScript (`ps2write` style) | It is another high-level device on the same marks. | `plans/v0.0.3/6-ps2write.md`. |
 | Compression writer container cleanup | `WriteCopy` copies the dead `/XRef` and `/ObjStm` containers and grows already-optimized files by about 3%. | `plans/v0.0.3/4-writer-cleanup.md`. |
