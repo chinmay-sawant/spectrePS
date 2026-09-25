@@ -20,7 +20,7 @@ For JPX, `/ColorSpace` is optional and ignored; the codestream carries the color
 
 ### 1.1 Dependency row
 
-- [ ] `go.mod` requires `github.com/mrjoshuak/go-jpeg2000 v1.5.12` with the reason next to it. `go mod tidy` writes `go.sum`, a second run leaves no diff, and `go list -deps` shows no cgo. Proof: `make tidy` twice, then `git diff --exit-code -- go.mod go.sum`, and `CGO_ENABLED=0 go build ./...`.
+- [x] `go.mod` requires `github.com/mrjoshuak/go-jpeg2000 v1.5.12` with the reason next to it. `go mod tidy` writes `go.sum`, a second run leaves no diff, and `go list -deps` shows no cgo. Proof: `make tidy` twice, then `git diff --exit-code -- go.mod go.sum`, and `CGO_ENABLED=0 go build ./...`. 2026-09-25: both tidy runs exited 0, the diff printed nothing and exited 0, and the cgo-free build exited 0. `CGO_ENABLED=1 go list -deps ./...` lists no `runtime/cgo`. The reason comment reads `JPEG2000 image streams decode through a pure-Go decoder; the module uses no cgo.`
 
 ## Phase 2: Decode
 
@@ -36,7 +36,7 @@ For JPX, `/ColorSpace` is optional and ignored; the codestream carries the color
 
 ### 3.1 Level integration
 
-- [ ] Levels 2 to 5 decode JPX like DCT. An undecodable stream still copies through. Proof: `go test -count=1 ./internal/pdfout -run TestLevelJPXImage`.
+- [x] Levels 2 to 5 decode JPX like DCT. An undecodable stream still copies through. Proof: `go test -count=1 ./internal/pdfout -run TestLevelJPXImage` exited 0 on 2026-09-25. Level 2 leaves the JPX stream alone like DCT, levels 3 to 5 write DCT and keep the RGB or gray color, and the malformed and truncated streams have no override at any level.
 
 ### 3.2 Docs and closure
 
