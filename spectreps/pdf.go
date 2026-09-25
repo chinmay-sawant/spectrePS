@@ -66,11 +66,14 @@ func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOp
 		return nil, err
 	}
 	_ = in
-	if doc == nil || doc.file == nil {
+	if !rewriteDocOK(doc) {
 		return nil, rewriteJobError("rangecheck")
 	}
 	if !rewriteRangeOK(opt) {
 		return nil, rewriteJobError("rangecheck")
+	}
+	if opt.Tag {
+		return rewriteTaggedRequest(ctx, doc, opt)
 	}
 	if opt.PDFA != PDFANone {
 		return rewritePDFA(ctx, doc.file, opt)
@@ -82,6 +85,11 @@ func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOp
 		return rewriteEmitted(ctx, doc.file, opt.CompressStreams)
 	}
 	return rewriteLevel(ctx, doc.file, opt)
+}
+
+// rewriteDocOK reports whether one document can take a rewrite.
+func rewriteDocOK(doc *Document) bool {
+	return doc != nil && doc.file != nil
 }
 
 // rewriteRangeOK reports whether the option values are in range.
