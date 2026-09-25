@@ -45,6 +45,14 @@ Two stream forms decode at 8 bits per component:
 
 Any other filter, color space, or bit depth returns `undefined`, as does a Flate stream whose byte count does not match width by height by components. JPEG is lossy, so decoded pixels are not a byte oracle for the source.
 
+## Painting images
+
+The content interpreter resolves `Do` in the page's `/XObject` resources. `/Resources` inherits from the nearest `/Pages` ancestor, and the `/XObject` subdictionary, the image entry, and the image itself may each be indirect. An image decodes once per name per painted page.
+
+An image paints into its unit square: `(0,0)` is the lower left and `(1,1)` is the upper right. The square maps through the current matrix (`cm`), then scales by the paint scale. The pixmap stamps it with nearest-neighbor sampling, image row 0 is the top of the square, and the alpha channel is ignored. `Marker.DrawImage(pic image.Image, ctm Matrix, scale float64)` is the device seam, and the pixmap and the rewrite recorder implement it.
+
+A missing name, an entry whose `/Subtype` is not `/Image`, an image with an `/SMask`, and a decode error all return `undefined` with the `Do` operator name. Level 0 of `RewritePDF` cannot write image pixels, so a page that paints one returns `undefined in Do` instead of dropping or outlining the image. The pass-through writer at levels 1 through 5 copies the image unchanged.
+
 ## Rewrite
 
 `RewritePDF` builds a new PDF from drawing operations on a `Document` at level 0. Stream compression uses `compress/flate` when `CompressStreams` is true. The CLI default is true.
@@ -59,7 +67,7 @@ The level table:
 
 | Level | Name | Content streams | Images |
 | --- | --- | --- | --- |
-| 0 | Path subset | re-emitted, Flate when `CompressStreams` is true | unchanged |
+| 0 | Path subset | re-emitted, Flate when `CompressStreams` is true | unchanged; a painted image is `undefined in Do` |
 | 1 | Light | Flate every uncompressed stream | unchanged |
 | 2 | Balanced | Flate | Flate and raw image streams re-encoded losslessly, no resample |
 | 3 | Medium | Flate | re-encoded as DCT, longest side capped at 1754 px, quality 80 |
@@ -74,7 +82,7 @@ The image helpers are three functions in `internal/pdfout`. `ScaleImage` takes a
 
 `ImagePDF` wraps each `PageImage` in one PDF page. The default image is 24-bit RGB, 8 bits per component, `/ColorSpace /DeviceRGB`, `/Filter /FlateDecode`. `ImagePDFColor` also writes DeviceGray and DeviceCMYK. The stored stream is the tightly packed rows, so stride padding is dropped. `/MediaBox` is `[0 0 width*72/dpi height*72/dpi]` points, and a `dpi` of zero or less selects 72.
 
-Each page has one content stream and one image XObject. The content stream is `q W 0 0 H 0 0 cm /Im0 Do Q`, and `/Resources` carries the XObject. Spectre's PDF interpreter still returns `undefined` for `Do`, so rasterizing this output is not the proof. The test decodes the image stream and compares it with `PageImage`.
+Each page has one content stream and one image XObject. The content stream is `q W 0 0 H 0 0 cm /Im0 Do Q`, and `/Resources` carries the XObject. Rasterizing this output is a round trip: the reopened file decodes the image and stamps it back at 1:1 through the same `Do` path, so `RasterizePage` matches the source `PageImage` under `CompareRaster` for the RGB and gray spaces.
 
 The writer emits objects in a fixed order, adds no `/Info`, and sets both trailer `/ID` strings to the SHA-256 of the concatenated Flate image streams. Two calls on the same pages return equal buffers, and `CompareFiles` is the proof. The output is not `pdfwrite` and it is not a DCT encode.
 
@@ -126,24 +134,22 @@ Phase 06 reads:
 - A header starting with `%PDF-`.
 - Classic xref tables, then xref streams in a following row of the same phase.
 - Flate-decoded content streams via `compress/flate`.
-- Page content operators `m l c h re S s f f* n q Q cm w RG rg g G`.
+- Page content operators `m l c h re S s f f* n q Q cm w RG rg g G Do`.
 
 Those operators map to the same path and color operations as `moveto` `lineto` `curveto` `closepath` `stroke` `fill` `eofill` `gsave` `grestore` `concat` `setlinewidth` `setrgbcolor` `setgray`.
 
-`Tj`, `TJ`, `'`, `"`, and `Do` return `undefined` with the operator name filled in, unless a later phase defines them. A page that uses them does not rasterize as a blank success.
+`Do` paints an image XObject and returns `undefined` with the `Do` operator name when the name or image cannot decode. `Tj`, `TJ`, `'`, and `"` return `undefined` with the operator name filled in, unless a later phase defines them. A page that uses them does not rasterize as a blank success.
 
 Encrypted files return `invalidaccess`. Unknown filters return `undefined`.
 
 ## Shared device interface inside the module
 
-Unexported, owned by `internal/graphics` once phase 04 starts:
+Owned by `internal/graphics`. The pixmap device and the PDF rewrite recorder both implement it. The PostScript operators and the PDF content interpreter call it. They do not call each other's parsers.
 
 ```go
-type Device interface {
-    Stroke(path Path, style Style)
-    Fill(path Path, style Style, evenOdd bool)
-    ShowPage()
+type Marker interface {
+    Stroke(pts []Point, width, red, green, blue float64)
+    Fill(pts []Point, red, green, blue float64, evenOdd bool)
+    DrawImage(pic image.Image, ctm Matrix, scale float64)
 }
 ```
-
-The pixmap device and the PDF rewrite device both implement it. The PostScript operators and the PDF content interpreter call it. They do not call each other's parsers.

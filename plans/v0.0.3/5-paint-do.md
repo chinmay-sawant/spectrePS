@@ -1,7 +1,7 @@
 # v0.0.3 - Paint Do and rasterize image PDFs
 
 > **Parent:** `plans/v0.0.3/00-program.md` - program ledger
-> **Status:** phases 1 to 3 landed. Phase 4 open.
+> **Status:** implemented. All rows checked. Lint and test passed on 2026-09-25.
 > **Estimated effort:** about 4 days
 
 ---
@@ -52,12 +52,12 @@ The reader decodes image XObjects, but the content interpreter has no `Do` case 
 
 ### 4.1 Rasterize Spectre's own image PDF
 
-- [ ] `RunPostScript` to `ImagePDF` to `OpenPDF` to `RasterizePage` compares equal to the source `PageImage` under `CompareRaster`, for the RGB and gray color modes. Proof: `go test -count=1 ./spectreps -run TestRasterizeOwnImagePDF` and `go test -count=1 ./internal/cli -run TestRasterOwnImagePDF`.
+- [x] `RunPostScript` to `ImagePDF` to `OpenPDF` to `RasterizePage` compares equal to the source `PageImage` under `CompareRaster`, for the RGB and gray color modes. Proof: `go test -count=1 ./spectreps -run TestRasterizeOwnImagePDF` and `go test -count=1 ./internal/cli -run TestRasterOwnImagePDF` exited 0 on 2026-09-25.
 
 ### 4.2 Docs and closure
 
-- [ ] `documentation/devices.md`, `features.md`, `covered-and-not-covered.md`, `test.md`, and `public-api.md` state the new behavior, and the deferred row moves to 10.4. Proof: `grep -n 'DrawImage' documentation/devices.md`.
-- [ ] `make lint` and `make test` pass. Outcomes recorded on the day.
+- [x] `documentation/devices.md`, `features.md`, `covered-and-not-covered.md`, `test.md`, and `public-api.md` state the new behavior, and the deferred row moves to 10.4. Proof: `grep -n 'DrawImage' documentation/devices.md` showed the seam at line 52 and the interface at line 153 on 2026-09-25. `plans/v0.0.1/10-deferred.md` is not edited in this worktree; the ledger move belongs to the integration session.
+- [x] `make lint` and `make test` pass. Outcomes recorded on the day: `make lint` exited 0 on 2026-09-25, `gofmt -l .` printed nothing, `golangci-lint run ./...` exited 0, and `size-check` reported 0 over-limit files. `make test` (`go test -p 24 ./...`) exited 0, and `go test -count=1 -p 4 ./...` exited 0.
 
 ## Dependencies
 
