@@ -28,7 +28,7 @@ Levels are a Spectre policy, not a Ghostscript clone. Level 1 is lossless: Flate
 
 ### 1.1 Object pass-through
 
-- [ ] The writer copies every object it does not rewrite: the page tree, `/Resources`, fonts, annotations, and metadata. It writes a new xref over the copied and new objects. Proof: `go test -count=1 ./internal/pdfout -run TestCopyObjects`.
+- [x] The writer copies every object it does not rewrite: the page tree, `/Resources`, fonts, annotations, and metadata. It writes a new xref over the copied and new objects. Proof: `go test -count=1 ./internal/pdfout -run TestCopyObjects` exited 0 on 2026-09-25.
 
 ### 1.2 Content operators
 
