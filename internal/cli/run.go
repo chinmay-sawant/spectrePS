@@ -44,6 +44,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	return dispatch(args, stdout, stderr)
 }
 
+//nolint:cyclop // one case per command, and the list is the CLI
 func dispatch(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "version":
@@ -62,6 +63,8 @@ func dispatch(args []string, stdout, stderr io.Writer) int {
 		return cmdValidate(args[1:], stderr)
 	case "compare":
 		return cmdCompare(args[1:], stdout, stderr)
+	case "gs":
+		return cmdGS(args[1:], stdout, stderr)
 	default:
 		usage(stderr)
 		return exitUsage
@@ -80,6 +83,7 @@ spectreps rewrite [-compress] [-level N] -o path file.pdf
 spectreps validate file
 spectreps compare bytes fileA fileB
 spectreps compare raster [-w points] [-h points] [-r dpi] [-pages range] [-o path] fileA fileB
+spectreps gs [-sDEVICE=name] [-sOutputFile=path] [switches] file
 `)
 }
 
