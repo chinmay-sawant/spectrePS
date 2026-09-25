@@ -1,7 +1,7 @@
 # v0.0.3 - Compression writer cleanup
 
 > **Parent:** `plans/v0.0.3/00-program.md` - program ledger
-> **Status:** not started.
+> **Status:** partially implemented. 1.1, 2.1, and 3.1 landed. 1.2 is open because the guard cannot pass.
 > **Estimated effort:** half a day for the skip and the measurement, about a week for the packing phase
 
 ---
@@ -20,23 +20,23 @@ Two changes are format-neutral and cheap: skip the dead container objects, and r
 
 ### 1.1 Skip XRef and ObjStm objects
 
-- [ ] `copyBody` resolves each object and skips it when its `/Type` is `/XRef` or `/ObjStm`, writing a free xref row instead. The `/ID` digest covers only written bodies, and `/Size` stays `ObjectCount+1`. Proof: `go test -count=1 ./internal/pdfout -run TestCopySkipsContainers` builds an xref-stream plus object-stream fixture, asserts the containers are absent from the output and the digest, the page count is unchanged, and two calls are equal.
+- [x] `copyBody` resolves each object and skips it when its `/Type` is `/XRef` or `/ObjStm`, writing a free xref row instead. The `/ID` digest covers only written bodies, and `/Size` stays `ObjectCount+1`. Proof: `go test -count=1 ./internal/pdfout -run TestCopySkipsContainers` exited 0 on 2026-09-25. The test failed against the old `copyBody` with "output copies a dead container".
 
 ### 1.2 Re-measure
 
-- [ ] The level 1 and 2 sizes for `whatisthis.pdf` are recorded in the phase row, and `TestRewriteSamples` gains a guard that levels 1 and 2 are not larger than the input. Proof: `go test -count=1 ./internal/cli -run TestRewriteSamples`.
+- [ ] The level 1 and 2 sizes for `whatisthis.pdf` are recorded in the phase row, and `TestRewriteSamples` gains a guard that levels 1 and 2 are not larger than the input. Proof: `go test -count=1 ./internal/cli -run TestRewriteSamples`. Measured on 2026-09-25: the input is 596,341 bytes, levels 1 and 2 were 614,343 before the container skip, 610,034 after it, and 596,491 with the optional packed writer, so the guard cannot pass and is not added. Reason: the source packs 78 non-stream objects, and even the packed writer stays 150 bytes over the input.
 
 ## Phase 2: Packing, later
 
 ### 2.1 Object stream writer
 
-- [ ] `CopyOptions` gains an object-stream mode: non-stream bodies go into a new Flate `/Type /ObjStm`, addressed by a new `/Type /XRef` stream, header `%PDF-1.5`. The `/ID` digest stays SHA-256 over object bodies in object-number order, computed before packing, so bytes stay stable and independent of packing. Proof: `go test -count=1 ./internal/pdfout -run TestWritePackedObjects` and `go test -count=1 ./spectreps -run TestRewriteLevelsStable`.
+- [x] `CopyOptions` gains an object-stream mode: non-stream bodies go into a new Flate `/Type /ObjStm`, addressed by a new `/Type /XRef` stream, header `%PDF-1.5`. The `/ID` digest stays SHA-256 over object bodies in object-number order, computed before packing, so bytes stay stable and independent of packing. Proof: `go test -count=1 ./internal/pdfout -run TestWritePackedObjects` and `go test -count=1 ./spectreps -run TestRewriteLevelsStable` exited 0 on 2026-09-25. The mode is opt-in through `CopyOptions.PackObjects`; the levels 1 through 5 path does not select it.
 
 ## Phase 3: Docs and closure
 
 ### 3.1 Docs
 
-- [ ] `documentation/devices.md` and `documentation/test.md` state the container rule and the optional packing, and the v0.0.2 known-limitation notes are closed in the feature map. Proof: `grep -n 'ObjStm' documentation/devices.md`.
+- [x] `documentation/devices.md` and `documentation/test.md` state the container rule and the optional packing, and the v0.0.2 known-limitation notes are closed in the feature map. Proof: `grep -n 'ObjStm' documentation/devices.md` printed the container rule and the packed mode on lines 56 and 58 on 2026-09-25, and the feature-map row named "Compression writer container cleanup" is gone.
 
 ### 3.2 Closure
 

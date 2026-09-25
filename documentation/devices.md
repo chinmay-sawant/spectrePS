@@ -53,7 +53,9 @@ The level 0 writer omits a wall-clock creation date and uses a fixed trailer id 
 
 The output is not a copy of the input xref, and it is not expected to match `pdfwrite` from any Ghostscript version.
 
-The pass-through writer (`WriteCopy`) serves levels 1 through 5. It copies every object it does not replace: the page tree, `/Resources`, fonts, annotations, and metadata. An object stored in an object stream is written uncompressed through `SerializeValue`. An override replaces a whole object body by number. The trailer uses the source `/Root`, `/Size` as the highest in-use object number plus one, and `/ID` as the SHA-256 of the written object bodies. Two calls on the same source return equal buffers, and the file carries no `/Info` and no dates.
+The pass-through writer (`WriteCopy`) serves levels 1 through 5. It copies every object it does not replace: the page tree, `/Resources`, fonts, annotations, and metadata. A source `/Type /XRef` or `/Type /ObjStm` container is not copied, so its object number becomes a free xref row and no dead container bytes reach the output. An object stored in an object stream is written uncompressed through `SerializeValue`. An override replaces a whole object body by number. The trailer uses the source `/Root`, `/Size` as the highest in-use object number plus one, and `/ID` as the SHA-256 of the written bodies only, in object-number order. Two calls on the same source return equal buffers, and the file carries no `/Info` and no dates.
+
+`CopyOptions.PackObjects` selects the optional packed output: `%PDF-1.5`, every non-stream body in one Flate `/Type /ObjStm`, and a Flate `/Type /XRef` stream with `W [1 4 2]` in place of the classic xref. The `/ID` digest is computed over the unpacked bodies before packing, so it does not change with the mode. The levels 1 through 5 path does not select the packed output.
 
 The level table:
 
