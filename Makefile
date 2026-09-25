@@ -3,8 +3,10 @@ PKG := ./cmd/spectreps
 # -p is how many test binaries run at once. Default is GOMAXPROCS.
 # nproc is the machine's CPU count. Fall back to 1 if the command is missing.
 NPROC := $(shell nproc 2>/dev/null || echo 1)
+# BENCH_PKGS is the packages with Benchmark functions. make test never runs them.
+BENCH_PKGS := ./spectreps ./internal/cli ./internal/pdf ./internal/pdfout ./internal/graphics ./internal/ps
 
-.PHONY: help build test lint fmt tidy clean size-check pdfa-check pdfua2-check
+.PHONY: help build test lint fmt tidy clean size-check pdfa-check pdfua2-check bench bench-profile bench-check
 
 help:
 	@printf '%s\n' \
@@ -14,6 +16,9 @@ help:
 		'size-check  Go files over 2000 lines must be allowlisted' \
 		'pdfa-check  run veraPDF over sampledata/pdfa when installed' \
 		'pdfua2-check run veraPDF over sampledata/pdfua2 when installed' \
+		'bench       run the benchmarks with -count=3 into profiles/bench.txt' \
+		'bench-profile write CPU and memory profiles per package under profiles/' \
+		'bench-check run the benchmarks with -count=5 and compare with benchstat' \
 		'fmt         gofmt -w .' \
 		'tidy        go mod tidy' \
 		'clean       remove bin/'
@@ -69,6 +74,38 @@ pdfua2-check:
 		exit 0; \
 	fi; \
 	"$$verapdf" --flavour ua2 --format json $$files
+
+# bench runs every benchmark three times and records the output. Benchmark
+# timing is machine-specific and never gates make test.
+bench:
+	@mkdir -p profiles
+	go test -p 1 -run '^$$' -bench . -benchmem -count=3 $(BENCH_PKGS) > profiles/bench.txt 2>&1
+	@printf '%s\n' 'bench: wrote profiles/bench.txt'
+
+# bench-profile writes one CPU and one memory profile per benchmark package.
+bench-profile:
+	@mkdir -p profiles
+	@for pkg in $(BENCH_PKGS); do \
+		name=$$(basename $$pkg); \
+		printf '%s\n' "bench-profile: $$name"; \
+		go test -p 1 -run '^$$' -bench . -benchmem -count=1 \
+			-cpuprofile profiles/$$name.cpu \
+			-memprofile profiles/$$name.mem \
+			$$pkg > profiles/$$name.profile.txt 2>&1 || exit 1; \
+	done
+	@printf '%s\n' 'bench-profile: wrote profiles/*.cpu and profiles/*.mem'
+
+# bench-check compares a fresh -count=5 run against profiles/bench.txt with
+# benchstat when it is on PATH, and records the verdict in profiles/compare.txt.
+bench-check:
+	@mkdir -p profiles
+	go test -p 1 -run '^$$' -bench . -benchmem -count=5 $(BENCH_PKGS) > profiles/bench-check.txt 2>&1
+	@if command -v benchstat >/dev/null 2>&1; then \
+		benchstat profiles/bench.txt profiles/bench-check.txt > profiles/compare.txt; \
+	else \
+		printf '%s\n' 'benchstat is not on PATH, skipping the comparison' > profiles/compare.txt; \
+	fi
+	@cat profiles/compare.txt
 
 fmt:
 	gofmt -w .

@@ -10,6 +10,9 @@
 | `make test` | `go test -p $(nproc) ./...` |
 | `make lint` | `gofmt -l` must be empty, then `golangci-lint run ./...`, then `make size-check` |
 | `make size-check` | `bash scripts/check-file-size.sh` |
+| `make bench` | `go test -p 1 -run '^$' -bench . -benchmem -count=3` over the six benchmark packages, writing `profiles/bench.txt` |
+| `make bench-profile` | the same packages with `-cpuprofile` and `-memprofile`, writing one CPU and one heap profile per package under `profiles/` |
+| `make bench-check` | a `-count=5` rerun compared against `profiles/bench.txt` with benchstat, writing `profiles/compare.txt` |
 | `make fmt` | `gofmt -w .` |
 | `make tidy` | `go mod tidy` |
 | `make clean` | remove `bin/` |
@@ -19,6 +22,8 @@
 `make lint` and `make test` are the gates for a phase that changes Go code. Record both commands and their outcomes in the phase file before marking that phase complete. A documentation-only change does not run them. The rule comes from `skills/phase-wise-checklist/SKILLS.md`.
 
 `make size-check` enforces the 2,000-line Go file limit from `AGENTS.md`. Overflow is recorded in `scripts/file-size-allowlist.txt`. `make lint` runs the check, so a stale record fails lint.
+
+`make bench`, `make bench-profile`, and `make bench-check` are manual targets. Neither `make test` nor `make lint` calls them, because `go test ./...` runs benchmarks only when `-bench` is passed. Benchmark output lands in `profiles/`, which is gitignored; the recorded tables live in `documentation/performance.md`. `bash scripts/bench-cli.sh` measures the built binary and writes `profiles/cli.txt`.
 
 ## Checklist
 

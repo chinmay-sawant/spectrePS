@@ -273,7 +273,11 @@ func decodeFlateImage(stream Value, width, height int, space colorSpace, opName 
 		return nil, NewError(opName, errUndefined)
 	}
 	pic := image.NewRGBA(image.Rect(0, 0, width, height))
-	values := make([]float64, planes)
+	var small [rgbaComponents]float64
+	values := small[:planes]
+	if planes > len(small) {
+		values = make([]float64, planes)
+	}
 	for index := range width * height {
 		at := index * planes
 		for part := range planes {

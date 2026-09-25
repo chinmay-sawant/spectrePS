@@ -184,3 +184,7 @@ These cases belong to the library and the `compare bytes` command. Ghostscript h
 - The first differing byte sets `Reason` `byte` and `Offset` to that index.
 - When one slice is a prefix of the other, `Offset` is the shorter length and `Reason` is `length`.
 - `spectreps compare bytes` exits 0 for equal files and 1 for a mismatch, printing `mismatch byte N` on stdout.
+
+## Benchmarks and profiles
+
+`make test` runs `go test ./...`, and `go test` runs a benchmark only when `-bench` is passed, so no benchmark gates `make test`. `make bench`, `make bench-profile`, and `make bench-check` are manual targets, and `profiles/` is gitignored. Benchmark timing is machine-specific and never gates a phase. The allocation ceilings in `TestPerformanceAllocs` are ordinary tests, so they do run under `make test`. The baseline, the budget, and the tool matrix are in `documentation/performance.md`.

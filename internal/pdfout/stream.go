@@ -3,7 +3,22 @@ package pdfout
 import (
 	"bytes"
 	"compress/zlib"
+	"errors"
 	"fmt"
+	"io"
+	"sync"
+)
+
+// flateWriterPool reuses one zlib writer across streams. A fresh writer
+// allocates the deflate window and hash tables, about 700 KiB, so a rewrite
+// that flates many streams pays that cost per stream without the pool.
+var (
+	// flateWriterPool reuses one zlib writer per active benchmark or job.
+	flateWriterPool = sync.Pool{ //nolint:gochecknoglobals // one writer pool per process
+		New: func() any { return zlib.NewWriter(io.Discard) },
+	}
+	errFlateWriterPoolType = errors.New(
+		"pdfout: flate writer pool holds a non-writer")
 )
 
 func streamParts(content []byte, compress bool) ([]byte, []byte, error) {
@@ -22,10 +37,25 @@ func storedBytes(content []byte, compress bool) ([]byte, error) {
 }
 
 func flateBytes(content []byte) ([]byte, error) {
+	return withFlateWriter(func(writer *zlib.Writer) error {
+		_, err := writer.Write(content)
+		return err
+	})
+}
+
+// withFlateWriter runs fn against one pooled zlib writer and returns the
+// compressed bytes.
+func withFlateWriter(fn func(*zlib.Writer) error) ([]byte, error) {
 	var buf bytes.Buffer
-	writer := zlib.NewWriter(&buf)
-	_, err := writer.Write(content)
+	pooled := flateWriterPool.Get()
+	writer, ok := pooled.(*zlib.Writer)
+	if !ok {
+		return nil, errFlateWriterPoolType
+	}
+	writer.Reset(&buf)
+	err := fn(writer)
 	closeErr := writer.Close()
+	flateWriterPool.Put(writer)
 	if err != nil {
 		return nil, err
 	}

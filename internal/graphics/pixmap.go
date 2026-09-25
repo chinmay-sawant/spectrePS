@@ -65,8 +65,13 @@ func (p *Pixmap) Stroke(pts []Point, width, red, green, blue float64) {
 		width = -width
 	}
 	half := width / halfWidth
-	for _, seg := range segments(pts) {
-		p.strokeSegment(seg[0], seg[1], half, red, green, blue, p.strokeAlpha)
+	// Walk adjacent pairs directly. A Move point starts a new subpath and
+	// breaks the pair, so no per-stroke segment slice is built.
+	for i := 1; i < len(pts); i++ {
+		if pts[i].Move {
+			continue
+		}
+		p.strokeSegment(pts[i-1], pts[i], half, red, green, blue, p.strokeAlpha)
 	}
 }
 
@@ -280,22 +285,6 @@ func distToSeg(pointX, pointY, startX, startY, endX, endY float64) float64 {
 		param = 1
 	}
 	return math.Hypot(pointX-(startX+param*deltaX), pointY-(startY+param*deltaY))
-}
-
-func segments(pts []Point) [][2]Point {
-	out := make([][2]Point, 0, len(pts))
-	var prev Point
-	has := false
-	for _, point := range pts {
-		if point.Move || !has {
-			prev = point
-			has = true
-			continue
-		}
-		out = append(out, [2]Point{prev, point})
-		prev = point
-	}
-	return out
 }
 
 func subpaths(pts []Point) [][]Point {

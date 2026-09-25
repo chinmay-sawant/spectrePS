@@ -8,4 +8,7 @@ coverage.out
 /verapdf/
 # sampledata/validation/external/ holds fetched, non-committed corpus files.
 /sampledata/validation/external/
+# profiles/ holds the generated benchmark, CPU, and memory output. It is not
+# source and make bench writes it.
+/profiles/
 .DS_Store

@@ -41,22 +41,19 @@ func EncodeDCT(img image.Image, quality int) ([]byte, error) {
 func EncodeFlateRGB(img image.Image) ([]byte, error) {
 	bounds := img.Bounds()
 	row := make([]byte, bounds.Dx()*imageChannels)
-	var buf bytes.Buffer
-	writer := zlib.NewWriter(&buf)
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			red, green, blue, _ := img.At(x, y).RGBA()
-			at := (x - bounds.Min.X) * imageChannels
-			row[at] = byte(red >> colorByteShift)
-			row[at+1] = byte(green >> colorByteShift)
-			row[at+2] = byte(blue >> colorByteShift)
+	return withFlateWriter(func(writer *zlib.Writer) error {
+		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+			for x := bounds.Min.X; x < bounds.Max.X; x++ {
+				red, green, blue, _ := img.At(x, y).RGBA()
+				at := (x - bounds.Min.X) * imageChannels
+				row[at] = byte(red >> colorByteShift)
+				row[at+1] = byte(green >> colorByteShift)
+				row[at+2] = byte(blue >> colorByteShift)
+			}
+			if _, err := writer.Write(row); err != nil {
+				return err
+			}
 		}
-		if _, err := writer.Write(row); err != nil {
-			return nil, err
-		}
-	}
-	if err := writer.Close(); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+		return nil
+	})
 }
