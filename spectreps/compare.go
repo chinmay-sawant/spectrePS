@@ -1,6 +1,10 @@
 package spectreps
 
-import "github.com/chinmay-sawant/spectrePS/internal/engine"
+import (
+	"bytes"
+
+	"github.com/chinmay-sawant/spectrePS/internal/engine"
+)
 
 const rgbBytes = 3
 
@@ -19,8 +23,14 @@ func CompareRaster(a, b PageImage) CompareResult {
 	if a.Height != b.Height {
 		return CompareResult{Equal: false, Offset: -1, Reason: "height"}
 	}
-	var offset int64
 	rowBytes := a.Width * rgbBytes
+	// Two tight strides are one packed buffer per image, so bytes.Equal skips
+	// the per-byte loop. A padded or mismatched stride keeps the loop.
+	if a.Stride == rowBytes && b.Stride == rowBytes &&
+		bytes.Equal(a.Pixels[:a.Height*rowBytes], b.Pixels[:b.Height*rowBytes]) {
+		return CompareResult{Equal: true, Offset: -1, Reason: ""}
+	}
+	var offset int64
 	for row := range a.Height {
 		aBase := row * a.Stride
 		bBase := row * b.Stride

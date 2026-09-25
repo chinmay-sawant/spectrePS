@@ -6,4 +6,7 @@ coverage.out
 /vendor/
 # veraPDF is a local proof tool, not a dependency.
 /verapdf/
+# profiles/ holds the generated benchmark, CPU, and memory output. It is not
+# source and make bench writes it.
+/profiles/
 .DS_Store
