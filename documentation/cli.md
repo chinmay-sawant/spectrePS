@@ -14,6 +14,7 @@ spectreps pdfimage [options] file.ps|file.pdf
 spectreps bbox [options] file.ps|file.pdf
 spectreps inkcov [options] file.ps|file.pdf
 spectreps rewrite [options] file.pdf
+spectreps ps -o path file.pdf
 spectreps validate [options] file.ps|file.pdf
 spectreps compare bytes fileA fileB
 spectreps compare raster [options] fileA fileB
@@ -62,6 +63,14 @@ Any other `-colorspace` value exits 2. `rgb` keeps the 24-bit RGB bytes from ear
 
 `-level 0` re-emits the path subset and keeps `-compress` as the Flate switch. `-level 1` through `-level 5` use the pass-through writer, so text, fonts, and content Spectre cannot interpret are copied. A level above 0 Flates content streams and ignores `-compress`. The image policy per level is in `documentation/devices.md`. Any other value exits 2.
 
+`ps` options:
+
+| Flag | Meaning | Default |
+| --- | --- | --- |
+| `-o` | Output PostScript path | required |
+
+`ps` opens a PDF and re-emits each page's path subset as one date-free PostScript program. The header is `%!PS-Adobe-3.0` with a fixed 612 by 792 box. Marks are `setrgbcolor` or `setgray`, `setlinewidth`, `m`/`l`, and `S`/`f`/`f*` in 72 dpi points, and a prolog defines the short names. Text and images are not emitted: a page with `Tj` exits 1 with `Error: /undefined in Tj`. The file is written at mode `0o600`, and bytes are stable across two runs. `documentation/devices.md` has the shape.
+
 `validate` takes one input and writes errors to stderr. It has no output file.
 
 `compare bytes` takes two paths and no device flags. `compare raster` rasterizes the selected pages of both inputs with the same options and calls `CompareRaster` on each page pair. A `.pdf` input opens with `OpenPDF` and paints each selected page with `RasterizePage`; any other input uses `RunPostScript`. Different selected page counts print `mismatch length` and exit 1. It does not hash the encoded files.
@@ -95,6 +104,8 @@ Page 1
 The three fractions are RGB occupancy with five digits after the point. They are not CMYK, and the line does not end in `CMYK OK`.
 
 `rewrite` writes one PDF. The compression levels are in `documentation/devices.md`.
+
+`ps` writes one PostScript program with a date-free `%!PS-Adobe-3.0` header. The marks and the fixed box are in `documentation/devices.md`.
 
 `pdfimage` writes one PDF with one image page per input page. `-colorspace` selects 24-bit RGB, 8-bit DeviceGray, or 32-bit DeviceCMYK image streams, and `rgb` is the default. The input is a PostScript file or a PDF. A PDF input paints every page with `RasterizePage`, and any other input uses `RunPostScript`. The `-o` path is required and does not use `%d`. `-r 0` writes 72 dpi.
 

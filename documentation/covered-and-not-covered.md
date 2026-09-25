@@ -15,6 +15,7 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 - Report the painted box in points and the RGB mark coverage of a page, in the style of `bbox` and `inkcov`. Spectre's coverage is RGB occupancy, not a CMYK report.
 - Wrap each painted page in a new PDF as one image, in the style of `pdfimage24`, `pdfimage8`, and `pdfimage32`. Spectre uses Flate image streams and the RGB, gray, and CMYK spaces.
 - Rewrite a PDF as a new file, compress streams, and re-encode images. Spectre Flates content, re-encodes Flate and raw image streams losslessly at level 2, and DCT-encodes images with a longest-side cap at levels 3 through 5. CCITT and JPEG2000 streams copy unchanged.
+- Rewrite a path-only PDF as PostScript, in the style of `pdf2ps` and `ps2write`. Spectre writes the points operators, not glyphs or image data, so text, fonts, and images wait.
 - Stop on the first broken-file error, the same idea as `-dPDFSTOPONERROR`.
 - A library call and a CLI over that call, the same split as `gsapi` and the `gs` binary.
 - Block file write, rename, and delete by default, which is the rough idea of SAFER.
@@ -28,7 +29,7 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 - Font embedding and subsetting.
 - PDF/A-1b, PDF/A-2b, and PDF/A-3b creation.
 - PDF/X creation.
-- PDF to PostScript (`pdf2ps`, `ps2write`) and EPS rewrite (`eps2write`, `ps2epsi`).
+- EPS rewrite (`eps2write`, `ps2epsi`) and PostScript output for text, fonts, or images.
 - XPS output (`xpswrite`), DOCX output (`docxwrite`), and PCL-XL output (`pxlmono`, `pxlcolor`).
 - PCLm output.
 - Spot-color separations (`tiffsep`).

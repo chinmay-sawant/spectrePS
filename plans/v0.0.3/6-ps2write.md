@@ -1,7 +1,7 @@
 # v0.0.3 - PDF to PostScript
 
 > **Parent:** `plans/v0.0.3/00-program.md` - program ledger
-> **Status:** in progress.
+> **Status:** implemented. Lint and test passed on 2026-09-25.
 > **Estimated effort:** 3 to 4 days for the path phase
 
 ---
@@ -38,8 +38,8 @@ A new `internal/psout` recorder implements `graphics.Marker` and emits PostScrip
 
 ### 3.2 Docs and closure
 
-- [ ] `documentation/cli.md`, `devices.md`, `features.md`, `covered-and-not-covered.md`, and `public-api.md` state the new command, and the deferred row moves to 10.4. Proof: `grep -n 'spectreps ps' documentation/cli.md`.
-- [ ] `make lint` and `make test` pass. Outcomes recorded on the day.
+- [x] `documentation/cli.md`, `devices.md`, `features.md`, `covered-and-not-covered.md`, and `public-api.md` state the new command. Proof: `grep -n 'spectreps ps' documentation/cli.md` printed line 17 on 2026-09-25. The `plans/v0.0.1/10-deferred.md` move to 10.4 is parent-owned and that file was not edited.
+- [x] `make lint` and `make test` pass. Outcomes recorded on the day: `make lint` exited 0 on 2026-09-25 with `gofmt -l .` clean, `golangci-lint run ./...` clean, and `size-check: clean (0 over-limit files)`. `go test -count=1 -p 4 ./...` exited 0 on 2026-09-25 with every package `ok`.
 
 ## Dependencies
 
