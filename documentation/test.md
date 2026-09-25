@@ -81,10 +81,13 @@ External tests use `package spectreps_test`, so they only see the exported API.
 ## PDF rewrite
 
 - `RewritePDF` on a document this module can rasterize returns a PDF. Opening that PDF and rasterizing page 0 matches `RasterizePage` of the input, via `CompareRaster`.
-- `DefaultRewriteOptions` Flate-compresses page content streams. `CompressStreams` false leaves those streams uncompressed. Both outputs still match the input pixels.
-- Two `RewritePDF` calls on the same input return buffers `CompareFiles` reports equal. The output contains no wall-clock timestamp.
+- `DefaultRewriteOptions` selects level 0 and Flate-compresses page content streams. `CompressStreams` false leaves those streams uncompressed. Both outputs still match the input pixels.
+- `RewriteOptions.Level` is 0 by default. Level 0 re-emits the path subset. Levels 1 through 5 use the pass-through writer, so text, fonts, and the page tree are copied and the page count and boxes match the input. A level outside 0 through 5 returns `rangecheck` from `RewritePDF` and exits 2 from the CLI.
+- Level 1 Flates every uncompressed content stream. Level 2 also re-encodes Flate and raw image streams losslessly with no resample. Levels 3 through 5 also re-encode images as DCT. The longest-side caps are 1754, 1123, and 842 pixels, at qualities 80, 60, and 40. An image at or below the cap keeps its size. An image Spectre cannot decode, and an image with an `/SMask`, is copied unchanged.
+- Two `RewritePDF` calls at any level on the same input return buffers `CompareFiles` reports equal. The output contains no `CreationDate` or `ModDate`.
 - The rewritten bytes are not required to equal the input bytes, and they are not compared with Ghostscript `pdfwrite`.
-- `spectreps rewrite` without `-o` exits 2. `-compress=false` selects the uncompressed option. A successful rewrite exits 0.
+- `spectreps rewrite` without `-o` exits 2. `-compress=false` selects the uncompressed level 0 option. `-level 1` through `-level 5` succeed on a text stream that level 0 rejects with `undefined`. A successful rewrite exits 0.
+- `sampledata/compress/whatisthis.pdf` and `sampledata/compress/path.pdf` rewrite at every level with the input page count. The JPEG image decodes, the caps hold, and level 5 is the smallest of the five. The test skips when `sampledata/` is absent.
 
 ## Bitmap PDF
 

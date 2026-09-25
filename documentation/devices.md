@@ -47,17 +47,28 @@ Any other filter, color space, or bit depth returns `undefined`, as does a Flate
 
 ## Rewrite
 
-`RewritePDF` builds a new PDF from drawing operations on a `Document`. Stream compression uses `compress/flate` when `CompressStreams` is true. The CLI default is true.
+`RewritePDF` builds a new PDF from drawing operations on a `Document` at level 0. Stream compression uses `compress/flate` when `CompressStreams` is true. The CLI default is true.
 
-The writer omits a wall-clock creation date and uses a fixed trailer id derived from the compressed content bytes. Two calls on the same document return equal buffers. `CompareFiles` is the proof.
+The level 0 writer omits a wall-clock creation date and uses a fixed trailer id derived from the compressed content bytes. Two calls on the same document return equal buffers. `CompareFiles` is the proof.
 
 The output is not a copy of the input xref, and it is not expected to match `pdfwrite` from any Ghostscript version.
 
-The pass-through writer (`WriteCopy`) copies every object it does not rewrite: the page tree, `/Resources`, fonts, annotations, and metadata. An object stored in an object stream is written uncompressed through `SerializeValue`. An override replaces a whole object body by number. The trailer uses the source `/Root`, `/Size` as the highest in-use object number plus one, and `/ID` as the SHA-256 of the written object bodies. Two calls on the same source return equal buffers, and the file carries no `/Info` and no dates.
+The pass-through writer (`WriteCopy`) serves levels 1 through 5. It copies every object it does not replace: the page tree, `/Resources`, fonts, annotations, and metadata. An object stored in an object stream is written uncompressed through `SerializeValue`. An override replaces a whole object body by number. The trailer uses the source `/Root`, `/Size` as the highest in-use object number plus one, and `/ID` as the SHA-256 of the written object bodies. Two calls on the same source return equal buffers, and the file carries no `/Info` and no dates.
 
-This tag compresses content streams. It does not downsample images, and it does not DCT-encode them. Those are image-model features and they are deferred.
+The level table:
 
-The image side of the compression levels is three helpers in `internal/pdfout`. `ScaleImage` takes any `image.Image` and returns RGBA resampled with the CatmullRom kernel from `golang.org/x/image/draw`; width and height below 1 clamp to 1. `EncodeDCT` wraps `image/jpeg` with the quality clamped to 1 through 100, and `EncodeFlateRGB` writes tightly packed RGB rows, top row first, inside zlib. All three are deterministic, so the same input returns the same bytes. `spectreps rewrite` does not call them until the level wiring lands.
+| Level | Name | Content streams | Images |
+| --- | --- | --- | --- |
+| 0 | Path subset | re-emitted, Flate when `CompressStreams` is true | unchanged |
+| 1 | Light | Flate every uncompressed stream | unchanged |
+| 2 | Balanced | Flate | Flate and raw image streams re-encoded losslessly, no resample |
+| 3 | Medium | Flate | re-encoded as DCT, longest side capped at 1754 px, quality 80 |
+| 4 | Strong | Flate | re-encoded as DCT, longest side capped at 1123 px, quality 60 |
+| 5 | Hard | Flate | re-encoded as DCT, longest side capped at 842 px, quality 40 |
+
+An image at or below its cap keeps its size. An image Spectre cannot decode, and an image with an `/SMask`, is copied unchanged. A level above 0 ignores `CompressStreams`. Every page reaches the output with the same page count and boxes, because the writer copies the page tree.
+
+The image helpers are three functions in `internal/pdfout`. `ScaleImage` takes any `image.Image` and returns RGBA resampled with the CatmullRom kernel from `golang.org/x/image/draw`; width and height below 1 clamp to 1. `EncodeDCT` wraps `image/jpeg` with the quality clamped to 1 through 100, and `EncodeFlateRGB` writes tightly packed RGB rows, top row first, inside zlib. All three are deterministic, so the same input returns the same bytes. Levels 3 through 5 call `ScaleImage` and `EncodeDCT`, and level 2 calls `EncodeFlateRGB`.
 
 ## Bitmap PDF
 

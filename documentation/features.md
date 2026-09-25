@@ -27,7 +27,8 @@ The released tag is v0.0.1. The v0.0.2 work adds the page summaries, JPEG raster
 
 ## PDF output
 
-- `spectreps rewrite` writes a new PDF from a path-only PDF. Content streams carry the same path subset. `-compress` selects Flate content streams and defaults to true. Bytes are stable across two calls, and the file carries no wall-clock date.
+- `spectreps rewrite -level 0` writes a new PDF from a path-only PDF. Content streams carry the same path subset. `-compress` selects Flate content streams and defaults to true. Bytes are stable across two calls, and the file carries no wall-clock date. A missing `-level` selects 0.
+- `spectreps rewrite -level 1` through `-level 5` use the pass-through writer, so text, fonts, and content Spectre cannot interpret are copied. Level 1 Flates uncompressed content streams. Level 2 also re-encodes Flate and raw image streams losslessly, with no resample. Levels 3 through 5 also re-encode images as DCT with a longest-side cap and a quality. The caps and qualities are the table in `documentation/devices.md`.
 - `spectreps pdfimage` wraps each painted page in a new PDF as one 24-bit RGB image XObject, 8 bits per component, `/Filter /FlateDecode`. `/MediaBox` comes from the pixel size and the paint dpi. A `.pdf` input paints every page with `RasterizePage`; any other input uses `RunPostScript`. Bytes are stable, and the trailer `/ID` is the SHA-256 of the image streams.
 - The bitmap PDF says nothing about `Do` on the reading side. Spectre still returns `undefined` for `Do`, so it cannot rasterize its own image PDF yet.
 
@@ -55,8 +56,7 @@ The released tag is v0.0.1. The v0.0.2 work adds the page summaries, JPEG raster
 | Feature | Why it waits | Next gate |
 | --- | --- | --- |
 | Images inside a PDF, `Do` | The PDF interpreter has no image XObject model. | A plan file for image XObjects. |
-| DCT, CCITT, and downsampling on rewrite | Rewrite has no image samples to resample. | `Do` support in the PDF interpreter, then `plans/v0.0.3/2-pdf-compression.md` (rows 1.3 and 1.4). |
-| PDF compression levels 1 to 5 over arbitrary PDFs | Levels need text, images, and a policy. Today `rewrite` re-emits the path subset only and has one Flate switch. | `plans/v0.0.3/2-pdf-compression.md`. |
+| CCITT and JPEG2000 image streams on rewrite | `DecodeImage` reads Flate and DCT only, so those streams copy through unchanged. | A CCITT or JPX decoder. |
 | TIFF raster | The encoder is `golang.org/x/image/tiff`, not the standard library. The encoder supports none and Deflate only. | `plans/v0.0.3/1-quick-wins.md` (phase 2). |
 | Text extraction, `show`, `Tj` | Fonts are a separate machine from the path engine. | A new plan file after the font decision. |
 | PDF/A-1b, PDF/A-2b, PDF/A-3b creation | Needs a named level, a named policy, and metadata. The file is not a conformance certificate. | A plan file that states the level and the policy. |

@@ -13,7 +13,7 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 - Rasterize to an image. Spectre writes PPM, PNG, and JPEG. Ghostscript also writes TIFF, BMP, PCX, fax, and PSD.
 - Report the painted box in points and the RGB mark coverage of a page, in the style of `bbox` and `inkcov`. Spectre's coverage is RGB occupancy, not a CMYK report.
 - Wrap each painted page in a new PDF as one 24-bit RGB image, in the style of `pdfimage24`. Spectre uses Flate image streams.
-- Rewrite a PDF as a new file and compress streams. Spectre uses Flate only.
+- Rewrite a PDF as a new file, compress streams, and re-encode images. Spectre Flates content, re-encodes Flate and raw image streams losslessly at level 2, and DCT-encodes images with a longest-side cap at levels 3 through 5. CCITT and JPEG2000 streams copy unchanged.
 - Stop on the first broken-file error, the same idea as `-dPDFSTOPONERROR`.
 - A library call and a CLI over that call, the same split as `gsapi` and the `gs` binary.
 - Block file write, rename, and delete by default, which is the rough idea of SAFER.
@@ -23,7 +23,7 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 - Full PostScript LanguageLevel 3, including filters other than Flate, `%pipe%`, and `%disk`.
 - Full PDF 1.7 and PDF 2.0, including transparency, optional content, encryption, and passwords.
 - Fonts, `show`, text extraction (`txtwrite`, `ps2ascii`), and OCR (`pdfocr`, Tesseract).
-- Images inside a PDF, DCT and CCITT compression, downsampling, and JPEG2000.
+- Images inside a PDF on the reading side. `Do` still returns `undefined`, and rewrite copies CCITT and JPEG2000 image streams unchanged.
 - Font embedding and subsetting.
 - PDF/A-1b, PDF/A-2b, and PDF/A-3b creation.
 - PDF/X creation.

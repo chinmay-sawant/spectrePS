@@ -41,9 +41,10 @@ type Document struct { /* unexported */ }
 
 type RewriteOptions struct {
     CompressStreams bool
+    Level           int // 0 re-emits the path subset, 1 through 5 pass through
 }
 
-func DefaultRewriteOptions() RewriteOptions // CompressStreams true
+func DefaultRewriteOptions() RewriteOptions // CompressStreams true at level 0
 
 type CompareResult struct {
     Equal  bool
@@ -139,4 +140,6 @@ A cancelled `ctx` returns `ctx.Err()` and no partial success. `nil` context is a
 
 `ImagePDF` calls `ImagePDFColor` with `ImageColorRGB`, so its bytes do not change. `ImageColorGray` writes one 8-bit sample per pixel with `/DeviceGray`. `ImageColorCMYK` writes four 8-bit samples per pixel with `/DeviceCMYK`. Both use `/Filter /FlateDecode`. The conversion formulas and the pure red example are in `documentation/devices.md`.
 
-`DefaultRewriteOptions` turns stream compression on. The zero `RewriteOptions` leaves it off, so a test can ask for uncompressed streams on purpose. The CLI uses `DefaultRewriteOptions`.
+`DefaultRewriteOptions` turns stream compression on at level 0. The zero `RewriteOptions` leaves it off, so a test can ask for uncompressed streams on purpose. The CLI uses `DefaultRewriteOptions` when no flag is given.
+
+`RewriteOptions.Level` selects the writer. Level 0 re-emits the path subset and keeps `CompressStreams` as the Flate switch. Levels 1 through 5 use the pass-through writer: content Spectre cannot interpret is copied, level 1 Flates uncompressed content streams, level 2 re-encodes Flate and raw image streams losslessly, and levels 3 through 5 re-encode images as DCT with a longest-side cap. A level outside 0 through 5 returns `rangecheck`. The caps and qualities are in `documentation/devices.md`.

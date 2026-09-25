@@ -33,7 +33,7 @@ Levels are a Spectre policy, not a Ghostscript clone. Level 1 is lossless: Flate
 ### 1.2 Content operators
 
 - [x] The reader accepts `cm`. A six-number matrix composes into the CTM, `q` and `Q` save and restore it, path points transform through it before the device scale, and the stroke width scales by the same matrix scale. Proof: `go test -count=1 ./internal/pdf -run TestCTM` and `go test -count=1 ./spectreps -run TestCTM` exited 0 on 2026-09-25.
-- [ ] The reader accepts the text operators `BT` `ET` `Tf` `Tj` `TJ`, or the writer copies a content stream it cannot interpret and edits only the parts it can. Proof: `go test -count=1 ./internal/pdf -run TestCompressContent`.
+- [x] The pass-through writer copies a content stream it cannot interpret and edits only the parts it can, so `BT` `ET` `Tf` `Tj` `TJ` and the font resources reach the output unchanged. Proof: `go test -count=1 ./internal/pdfout -run TestLevelContentCopy` and `go test -count=1 ./spectreps -run TestRewriteLevelsStable` exited 0 on 2026-09-25.
 
 ### 1.3 Image XObjects
 
@@ -42,31 +42,31 @@ Levels are a Spectre policy, not a Ghostscript clone. Level 1 is lossless: Flate
 
 ### 1.4 Levels
 
-- [ ] `spectreps rewrite -level N` accepts 1 through 5. The `-compress` flag stays for compatibility and equals level 1 or level 0. The mapping is:
+- [x] `spectreps rewrite -level N` accepts 0 through 5 and defaults to 0. Level 0 keeps the path-subset writer and the `-compress` switch. A level above 0 uses the pass-through writer and ignores `-compress`. The mapping is:
 
   | Level | Name | Content streams | Images |
   | --- | --- | --- | --- |
   | 1 | Light | Flate | unchanged |
-  | 2 | Balanced | Flate | uncompressed image streams re-Flated, no resample |
-  | 3 | Medium | Flate | downsample above 150 dpi to 150 dpi, JPEG quality 80 |
-  | 4 | Strong | Flate | downsample to 96 dpi, JPEG quality 60 |
-  | 5 | Hard | Flate | downsample to 72 dpi, JPEG quality 40 |
+  | 2 | Balanced | Flate | Flate and raw image streams re-encoded losslessly, no resample |
+  | 3 | Medium | Flate | DCT, longest side capped at 1754 px, JPEG quality 80 |
+  | 4 | Strong | Flate | DCT, longest side capped at 1123 px, JPEG quality 60 |
+  | 5 | Hard | Flate | DCT, longest side capped at 842 px, JPEG quality 40 |
 
-- Proof: `go test -count=1 ./internal/cli -run TestRewriteLevels`.
-- A missing `-level` keeps today's behavior. Level 5 does not promise a size, only the smallest of the five on the sample set.
-  - [x] Writer half. The helpers above are the image column of the table: level 2 Flates the packed rows, and levels 3 to 5 resample to the target dpi and DCT-encode at the level's quality. Proof: the same `go test -count=1 ./internal/pdfout -run 'TestScale|TestEncode'` run exited 0 on 2026-09-25. The `-level` flag and the reader wiring are the CLI half.
+- [x] Proof: `go test -count=1 ./internal/cli -run TestRewriteLevels` exited 0 on 2026-09-25.
+- [x] A missing `-level` keeps today's behavior. Level 5 does not promise a size, only the smallest of the five on the sample set.
+  - [x] Writer half. `pdfout.LevelOverrides` builds the image column of the table: level 2 Flates raw rows and re-encodes Flate images, and levels 3 to 5 resample above the level's pixel cap and DCT-encode at the level's quality. Proof: `go test -count=1 ./internal/pdfout -run TestLevelImagePolicy` exited 0 on 2026-09-25.
 
 ### 1.5 Stable bytes
 
-- [ ] Two runs at the same level on the same input return buffers `CompareFiles` reports equal. The output contains no `CreationDate` or `ModDate`. Proof: `go test -count=1 ./spectreps -run TestRewriteLevelsStable`.
+- [x] Two runs at the same level on the same input return buffers `CompareFiles` reports equal. The output contains no `CreationDate` or `ModDate`. Proof: `go test -count=1 ./spectreps -run TestRewriteLevelsStable` exited 0 on 2026-09-25.
 
 ### 1.6 Acceptance
 
-- [ ] `sampledata/compress/whatisthis.pdf` and `sampledata/compress/path.pdf` rewrite at every level. Page count matches the input, the JPEG image decodes in the output, and level 5 is the smallest file of the five. Proof: `go test -count=1 ./internal/cli -run TestRewriteSamples`, guarded to skip when `sampledata/` is absent.
+- [x] `sampledata/compress/whatisthis.pdf` and `sampledata/compress/path.pdf` rewrite at every level. Page count matches the input, the JPEG image decodes in the output, and level 5 is the smallest file of the five. Proof: `go test -count=1 ./internal/cli -run TestRewriteSamples` exited 0 on 2026-09-25, guarded to skip when `sampledata/` is absent.
 
 ### 1.7 Documentation
 
-- [ ] `documentation/cli.md`, `documentation/devices.md`, `documentation/features.md`, and `documentation/covered-and-not-covered.md` state the level table and the pass-through rule. Proof: `grep -n 'level' documentation/cli.md documentation/features.md` shows the rows.
+- [x] `documentation/cli.md`, `documentation/devices.md`, `documentation/features.md`, `documentation/covered-and-not-covered.md`, and `documentation/test.md` state the level table and the pass-through rule. Proof: `grep -n 'level' documentation/cli.md documentation/features.md` showed the rows on 2026-09-25.
 
 ## Reference
 
