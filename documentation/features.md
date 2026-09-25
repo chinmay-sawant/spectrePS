@@ -1,0 +1,71 @@
+# Features
+
+This file is the product inventory: what Spectre supports today and what waits. `documentation/covered-and-not-covered.md` maps the same ground against Ghostscript. `plans/v0.0.1/10-deferred.md` is the ledger for the work that waits, with a next gate on each row.
+
+The released tag is v0.0.1. The v0.0.2 work adds the page summaries, JPEG raster, and the bitmap PDF. `spectreps version` prints `0.0.1` until a tag bumps that constant.
+
+## Input
+
+- PostScript source over the subset in `documentation/language.md`. Tokens, three stacks, procedures, dictionaries, arrays, strings, control flow, math, matrix operators, and the path and paint operators all run.
+- PDF path content. Classic xref tables and xref streams open. Object streams supply objects a type 2 xref row names. Content streams decode through Flate, and the page content operators `m l c h re S s f f* n q Q w RG rg g G` paint through the same graphics engine as PostScript.
+- A PostScript header such as `%!PS-Adobe-3.0` is optional. It scans as a comment.
+- An encrypted PDF returns `invalidaccess`. A PDF with an unknown stream filter returns `undefined`. A page that uses `Tj`, `TJ`, `'`, `"`, or `Do` fails with that operator name. The page is not a blank success.
+- The page count is the number of page leaves in the tree, not the trailer `/Count`.
+
+## Raster output
+
+- `spectreps raster` writes PPM raw (P6) for any suffix other than `.png`, `.jpg`, or `.jpeg`.
+- A `.png` path encodes the pixmap with `image/png`.
+- A `.jpg` or `.jpeg` path encodes the same pixmap with `image/jpeg`. `-jpegq` takes 1 through 100 and defaults to 75. JPEG is lossy, and its file bytes are not an equality oracle.
+- The pixmap is RGB8, row 0 at the top, stride `Width * 3`. Default media is 612 by 792 points and the default resolution is 72 dpi.
+
+## Page measurement
+
+- `spectreps bbox` prints `%%BoundingBox` with floored minima and ceilinged maxima, then `%%HiResBoundingBox` with the float edges. The box is the union of marked pixels in points, origin at the lower left. A pixel marks when any of R, G, or B is not 255. A blank page prints a zero box.
+- `spectreps inkcov` prints `Page N` and three RGB occupancy fractions with five digits after the point. It is not a CMYK report and it does not end in `CMYK OK`. These are occupancy fractions, not `ink_cov` weighted amounts.
+- Both commands accept `-w`, `-h`, and `-r`, and they rasterize every page of a PDF input.
+
+## PDF output
+
+- `spectreps rewrite` writes a new PDF from a path-only PDF. Content streams carry the same path subset. `-compress` selects Flate content streams and defaults to true. Bytes are stable across two calls, and the file carries no wall-clock date.
+- `spectreps pdfimage` wraps each painted page in a new PDF as one 24-bit RGB image XObject, 8 bits per component, `/Filter /FlateDecode`. `/MediaBox` comes from the pixel size and the paint dpi. A `.pdf` input paints every page with `RasterizePage`; any other input uses `RunPostScript`. Bytes are stable, and the trailer `/ID` is the SHA-256 of the image streams.
+- The bitmap PDF says nothing about `Do` on the reading side. Spectre still returns `undefined` for `Do`, so it cannot rasterize its own image PDF yet.
+
+## Compare and validate
+
+- `spectreps compare bytes` compares two files byte by byte and prints `mismatch byte N` or `mismatch length N` on a mismatch. Exit 0 when equal, exit 1 on a mismatch.
+- `spectreps compare raster` rasterizes both inputs with one `RunOptions` value and compares the pixmaps with `CompareRaster`. It prints `mismatch pixel N` or `mismatch width` or `mismatch height`.
+- `spectreps validate` runs the interpreter in stop-on-first-error mode. A bad xref, a bad stream, an encrypted file, or an unsupported operator fails the command with that error. It does not claim PDF/A conformance.
+
+## Library and CLI
+
+- Package `spectreps` exposes `New`, `Close`, `RunPostScript`, `OpenPDF`, `PageCount`, `RasterizePage`, `RewritePDF`, `ImagePDF`, `MeasureBox`, `MeasureInk`, `CompareFiles`, `CompareRaster`, and `Version`. The full contract is `documentation/public-api.md`.
+- Every job takes a `context.Context`. A canceled context returns `ctx.Err()` with no partial success, and a nil context panics.
+- The `spectreps` command parses flags and maps errors to exit codes 0 through 3. The contract is `documentation/cli.md`.
+- `internal/cli` calls the public package. `cmd/spectreps` calls `internal/cli` only.
+
+## Limits and safety
+
+- Caps: operand stack 8192, execution stack 500, dictionary stack 20, `gsave` depth 32, procedure nesting 128, path points 100000, pixels per page 40000000, page side 20000 pixels. Crossing a cap returns `limitcheck`.
+- `file`, `run`, `deletefile`, `renamefile`, and `filenameforall` are defined and return `invalidaccess`. A `%pipe%` path never runs.
+- The module does not use cgo, does not link Ghostscript, and does not start `gs` or any other process. No operator opens a network connection.
+
+## Deferred
+
+| Feature | Why it waits | Next gate |
+| --- | --- | --- |
+| Images inside a PDF, `Do` | The PDF interpreter has no image XObject model. | A plan file for image XObjects. |
+| DCT, CCITT, and downsampling on rewrite | Rewrite has no image samples to resample. | `Do` support in the PDF interpreter. |
+| TIFF raster | The encoder is `golang.org/x/image/tiff`, not the standard library. | A dependency row of its own, then a plan file. |
+| Text extraction, `show`, `Tj` | Fonts are a separate machine from the path engine. | A new plan file after the font decision. |
+| PDF/A-1b, PDF/A-2b, PDF/A-3b creation | Needs a named level, a named policy, and metadata. The file is not a conformance certificate. | A plan file that states the level and the policy. |
+| PDF to PostScript (`ps2write` style) | It is another high-level device on the same marks. | A plan file. |
+| Gray and CMYK image PDF (`pdfimage8`, `pdfimage32` style) | Only the 24-bit RGB path exists. | A plan file on the image writer. |
+| PCLm | A different image-PDF flavor. | A plan file. |
+| Spot-color separations (`tiffsep`) | No separation model. | A plan file. |
+| `gs` argv compatibility mode | The subcommands map to library methods, and a second flag grammar would fork the CLI. | A written switch map. |
+| Page selection, PDF info, linearization, output encryption | Out of the current tags. | A new plan file. |
+| Full PDF 1.7 and PDF 2.0, including transparency and optional content | The current reader is a path-only subset. | A new plan file. |
+| `bind`, `save`, `restore`, `clip`, and filters other than Flate | Out of the current PostScript subset. | A new plan file. |
+| Font embedding and subsetting | Needs the font machine first. | A new plan file. |
+| Printer languages: PCL, PXL, XPS, and the `gs -h` device list | GhostPCL, GhostXPS, and printer drivers are separate products from the PostScript and PDF interpreter. | A named device request opens a program plan. |
