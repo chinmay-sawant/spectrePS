@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"context"
+	"image"
 	"math"
 	"slices"
 	"strconv"
@@ -55,6 +56,7 @@ type (
 		marker   graphics.Marker
 		scale    float64
 		xobjects map[string]Value
+		images   map[string]image.Image
 		stack    []item
 		path     []point
 		hasPt    bool
@@ -132,6 +134,7 @@ func newRunner(marker graphics.Marker, scale float64) *runner {
 		marker:   marker,
 		scale:    scale,
 		xobjects: nil,
+		images:   nil,
 		stack:    nil,
 		path:     nil,
 		hasPt:    false,

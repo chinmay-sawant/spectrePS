@@ -1,7 +1,7 @@
 # v0.0.3 - Paint Do and rasterize image PDFs
 
 > **Parent:** `plans/v0.0.3/00-program.md` - program ledger
-> **Status:** phases 1 and 2 landed. Phases 3 and 4 open.
+> **Status:** phases 1 to 3 landed. Phase 4 open.
 > **Estimated effort:** about 4 days
 
 ---
@@ -42,11 +42,11 @@ The reader decodes image XObjects, but the content interpreter has no `Do` case 
 
 ### 3.1 Do in the interpreter
 
-- [ ] `Do` pops a name, resolves `/XObject`, requires `/Subtype /Image`, decodes once per name into a runner cache, and calls `DrawImage` with the current matrix and scale. Missing names, non-image subtypes, and decode errors return `undefined` with the `Do` operator name. Proof: `go test -count=1 ./internal/pdf -run TestPaintDoImageRGB`, `TestPaintDoImageGray`, `TestPaintDoCM`, `TestPaintDoMissing`, and `TestPaintDoRejectedSMask`.
+- [x] `Do` pops a name, resolves `/XObject`, requires `/Subtype /Image`, decodes once per name into a runner cache, and calls `DrawImage` with the current matrix and scale. Missing names, non-image subtypes, and decode errors return `undefined` with the `Do` operator name. Proof: `go test -count=1 ./internal/pdf -run 'TestPaintDoImageRGB|TestPaintDoImageGray|TestPaintDoCM|TestPaintDoMissing|TestPaintDoRejectedSMask'` exited 0 on 2026-09-25.
 
 ### 3.2 Rewrite level 0 stays gated
 
-- [ ] `pdfout.Emit` returns `undefined in Do` when the recorder saw an image, so level 0 does not silently outline or drop images. Proof: `go test -count=1 ./internal/pdfout -run TestEmitDoUnchanged`.
+- [x] `pdfout.Emit` returns `undefined in Do` when the recorder saw an image, so level 0 does not silently outline or drop images. Proof: `go test -count=1 ./internal/pdfout -run TestEmitDoUnchanged` exited 0 on 2026-09-25.
 
 ## Phase 4: Round trip and docs
 

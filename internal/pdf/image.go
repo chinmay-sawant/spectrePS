@@ -17,6 +17,7 @@ const (
 	keyHeight     = "Height"
 	keyBits       = "BitsPerComponent"
 	keyColorSpace = "ColorSpace"
+	keySMask      = "SMask"
 
 	colorRGB  = "DeviceRGB"
 	colorGray = "DeviceGray"
