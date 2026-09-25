@@ -70,8 +70,11 @@ Any other `-colorspace` value exits 2. `rgb` keeps the 24-bit RGB bytes from ear
 | `-compress` | Flate content streams at level 0 | true |
 | `-level` | Compression level, 0 through 5 | 0 |
 | `-pdfa` | PDF/A-4 claim: `4` or `4f` | omitted |
+| `-subset-fonts` | Subset embedded TrueType fonts at levels 1 through 5 | false |
 
 `-level 0` re-emits the path subset and keeps `-compress` as the Flate switch. `-level 1` through `-level 5` use the pass-through writer, so text, fonts, and content Spectre cannot interpret are copied. A level above 0 Flates content streams and ignores `-compress`. The image policy per level is in `documentation/devices.md`. Any other value exits 2. A tagged PDF at `-level 0` exits 1 with `Error: /tagged in RewritePDF`; levels 1 through 5 keep the tags and the source header version.
+
+`-subset-fonts` replaces an embedded `/FontFile2` TrueType program with a stable-glyph-index subset and adds a synthesized `/ToUnicode` at levels 1 through 5. It is off by default, so bytes do not change unless the caller opts in. Level 0 ignores it and still refuses text. A `/FontFile3` OpenType program and a Type 1 `/FontFile` program are copied whole, and a font with no program is copied unchanged, so the PDF/A `font-not-embedded` refusal is unaffected. `documentation/fonts.md` has the scope.
 
 `-pdfa 4` claims PDF/A-4 base and `-pdfa 4f` claims PDF/A-4f. A claim uses the pass-through writer at the selected level, appends the XMP metadata and the sRGB output intent, and changes the header to `%PDF-2.0` with a binary marker. The command runs the profile preflight first. A known violation exits 1 with one stderr line in the form `Error: /rule in PDFA`, and writes no output file. The rules are the table in `documentation/devices.md`. The claim is a profile preflight, not a certificate.
 

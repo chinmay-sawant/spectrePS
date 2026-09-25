@@ -43,6 +43,10 @@ type RewriteOptions struct {
 	CompressStreams bool
 	Level           int
 	PDFA            PDFAMode
+	// SubsetFonts embeds subsetted font programs on a rewrite. It is off by
+	// default. Levels 1 through 5 apply it; level 0 ignores it and still
+	// refuses text, because the path writer cannot emit a font.
+	SubsetFonts bool `exhaustruct:"optional"`
 }
 
 // DefaultRewriteOptions turns stream compression on at level 0.

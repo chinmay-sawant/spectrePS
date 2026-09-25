@@ -28,6 +28,12 @@ func rewritePDFA(ctx context.Context, file *pdf.File, opt RewriteOptions) ([]byt
 		return nil, asPDFJobError(err)
 	}
 	first := file.ObjectCount() + 1
+	extras := pdfa.ExtraObjects(mode, first)
+	subsetOverrides, subsetAppended, err := subsetObjects(ctx, file, opt.SubsetFonts, first+len(extras))
+	if err != nil {
+		return nil, err
+	}
+	mergeOverrides(overrides, subsetOverrides)
 	catalog, err := pdfaCatalog(file, first, first+pdfaIntentExtra)
 	if err != nil {
 		return nil, err
@@ -35,7 +41,7 @@ func rewritePDFA(ctx context.Context, file *pdf.File, opt RewriteOptions) ([]byt
 	copyOpt := pdfout.CopyOptions{
 		Overrides:       overrides,
 		PackObjects:     false,
-		AppendObjects:   pdfa.ExtraObjects(mode, first),
+		AppendObjects:   append(extras, subsetAppended...),
 		CatalogOverride: catalog,
 		PDFA:            true,
 	}

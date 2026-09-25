@@ -65,6 +65,16 @@ import boundary.
 
 SHA-256: `type1-text.pdf` `23749b69f83db2b1a646757edbcebb9e79e878adb25b8b8b446abdea569b089e`
 
+# Subset fixture
+
+`subset-text.pdf` is the one-page PDF `TestRewriteSubsetCLI` reads: the
+synthetic TrueType program that `internal/truetypesynth` builds behind a
+`/FontFile2` stream, with one "AB" line. Running
+`UPDATE_FIXTURES=1 go test ./internal/pdf -run TestGenSubsetFixture` rewrites
+it. `internal/cli` reads the checked-in file so it keeps its import boundary.
+
+SHA-256: `subset-text.pdf` `14b0bc415bbdafcc4177deb34c74ca7e555c4a2e1de114134857f25709220ceb`
+
 # CCITT fixtures
 
 `ccitt-g4.bin` and `ccitt-g3.bin` are raw strip bytes, not TIFF containers.
