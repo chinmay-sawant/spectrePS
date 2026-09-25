@@ -100,9 +100,10 @@ func CompareRaster(a, b PageImage) CompareResult
 
 func MeasureBox(img PageImage, dpi float64) (Box, bool)
 func MeasureInk(img PageImage) Ink
+func MeasureInkAmount(img PageImage) Ink
 ```
 
-`CompareFiles` and `CompareRaster` do not take an `Instance`. `MeasureBox` and `MeasureInk` do not take one either.
+`CompareFiles` and `CompareRaster` do not take an `Instance`. `MeasureBox`, `MeasureInk`, and `MeasureInkAmount` do not take one either.
 
 `CompareFiles` rules:
 
@@ -117,7 +118,7 @@ func MeasureInk(img PageImage) Ink
 - Same dimensions and different RGB bytes set `Reason` `pixel` and `Offset` to the first byte index in row-major order, ignoring stride padding.
 - Stride padding is not compared.
 
-`MeasureBox` and `MeasureInk` read a finished `PageImage`. They do not paint a second time and they add no operator.
+`MeasureBox`, `MeasureInk`, and `MeasureInkAmount` read a finished `PageImage`. They do not paint a second time and they add no operator.
 
 `MeasureBox` rules:
 
@@ -130,7 +131,14 @@ func MeasureInk(img PageImage) Ink
 
 - Each field is the fraction of pixels whose channel byte is not 255. The denominator is `Width * Height`.
 - Stride padding is ignored. A zero-size image returns the zero `Ink`.
-- The channels are RGB occupancy, not CMYK, and not Ghostscript `ink_cov` amounts.
+- The channels are RGB occupancy, not CMYK, and not Ghostscript `ink_cov` amounts. The weighted counterpart is `MeasureInkAmount`.
+
+`MeasureInkAmount` rules:
+
+- Each field is the mean complement of one channel byte: `(255 - c) / 255`, summed over `Width * Height` and divided by the pixel count.
+- A white page returns the zero `Ink` and a black page returns `1` on every channel.
+- Stride padding is ignored. A zero-size image returns the zero `Ink`.
+- The amount is a fraction. The CLI prints it times 100 with five decimals and the `RGB` suffix. The formula and both worked examples are in `documentation/devices.md`.
 
 A cancelled `ctx` returns `ctx.Err()` and no partial success. `nil` context is a programming error and panics. The CLI always passes a real context.
 

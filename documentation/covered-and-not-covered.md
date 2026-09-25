@@ -12,7 +12,7 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 - Open a PDF and rasterize pages. Spectre's slice is path operators plus Flate streams, not PDF 1.7 or PDF 2.0.
 - Rasterize to an image. Spectre writes PPM, PNG, JPEG, and TIFF (none or Deflate). Ghostscript also writes BMP, PCX, fax, and PSD.
 - Select pages with `-pages`, in the style of `-dFirstPage` and `-dLastPage`. `raster`, `bbox`, `inkcov`, `pdfimage`, and `compare raster` take the flag.
-- Report the painted box in points and the RGB mark coverage of a page, in the style of `bbox` and `inkcov`. Spectre's coverage is RGB occupancy, not a CMYK report.
+- Report the painted box in points, the RGB mark coverage of a page in the style of `bbox` and `inkcov`, and the weighted RGB ink amount in the style of `ink_cov`. Spectre's channels are RGB because the pixmap is RGB, so neither ink report is a CMYK report.
 - Wrap each painted page in a new PDF as one image, in the style of `pdfimage24`, `pdfimage8`, and `pdfimage32`. Spectre uses Flate image streams and the RGB, gray, and CMYK spaces.
 - Rewrite a PDF as a new file, compress streams, and re-encode images. Spectre Flates content, re-encodes Flate and raw image streams losslessly at level 2, and DCT-encodes images with a longest-side cap at levels 3 through 5. Levels 3 through 5 decode JPEG2000 streams and re-encode them as DCT. CCITT streams copy unchanged.
 - Stop on the first broken-file error, the same idea as `-dPDFSTOPONERROR`.

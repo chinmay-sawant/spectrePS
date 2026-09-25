@@ -13,6 +13,7 @@ spectreps raster [options] file.ps|file.pdf
 spectreps pdfimage [options] file.ps|file.pdf
 spectreps bbox [options] file.ps|file.pdf
 spectreps inkcov [options] file.ps|file.pdf
+spectreps ink_cov [options] file.ps|file.pdf
 spectreps rewrite [options] file.pdf
 spectreps validate [options] file.ps|file.pdf
 spectreps compare bytes fileA fileB
@@ -21,7 +22,7 @@ spectreps compare raster [options] fileA fileB
 
 `version` prints `0.0.2`. Exit 0.
 
-Shared options for `run`, `raster`, `pdfimage`, `bbox`, `inkcov`, and `compare raster`:
+Shared options for `run`, `raster`, `pdfimage`, `bbox`, `inkcov`, `ink_cov`, and `compare raster`:
 
 | Flag | Meaning | Default |
 | --- | --- | --- |
@@ -50,7 +51,7 @@ Any other `-colorspace` value exits 2. `rgb` keeps the 24-bit RGB bytes from ear
 
 `run` and `compare raster` do not accept `-jpegq`, `-tiffcompress`, or `-colorspace`.
 
-`bbox` and `inkcov` write their report to stdout and do not write a file.
+`bbox`, `inkcov`, and `ink_cov` write their report to stdout and do not write a file.
 
 `rewrite` options:
 
@@ -94,6 +95,15 @@ Page 1
 
 The three fractions are RGB occupancy with five digits after the point. They are not CMYK, and the line does not end in `CMYK OK`.
 
+`ink_cov` writes the same two lines per page with the weighted amount as a percent per channel:
+
+```
+Page 1
+25.00000 0.00000 0.00000 RGB
+```
+
+The formula and both worked examples are in `documentation/devices.md`. The channels are R, G, and B because the pixmap is RGB, so the line still ends in `RGB`. The CLI prints `MeasureInkAmount` times 100.
+
 `rewrite` writes one PDF. The compression levels are in `documentation/devices.md`.
 
 `pdfimage` writes one PDF with one image page per input page. `-colorspace` selects 24-bit RGB, 8-bit DeviceGray, or 32-bit DeviceCMYK image streams, and `rgb` is the default. The input is a PostScript file or a PDF. A PDF input paints every page with `RasterizePage`, and any other input uses `RunPostScript`. The `-o` path is required and does not use `%d`. `-r 0` writes 72 dpi.
@@ -107,7 +117,7 @@ The three fractions are RGB occupancy with five digits after the point. They are
 | 2 | Usage. Missing file, unknown flag, unknown command, missing `-o`. |
 | 3 | A read or write failed before the interpreter ran. |
 
-`bbox` and `inkcov` exit 0 after printing every page, 1 on an interpreter error, and 2 on a missing input or a bad flag.
+`bbox`, `inkcov`, and `ink_cov` exit 0 after printing every page, 1 on an interpreter error, and 2 on a missing input or a bad flag.
 
 Mismatch text for compare, one line on stdout:
 

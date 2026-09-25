@@ -33,6 +33,7 @@ const (
 	jpegMinQuality     = 1
 	jpegMaxQuality     = 100
 	maxRewriteLevel    = 5
+	inkPercentScale    = 100
 )
 
 // Run parses args and returns the process exit code.
@@ -54,7 +55,7 @@ func dispatch(args []string, stdout, stderr io.Writer) int {
 		return cmdRaster(args[1:], stderr)
 	case "pdfimage":
 		return cmdPDFImage(args[1:], stderr)
-	case "bbox", "inkcov":
+	case "bbox", "inkcov", "ink_cov":
 		return cmdMeasure(args[0], args[1:], stdout, stderr)
 	case "rewrite":
 		return cmdRewrite(args[1:], stderr)
@@ -76,6 +77,7 @@ spectreps raster [-w points] [-h points] [-r dpi] [-jpegq quality]
 spectreps pdfimage [-w points] [-h points] [-r dpi] [-colorspace rgb|gray|cmyk] [-pages range] -o path file
 spectreps bbox [-w points] [-h points] [-r dpi] [-pages range] file
 spectreps inkcov [-w points] [-h points] [-r dpi] [-pages range] file
+spectreps ink_cov [-w points] [-h points] [-r dpi] [-pages range] file
 spectreps rewrite [-compress] [-level N] -o path file.pdf
 spectreps validate file
 spectreps compare bytes fileA fileB
@@ -225,9 +227,12 @@ func cmdMeasure(name string, args []string, stdout, stderr io.Writer) int {
 		return code
 	}
 	for i, page := range pages {
-		if name == "bbox" {
+		switch name {
+		case "bbox":
 			writeBBox(stdout, page, opt.ResolutionDPI)
-		} else {
+		case "ink_cov":
+			writeInkAmount(stdout, i+1, page)
+		default:
 			writeInk(stdout, i+1, page)
 		}
 	}
@@ -283,6 +288,14 @@ func writeInk(w io.Writer, page int, img spectreps.PageImage) {
 	ink := spectreps.MeasureInk(img)
 	fmt.Fprintf(w, "Page %d\n", page)
 	fmt.Fprintf(w, "%.5f %.5f %.5f RGB\n", ink.R, ink.G, ink.B)
+}
+
+// writeInkAmount prints the weighted amount as a percent per channel.
+func writeInkAmount(w io.Writer, page int, img spectreps.PageImage) {
+	ink := spectreps.MeasureInkAmount(img)
+	fmt.Fprintf(w, "Page %d\n", page)
+	fmt.Fprintf(w, "%.5f %.5f %.5f RGB\n",
+		ink.R*inkPercentScale, ink.G*inkPercentScale, ink.B*inkPercentScale)
 }
 
 func cmdRewrite(args []string, stderr io.Writer) int {

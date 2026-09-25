@@ -13,7 +13,9 @@ type Box struct {
 	MaxY float64
 }
 
-// Ink is the fraction of pixels that mark each RGB channel.
+// Ink is one RGB triple. MeasureInk fills it with occupancy, the fraction of
+// pixels that mark each channel. MeasureInkAmount fills it with the weighted
+// amount, the mean complement of each channel.
 type Ink struct {
 	R float64
 	G float64
@@ -88,6 +90,34 @@ func MeasureInk(img PageImage) Ink {
 		}
 	}
 	n := float64(total)
+	return Ink{
+		R: float64(red) / n,
+		G: float64(green) / n,
+		B: float64(blue) / n,
+	}
+}
+
+// MeasureInkAmount returns the mean complement of each RGB channel, the
+// weighted ink amount. A channel byte c contributes (255 - c) / 255, and the
+// mean runs over Width * Height. A white page is zero and a black page is one
+// on every channel. Stride padding is ignored. A zero-size image returns the
+// zero Ink.
+func MeasureInkAmount(img PageImage) Ink {
+	total := img.Width * img.Height
+	if total == 0 {
+		return Ink{R: 0, G: 0, B: 0}
+	}
+	var red, green, blue int64
+	for row := range img.Height {
+		base := row * img.Stride
+		for col := range img.Width {
+			i := base + col*rgbBytes
+			red += int64(whiteByte - int(img.Pixels[i]))
+			green += int64(whiteByte - int(img.Pixels[i+1]))
+			blue += int64(whiteByte - int(img.Pixels[i+2]))
+		}
+	}
+	n := float64(total) * whiteByte
 	return Ink{
 		R: float64(red) / n,
 		G: float64(green) / n,
