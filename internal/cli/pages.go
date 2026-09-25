@@ -179,6 +179,20 @@ func pageImages(
 	opt spectreps.RunOptions,
 	sel pageSelection,
 ) ([]spectreps.PageImage, error) {
+	return pageImagesPolicy(in, path, src, opt, sel, false)
+}
+
+// pageImagesPolicy is pageImages with the tagged-input policy. When
+// refuseTagged is set, a tagged PDF input returns JobError /tagged in ImagePDF
+// instead of dropping the tags into a generated file.
+func pageImagesPolicy(
+	in *spectreps.Instance,
+	path string,
+	src []byte,
+	opt spectreps.RunOptions,
+	sel pageSelection,
+	refuseTagged bool,
+) ([]spectreps.PageImage, error) {
 	ctx := context.Background()
 	if !strings.HasSuffix(path, ".pdf") {
 		pages, err := in.RunPostScript(ctx, src, opt)
@@ -190,6 +204,9 @@ func pageImages(
 	doc, err := in.OpenPDF(ctx, src)
 	if err != nil {
 		return nil, err
+	}
+	if refuseTagged && doc.Tagged() {
+		return nil, spectreps.JobError{Op: "ImagePDF", Msg: "tagged", Filename: "", Line: 0, Column: 0}
 	}
 	indices, err := sel.pageIndices(doc.PageCount())
 	if err != nil {

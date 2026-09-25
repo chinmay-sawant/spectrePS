@@ -39,12 +39,23 @@ const (
 
 type Document struct { /* unexported */ }
 
+type PDFAMode int
+
+const (
+    PDFANone PDFAMode = iota
+    PDFA4
+    PDFA4F
+)
+
 type RewriteOptions struct {
     CompressStreams bool
     Level           int // 0 re-emits the path subset, 1 through 5 pass through
+    PDFA            PDFAMode // zero leaves the claim off
 }
 
 func DefaultRewriteOptions() RewriteOptions // CompressStreams true at level 0
+
+type PostScriptOptions struct{} // fixed 612 by 792 box, no compression
 
 type CompareResult struct {
     Equal  bool
@@ -90,8 +101,11 @@ Omit ` at file:line:col` when the position is unknown. `Op` is the operator name
 func (in *Instance) RunPostScript(ctx context.Context, src []byte, opt RunOptions) ([]PageImage, error)
 func (in *Instance) OpenPDF(ctx context.Context, src []byte) (*Document, error)
 func (doc *Document) PageCount() int // page leaves, 0 when doc is nil
+func (doc *Document) Tagged() bool   // structure tree or /MarkInfo /Marked true, false when doc is nil
 func (in *Instance) RasterizePage(ctx context.Context, doc *Document, pageIndex int, opt RunOptions) (PageImage, error)
+func (in *Instance) ExtractText(ctx context.Context, doc *Document, pageIndex int) (string, error)
 func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOptions) ([]byte, error)
+func (in *Instance) WritePostScript(ctx context.Context, doc *Document, opt PostScriptOptions) ([]byte, error)
 func (in *Instance) ImagePDF(ctx context.Context, pages []PageImage, dpi float64) ([]byte, error)
 func (in *Instance) ImagePDFColor(ctx context.Context, pages []PageImage, dpi float64, color ImageColor) ([]byte, error)
 
@@ -100,9 +114,10 @@ func CompareRaster(a, b PageImage) CompareResult
 
 func MeasureBox(img PageImage, dpi float64) (Box, bool)
 func MeasureInk(img PageImage) Ink
+func MeasureInkAmount(img PageImage) Ink
 ```
 
-`CompareFiles` and `CompareRaster` do not take an `Instance`. `MeasureBox` and `MeasureInk` do not take one either.
+`CompareFiles` and `CompareRaster` do not take an `Instance`. `MeasureBox`, `MeasureInk`, and `MeasureInkAmount` do not take one either.
 
 `CompareFiles` rules:
 
@@ -117,7 +132,7 @@ func MeasureInk(img PageImage) Ink
 - Same dimensions and different RGB bytes set `Reason` `pixel` and `Offset` to the first byte index in row-major order, ignoring stride padding.
 - Stride padding is not compared.
 
-`MeasureBox` and `MeasureInk` read a finished `PageImage`. They do not paint a second time and they add no operator.
+`MeasureBox`, `MeasureInk`, and `MeasureInkAmount` read a finished `PageImage`. They do not paint a second time and they add no operator.
 
 `MeasureBox` rules:
 
@@ -130,16 +145,29 @@ func MeasureInk(img PageImage) Ink
 
 - Each field is the fraction of pixels whose channel byte is not 255. The denominator is `Width * Height`.
 - Stride padding is ignored. A zero-size image returns the zero `Ink`.
-- The channels are RGB occupancy, not CMYK, and not Ghostscript `ink_cov` amounts.
+- The channels are RGB occupancy, not CMYK, and not Ghostscript `ink_cov` amounts. The weighted counterpart is `MeasureInkAmount`.
+
+`MeasureInkAmount` rules:
+
+- Each field is the mean complement of one channel byte: `(255 - c) / 255`, summed over `Width * Height` and divided by the pixel count.
+- A white page returns the zero `Ink` and a black page returns `1` on every channel.
+- Stride padding is ignored. A zero-size image returns the zero `Ink`.
+- The amount is a fraction. The CLI prints it times 100 with five decimals and the `RGB` suffix. The formula and both worked examples are in `documentation/devices.md`.
 
 A cancelled `ctx` returns `ctx.Err()` and no partial success. `nil` context is a programming error and panics. The CLI always passes a real context.
 
-`pageIndex` is zero-based. A negative index or an index past the last page returns `rangecheck`.
+`pageIndex` is zero-based for `RasterizePage` and `ExtractText`. A negative index or an index past the last page returns `rangecheck`.
 
-`ImagePDF` writes a new PDF with one 24-bit RGB Flate image per `PageImage`. `dpi` is the resolution the pages were painted at, and zero or less selects 72. The content stream paints `/Im0 Do`, but the PDF interpreter still returns `undefined` for `Do`, so Spectre cannot rasterize its own image PDF yet. The output is not `pdfwrite`.
+`ExtractText` returns the text of one page. Lines run top to bottom and left to right, each line ends with CRLF, and a font with neither `/ToUnicode` nor a named encoding falls back to the code point. The text comes from the same glyph sink as the show operators, so a standard 14 font extracts without an outline program. The output is not compared with Ghostscript `txtwrite`: text pixels never byte-match, because hinting and antialiasing differ, so the oracle is text and geometry.
+
+`ImagePDF` writes a new PDF with one 24-bit RGB Flate image per `PageImage`. `dpi` is the resolution the pages were painted at, and zero or less selects 72. The content stream paints `/Im0 Do` and the page resources carry the XObject, so `RasterizePage` of the reopened file matches the source `PageImage` under `CompareRaster`. The output is not `pdfwrite`.
 
 `ImagePDF` calls `ImagePDFColor` with `ImageColorRGB`, so its bytes do not change. `ImageColorGray` writes one 8-bit sample per pixel with `/DeviceGray`. `ImageColorCMYK` writes four 8-bit samples per pixel with `/DeviceCMYK`. Both use `/Filter /FlateDecode`. The conversion formulas and the pure red example are in `documentation/devices.md`.
 
 `DefaultRewriteOptions` turns stream compression on at level 0. The zero `RewriteOptions` leaves it off, so a test can ask for uncompressed streams on purpose. The CLI uses `DefaultRewriteOptions` when no flag is given.
 
-`RewriteOptions.Level` selects the writer. Level 0 re-emits the path subset and keeps `CompressStreams` as the Flate switch. Levels 1 through 5 use the pass-through writer: content Spectre cannot interpret is copied, level 1 Flates uncompressed content streams, level 2 re-encodes Flate and raw image streams losslessly, and levels 3 through 5 re-encode images as DCT with a longest-side cap. A level outside 0 through 5 returns `rangecheck`. The caps and qualities are in `documentation/devices.md`.
+`RewritePDF` at level 0 refuses a tagged document with `Error: /tagged in RewritePDF`, because the path-only writer cannot keep the tree. Levels 1 through 5 keep the tags and the source header version. `Document.Tagged` reads the catalog `/StructTreeRoot` or a true `/MarkInfo /Marked`. The claim for this work is preflight only, never certification.
+
+`RewriteOptions.PDFA` appends a PDF/A-4 claim. `PDFA4` is the base claim and `PDFA4F` is the embedded-file claim. A claim uses the pass-through writer at the selected level, runs the profile preflight, and returns a `JobError` with `Op` `PDFA` and the failed rule in `Msg` when the input carries a known violation. The claim is a profile preflight, not a certificate. The rules and the writer changes are in `documentation/devices.md`.
+
+`WritePostScript` writes one date-free PostScript program from a path-only document. The marks match `RewritePDF` level 0: `setrgbcolor` or `setgray`, `setlinewidth`, `m` and `l`, and `S`, `f`, or `f*` in 72 dpi points. A prolog defines the short names in terms of the long operators, each page ends in `showpage`, and the header carries a fixed 612 by 792 box. Two calls return equal bytes. Text and images are not emitted, so a content operator Spectre cannot emit returns `undefined` with its operator name; a text page returns `undefined in Tj`. A nil document returns `rangecheck`. The zero `PostScriptOptions` is the only supported shape in this tag; media options wait.

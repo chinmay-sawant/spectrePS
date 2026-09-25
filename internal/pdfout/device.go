@@ -3,6 +3,7 @@ package pdfout
 
 import (
 	"bytes"
+	"image"
 	"strconv"
 	"strings"
 
@@ -10,11 +11,18 @@ import (
 )
 
 type recorder struct {
-	buf bytes.Buffer
+	buf      bytes.Buffer
+	sawImage bool
 }
 
 func newRecorder() *recorder {
-	return &recorder{buf: bytes.Buffer{}}
+	return &recorder{buf: bytes.Buffer{}, sawImage: false}
+}
+
+// DrawImage records that an image was seen. The rewrite recorder cannot write
+// image pixels, so Emit refuses the page instead of dropping the image.
+func (rec *recorder) DrawImage(_ image.Image, _ graphics.Matrix, _ float64) {
+	rec.sawImage = true
 }
 
 func (rec *recorder) Stroke(pts []graphics.Point, width, red, green, blue float64) {

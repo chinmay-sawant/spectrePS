@@ -51,11 +51,64 @@ func checkEmitLine(t *testing.T) {
 
 func checkEmitUndefined(t *testing.T) {
 	t.Helper()
-	_, err := Emit(t.Context(), []byte("Tj"))
+	_, err := Emit(t.Context(), []byte("1 Tr"))
 	var job *pdf.Error
-	if !errors.As(err, &job) || job.Error() != "undefined" {
+	if !errors.As(err, &job) || job.Error() != errUndefined {
 		t.Fatalf("error = %v, want undefined", err)
 	}
+}
+
+// TestEmitDoUnchanged proves level 0 still refuses a page that paints an
+// image. The recorder sees the DrawImage, so EmitPage returns undefined in Do
+// instead of silently dropping the image.
+func TestEmitDoUnchanged(t *testing.T) {
+	file := imageEmitPDF(t)
+	checkEmitRecorderSeesImage(t, file)
+	got, err := EmitPage(t.Context(), file, 0)
+	var job *pdf.Error
+	if !errors.As(err, &job) || job.Op != "Do" || job.Name != "undefined" {
+		t.Fatalf("EmitPage() error = %v, want undefined in Do", err)
+	}
+	if got != nil {
+		t.Fatalf("EmitPage() bytes = %#v, want nil", got)
+	}
+}
+
+func checkEmitRecorderSeesImage(t *testing.T, file *pdf.File) {
+	t.Helper()
+	content, err := file.Content(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := file.PageResources(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := newRecorder()
+	err = pdf.PaintWith(t.Context(), content, rec, 1, pdf.PaintOptions{Resources: res})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rec.sawImage {
+		t.Fatal("recorder did not see the image")
+	}
+}
+
+// imageEmitPDF is one page whose content paints a 2 by 2 Flate RGB image.
+func imageEmitPDF(t *testing.T) *pdf.File {
+	t.Helper()
+	doc := newFixtureDoc()
+	doc.object("<< /Type /Catalog /Pages 2 0 R >>")
+	doc.object("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+	doc.object("<< /Type /Page /Parent 2 0 R /Contents 4 0 R " +
+		"/Resources << /XObject << /Im0 5 0 R >> >> >>")
+	doc.object(string(streamBody([]byte("2 0 0 2 0 0 cm /Im0 Do"), false)))
+	dict := "/Type /XObject /Subtype /Image /Width 2 /Height 2 " +
+		"/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode"
+	doc.object(levelStreamBody(dict, flateLevelBytes(t, []byte{
+		255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255,
+	})))
+	return mustOpenPDF(t, doc.classic())
 }
 
 func checkEmitEmpty(t *testing.T) {

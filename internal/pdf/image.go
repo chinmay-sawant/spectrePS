@@ -17,6 +17,7 @@ const (
 	keyHeight     = "Height"
 	keyBits       = "BitsPerComponent"
 	keyColorSpace = "ColorSpace"
+	keySMask      = "SMask"
 
 	colorRGB  = "DeviceRGB"
 	colorGray = "DeviceGray"
@@ -57,6 +58,9 @@ func (file *File) ImageObjectNums() ([]int, error) {
 // DecodeImage decodes one image XObject. num comes from ImageObjectNums.
 // FlateDecode supports DeviceRGB and DeviceGray at 8 bits per component.
 // DCTDecode decodes through image/jpeg.
+// CCITTFaxDecode decodes Group 4 and Group 3 into Gray at 1 bit per component.
+// JPXDecode decodes through the pure-Go JPEG2000 decoder and ignores the
+// /BitsPerComponent and /ColorSpace entries, which are optional for JPX.
 // Any other filter, color space, or bit depth returns undefined.
 // A Flate stream whose byte count does not match width by height by components
 // returns undefined too. A failed decode never returns a blank image.
@@ -65,21 +69,37 @@ func (file *File) DecodeImage(num int) (image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	width, height, space, err := imageParams(stream)
+	return DecodeImageValue(stream)
+}
+
+// DecodeImageValue decodes one resolved image XObject value. The value is the
+// stream form of DecodeImage, so a resolved object and its number return the
+// same pixels. Direct and indirect XObjects both work.
+func DecodeImageValue(val Value) (image.Image, error) {
+	if !hasImageSubtype(val) {
+		return nil, NewError(opImage, errUndefined)
+	}
+	filter, err := imageFilterName(val)
 	if err != nil {
 		return nil, err
 	}
-	filter, err := imageFilterName(stream)
+	if filter == nameJPX {
+		return decodeJPXImage(val)
+	}
+	if filter == nameCCITT {
+		return decodeCCITTImage(val)
+	}
+	width, height, space, err := imageParams(val)
 	if err != nil {
 		return nil, err
 	}
 	if filter == nameDCT {
-		return decodeDCTImage(stream)
+		return decodeDCTImage(val)
 	}
 	if filter != opFlate {
 		return nil, NewError(filter, errUndefined)
 	}
-	return decodeFlateImage(stream, width, height, space)
+	return decodeFlateImage(val, width, height, space)
 }
 
 func (file *File) imageStream(num int) (Value, error) {

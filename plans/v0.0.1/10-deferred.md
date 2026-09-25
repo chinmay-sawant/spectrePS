@@ -12,22 +12,17 @@ Rows here are `[~]` on purpose. They are not a second active checklist. When one
 
 ## Executive summary
 
-Ghostscript 9.55.0 exposes hundreds of printer devices, plus PCL and XPS in sister products. Spectre's v0.0.1 release is the PostScript subset, the path-only PDF, one pixmap, Flate rewrite, validate, and byte compare. v0.0.2 added the page summaries, JPEG and TIFF raster, page ranges, gray and CMYK image PDF, the `gs` switch map, the object pass-through writer, and compression levels 1 to 5. What waits now is painting `Do`, CCITT and JPEG2000 decoding, `ink_cov` weights, text, PDF/A, PostScript output, the full `gs` grammar, and the printer languages.
+Ghostscript 9.55.0 exposes hundreds of printer devices, plus PCL and XPS in sister products. Spectre's v0.0.1 release is the PostScript subset, the path-only PDF, one pixmap, Flate rewrite, validate, and byte compare. v0.0.2 added the page summaries, JPEG and TIFF raster, page ranges, gray and CMYK image PDF, the `gs` switch map, the object pass-through writer, and compression levels 1 to 5. v0.0.3 adds painting `Do`, CCITT and JPEG2000 decoding, `ink_cov` weights, the writer container cleanup, PDF/A-4, PDF/UA-2 preservation and preflight, PostScript output, the full `gs` grammar, and the font and text machine. What waits now is the remaining text machine and the printer languages. The text row's phase file is `plans/v0.0.3/9-text-and-fonts.md`.
 
 ## Phase 10: Deferred
 
 ### 10.1 Outputs that need an image or text model
 
-- [~] Painting `Do` and reading images into a raster. Reason: the reader decodes image XObjects, but the content interpreter still returns `undefined` for `Do`, so an image PDF cannot be rasterized by Spectre. Next gate: a plan file for the `Do` operator and the image marker seam.
-- [~] CCITT and JPEG2000 image streams. Reason: `DecodeImage` reads Flate and DCT only, so those streams copy through unchanged in the compression levels. Next gate: a CCITT or JPX decoder, then a plan file.
-- [~] `ink_cov` weighted ink amounts. Reason: Ghostscript prints `ink_cov` as a percent and its manual example disagrees with its source, so Spectre needs a named weighting model before any code. Next gate: a written model.
-- [~] Text extraction in the style of `txtwrite`, `show`, and PDF `Tj`. Reason: fonts are a separate machine from the path engine. Next gate: a new plan file. The phase 04 y-flip test has landed. Until then those operators return errors, not blank pages.
+- [~] Type 1 charstrings and `seac`. Reason: `documentation/fonts.md` defers Type 1 and bare CFF, so the font model reads TrueType and OpenType through `sfnt` only. Deferred in v0.0.3 (`plans/v0.0.3/9-text-and-fonts.md`, row 3.6).
 
 ### 10.2 PDF jobs and variants
 
-- [~] PDF/A-1b, PDF/A-2b, PDF/A-3b creation. Reason: needs output intents, metadata, and a finished rewrite. Creating the file is not a conformance certificate, and `PDFACompatibilityPolicy` 0 in Ghostscript can attach PDF/A metadata to a non-compliant file. Spectre will not copy that ambiguity. Next gate: a new plan file that states which PDF/A level and which policy.
-- [~] PDF to PostScript via a `ps2write` style device. Reason: it is another high-level device on the same marks. Next gate: a new plan file.
-- [~] Full `gs` argv grammar. Reason: the subcommands map to library methods, and a second flag grammar would fork the CLI. A bounded switch map landed in v0.0.2 (`plans/v0.0.2/4-quick-wins.md`, phase 4); the full grammar stays out. Next gate: a written proposal per switch family.
+- [~] Tag generation for PDF/UA-2. Reason: needs the text and font machine from phase 9, then reading order and role assignment. Preservation and preflight landed in v0.0.3 (`plans/v0.0.3/10-pdfua2.md`).
 
 ### 10.3 Out of product
 
@@ -45,6 +40,16 @@ Ghostscript 9.55.0 exposes hundreds of printer devices, plus PCL and XPS in sist
 - [x] Page selection for the raster and PDF jobs. Landed in v0.0.2 (`plans/v0.0.2/4-quick-wins.md`, phase 1).
 - [x] PDF inputs in `compare raster`. Landed in v0.0.2 (`plans/v0.0.2/4-quick-wins.md`, phase 1).
 - [x] `gs` argv compatibility mode, bounded switch map. Landed in v0.0.2 (`documentation/gs-argv-mapping.md`).
+- [x] `ink_cov` weighted ink amounts. Landed in v0.0.3 (`plans/v0.0.3/1-ink-cov.md`).
+- [x] CCITT G3 and G4 image streams. Landed in v0.0.3 (`plans/v0.0.3/2-ccitt-decode.md`).
+- [x] JPEG2000 image streams. Landed in v0.0.3 (`plans/v0.0.3/3-jpeg2000-decode.md`).
+- [x] Compression writer container cleanup and the optional packed form. Landed in v0.0.3 (`plans/v0.0.3/4-writer-cleanup.md`). The size guard in row 1.2 is open because the classic form must expand the source object streams.
+- [x] Painting `Do` and reading images into a raster. Landed in v0.0.3 (`plans/v0.0.3/5-paint-do.md`).
+- [x] PDF to PostScript via a `ps2write` style device. Landed in v0.0.3 (`plans/v0.0.3/6-ps2write.md`).
+- [x] Full `gs` argv grammar. Landed in v0.0.3 (`plans/v0.0.3/7-gs-argv.md`).
+- [x] PDF/A-4 creation, with the refusal policy. Landed in v0.0.3 (`plans/v0.0.3/8-pdfa4.md`). The claim is a profile preflight, not a certificate.
+- [x] PDF/UA-2 preservation and preflight. Landed in v0.0.3 (`plans/v0.0.3/10-pdfua2.md`). Tag generation stays out of the ledger.
+- [x] Text extraction in the style of `txtwrite`, `show`, and PDF `Tj`. Landed in v0.0.3 (`plans/v0.0.3/9-text-and-fonts.md`). Text pixels never byte-match Ghostscript; extraction compares text and geometry.
 
 ## Dependencies
 

@@ -28,22 +28,69 @@ A mismatch is exit code 1. It is not an interpreter error.
 
 ## Box and ink coverage
 
-`MeasureBox` and `MeasureInk` read a finished `PageImage`. They do not paint a second time and they add no operator.
+`MeasureBox`, `MeasureInk`, and `MeasureInkAmount` read a finished `PageImage`. They do not paint a second time and they add no operator.
 
 The box is the union of marked pixels in points, origin at the lower left. A pixel marks when any of R, G, or B is not 255. `dpi` of 0 selects 72.
 
-Ink output is RGB occupancy: the fraction of pixels marked in each of R, G, and B. The pixmap is RGB, not CMYK, so the CLI line ends in `RGB` and not `CMYK OK`. These numbers are occupancy fractions, not Ghostscript `ink_cov` weighted amounts.
+`MeasureInk` is RGB occupancy: the fraction of pixels marked in each of R, G, and B. The pixmap is RGB, not CMYK, so the CLI line ends in `RGB` and not `CMYK OK`. These numbers are occupancy fractions, not Ghostscript `ink_cov` weighted amounts. `spectreps inkcov` prints them.
+
+### Weighted ink amounts
+
+`MeasureInkAmount` is the weighted ink amount. Let `N` be `Width * Height` and let `v_i` be the byte in the channel being measured, `c`, of pixel `i`, where `c` is R, G, or B. The amount is:
+
+```
+amount_c = (1/N) * sum (255 - v_i)/255
+```
+
+The sum ignores stride padding. A white byte contributes 0, a black byte contributes 1, and every other byte contributes its complement as a fraction. A zero-size image returns the zero `Ink`. `spectreps ink_cov` prints `amount * 100` with five decimals and the `RGB` suffix.
+
+Worked example. A 20 by 20 page holds a cyan square (`0 1 1 setrgbcolor`) over 10 by 10 pixels. Those 100 pixels are `(0, 255, 255)` and the other 300 are white.
+
+- R: 100 pixels contribute `(255-0)/255 = 1` and 300 contribute 0, so the amount is `100/400 = 0.25`.
+- G and B: the square bytes are 255, so both amounts are 0.
+
+`spectreps ink_cov -w 20 -h 20 -r 72` prints `Page 1`, then `25.00000 0.00000 0.00000 RGB`.
+
+Second worked example. Every pixel on a byte-128 gray page is `(128, 128, 128)`. Each byte contributes `(255-128)/255 = 127/255 = 0.49803921...`, so the page prints `49.80392 49.80392 49.80392 RGB`.
+
+The alternatives considered:
+
+- Luma. One number per pixel, `0.299*R + 0.587*G + 0.114*B`, folds the channels into a display-weighted brightness. It loses which channel is heavy, and its weights are not ink weights. The report could not keep three RGB columns.
+- Total occupancy. The existing `MeasureInk` counts a marked channel as 1 no matter how dark the byte is. A 1 percent cyan tint and a full cyan pixel both count once. That is the Ghostscript `inkcov` device, not `ink_cov`. It cannot tell a light page from a dark one.
+
+The per-channel complement wins because it keeps both facts: which channel and how much. It is the continuous refinement of occupancy: a byte counts `(255 - v)/255` instead of 1, so a black byte counts 1 and a byte at 254 counts `1/255`. White and black land on the two ends. The channels stay R, G, and B because the pixmap is RGB, so the line keeps the `RGB` suffix.
+
+Manual versus source. The 10.09.0 manual example line shows fractions, and its walk-through says a half cyan fill reports `0.50 0.00 0.00 0.00` for `ink_cov`. The source (`devices/gdevicov.c`, `cov_write_page_ink`) computes `c = dc_pix*100 / (total_pix*255)` and prints a percent. The source is the reference. Measured by hand on the installed 9.55.0:
+
+```
+$ gs -q -dNOPAUSE -dBATCH -sDEVICE=ink_cov -g20x20 -r72 -o- quarter-cyan.ps
+25.00000  0.00000  0.00000  0.00000 CMYK OK
+$ gs -q -dNOPAUSE -dBATCH -sDEVICE=ink_cov -g20x20 -r72 -o- half-cyan.ps
+49.80392  0.00000  0.00000  0.00000 CMYK OK
+```
+
+The first file fills a quarter page with 100 percent cyan. The second fills a whole page with a 50 percent cyan tint, which the CMYK8 device stores as byte 127, so the printed value is `127/255 * 100`. A full black page prints `100.00000` on K. Spectre follows the source: it scales the amount by 100 and keeps the same five decimals. The suffix is `RGB`, not `CMYK OK`, because the Spectre pixmap is RGB.
 
 ## Image XObjects
 
 The reader walks the xref for in-use objects whose dictionary has `/Subtype /Image`. `ImageObjectNums` returns their object numbers in ascending order. `DecodeImage` returns an `image.Image` or an error. It never returns a blank image for a failed decode.
 
-Two stream forms decode at 8 bits per component:
+Four stream forms decode:
 
-- `/FlateDecode` with `/DeviceRGB` or `/DeviceGray`, through the same zlib path as content streams. A predictor above 1 is rejected.
+- `/FlateDecode` with `/DeviceRGB` or `/DeviceGray` at 8 bits per component, through the same zlib path as content streams. A predictor above 1 is rejected.
 - `/DCTDecode` through `image/jpeg`.
+- `/CCITTFaxDecode` with `/DeviceGray` at 1 bit per component, through `golang.org/x/image/ccitt`. `/K < 0` is Group 4, `/K == 0` with `/EndOfLine true` is Group 3, and `/K > 0` is undefined. `/Columns` and `/Rows` default to `/Width` and `/Height`, `/BlackIs1` inverts the samples, and `/EncodedByteAlign` byte-aligns the codes. `Columns * Rows` above the 32 MiB decoded cap returns `limitcheck` before allocation.
+- `/JPXDecode` through `github.com/mrjoshuak/go-jpeg2000`, a pure-Go decoder. `/ColorSpace` and `/BitsPerComponent` are optional and ignored for JPX: the codestream carries the color and the precision, so the branch runs before the shared parameter check. A header that declares more decoded sample bytes than the 32 MiB Flate cap returns `limitcheck` before the decoder allocates.
 
-Any other filter, color space, or bit depth returns `undefined`, as does a Flate stream whose byte count does not match width by height by components. JPEG is lossy, so decoded pixels are not a byte oracle for the source.
+Any other filter, color space, or bit depth returns `undefined`, as does a Flate stream whose byte count does not match width by height by components. JPEG is lossy, so decoded pixels are not a byte oracle for the source; a JPEG2000 stream may be lossless or lossy. A failed decode returns `syntaxerror` or `limitcheck`, never a blank image.
+
+## Painting images
+
+The content interpreter resolves `Do` in the page's `/XObject` resources. `/Resources` inherits from the nearest `/Pages` ancestor, and the `/XObject` subdictionary, the image entry, and the image itself may each be indirect. An image decodes once per name per painted page.
+
+An image paints into its unit square: `(0,0)` is the lower left and `(1,1)` is the upper right. The square maps through the current matrix (`cm`), then scales by the paint scale. The pixmap stamps it with nearest-neighbor sampling, image row 0 is the top of the square, and the alpha channel is ignored. `Marker.DrawImage(pic image.Image, ctm Matrix, scale float64)` is the device seam, and the pixmap and the rewrite recorder implement it.
+
+A missing name, an entry whose `/Subtype` is not `/Image`, an image with an `/SMask`, and a decode error all return `undefined` with the `Do` operator name. Level 0 of `RewritePDF` cannot write image pixels, so a page that paints one returns `undefined in Do` instead of dropping or outlining the image. The pass-through writer at levels 1 through 5 copies the image unchanged.
 
 ## Rewrite
 
@@ -53,28 +100,52 @@ The level 0 writer omits a wall-clock creation date and uses a fixed trailer id 
 
 The output is not a copy of the input xref, and it is not expected to match `pdfwrite` from any Ghostscript version.
 
-The pass-through writer (`WriteCopy`) serves levels 1 through 5. It copies every object it does not replace: the page tree, `/Resources`, fonts, annotations, and metadata. An object stored in an object stream is written uncompressed through `SerializeValue`. An override replaces a whole object body by number. The trailer uses the source `/Root`, `/Size` as the highest in-use object number plus one, and `/ID` as the SHA-256 of the written object bodies. Two calls on the same source return equal buffers, and the file carries no `/Info` and no dates.
+The pass-through writer (`WriteCopy`) serves levels 1 through 5. It copies every object it does not replace: the page tree, `/Resources`, fonts, annotations, and metadata. A source `/Type /XRef` or `/Type /ObjStm` container is not copied, so its object number becomes a free xref row and no dead container bytes reach the output. An object stored in an object stream is written uncompressed through `SerializeValue`. An override replaces a whole object body by number. The trailer uses the source `/Root`, `/Size` as the highest in-use object number plus one, and `/ID` as the SHA-256 of the written bodies only, in object-number order. Two calls on the same source return equal buffers, and the file carries no `/Info` and no dates.
+
+`CopyOptions.PackObjects` selects the optional packed output: `%PDF-1.5`, every non-stream body in one Flate `/Type /ObjStm`, and a Flate `/Type /XRef` stream with `W [1 4 2]` in place of the classic xref. The `/ID` digest is computed over the unpacked bodies before packing, so it does not change with the mode. The levels 1 through 5 path does not select the packed output.
+
+A tagged source is a separate case. Levels 1 through 5 copy the structure tree, the parent tree, MCIDs, `/Alt`, `/ActualText`, and `/Lang`, and the writer keeps the source header block, binary marker included, so a PDF 2.0 file with tags does not leave as a 1.4 shell. Level 0 returns `/tagged` instead of building a path-only file that dropped the tree. `ImagePDF` and `WriteImages` take page and image values and never see a source document, so the `pdfimage` command refuses a tagged PDF before it rasterizes.
 
 The level table:
 
 | Level | Name | Content streams | Images |
 | --- | --- | --- | --- |
-| 0 | Path subset | re-emitted, Flate when `CompressStreams` is true | unchanged |
+| 0 | Path subset | re-emitted, Flate when `CompressStreams` is true | unchanged; a painted image is `undefined in Do` |
 | 1 | Light | Flate every uncompressed stream | unchanged |
-| 2 | Balanced | Flate | Flate and raw image streams re-encoded losslessly, no resample |
+| 2 | Balanced | Flate | Flate, raw, and CCITT image streams re-encoded losslessly, no resample |
 | 3 | Medium | Flate | re-encoded as DCT, longest side capped at 1754 px, quality 80 |
 | 4 | Strong | Flate | re-encoded as DCT, longest side capped at 1123 px, quality 60 |
 | 5 | Hard | Flate | re-encoded as DCT, longest side capped at 842 px, quality 40 |
 
-An image at or below its cap keeps its size. An image Spectre cannot decode, and an image with an `/SMask`, is copied unchanged. A level above 0 ignores `CompressStreams`. Every page reaches the output with the same page count and boxes, because the writer copies the page tree.
+An image at or below its cap keeps its size. An image Spectre cannot decode, and an image with an `/SMask`, is copied unchanged. Level 2 re-encodes Flate, raw, and CCITT streams, so DCT and JPEG2000 streams copy through. Levels 3 through 5 decode DCT, CCITT, and JPEG2000 streams and re-encode them as DCT with the same caps and qualities. A level above 0 ignores `CompressStreams`. Every page reaches the output with the same page count and boxes, because the writer copies the page tree.
 
 The image helpers are three functions in `internal/pdfout`. `ScaleImage` takes any `image.Image` and returns RGBA resampled with the CatmullRom kernel from `golang.org/x/image/draw`; width and height below 1 clamp to 1. `EncodeDCT` wraps `image/jpeg` with the quality clamped to 1 through 100, and `EncodeFlateRGB` writes tightly packed RGB rows, top row first, inside zlib. All three are deterministic, so the same input returns the same bytes. Levels 3 through 5 call `ScaleImage` and `EncodeDCT`, and level 2 calls `EncodeFlateRGB`.
+
+## Tagged preflight
+
+The structure model is `internal/pdf/structtree.go`. It parses `/MarkInfo`, `/StructTreeRoot`, `/K`, `/S`, `/P`, `/Pg`, `/MCID`, `/Alt`, `/ActualText`, `/Lang`, `/Namespaces`, `/RoleMap`, `/RoleMapNS`, and `/ParentTree` into typed values. The tree walk caps depth at 64 and reports a cycle as `limitcheck`. The parent tree resolves an MCID to its structure element and back; a claim with no agreeing entry is `undefined in ParentTree`. A role map resolves a custom type to a standard type; a cycle or a chain past 32 hops is `limitcheck`, a mapping into its own namespace or to itself is `syntaxerror`, and an unmapped custom type is `undefined`.
+
+The font check is dictionary-level only. A font passes when it has `/ToUnicode`, or when it is a simple font with a standard `/Encoding`. Otherwise an `/ActualText` on the structure element or an ancestor covers the run. The preflight does not decode glyphs. The claim is preflight only, never certification.
+
+`internal/pdfa` adds the PDF/UA-2 metadata and the machine checks. `ReadUA2` reads the catalog `/Metadata` packet with the `pdfuaid` values and `dc:title`, plus `/Lang`, `/MarkInfo`, and `/ViewerPreferences`. `UA2Write` keeps the source claim and adds `pdfuaid:part 2` and `pdfuaid:rev 2024` only when the caller opted in after a passing preflight. `UA2XMP`, `UA2ExtraObjects`, and `UA2Catalog` produce the stream and the catalog.
+
+`PreflightUA2` is the UA-2 request, separate from the PDF/A preflight. It returns `Error: /ua2-<rule> in PDFUA` for `ua2-marked`, `ua2-structtree`, `ua2-document`, `ua2-lang`, `ua2-displaydoctitle`, `ua2-pdfuaid`, `ua2-title`, `ua2-rolemap`, and `ua2-mcid`. A PDF/A-only problem such as an LZW stream or a non-embedded font does not fail the UA-2 request, and the UA-2 checks never run for a PDF/A request. The claim is preflight only, never certification.
+
+`make pdfua2-check` runs `verapdf --flavour ua2 --format json` over the PDFs under `sampledata/pdfua2/` and skips when the CLI is absent. A `negative/` subfolder holds deliberate failures and is excluded. On 2026-09-25, veraPDF 1.30.2 reported 1727 passed rules and 0 failed rules for `tagged-ua2.pdf` and `compliant-ua2.pdf`. The verdict is veraPDF's.
+
+## PostScript output
+
+`WritePostScript` builds a date-free PostScript program from drawing operations on a `Document`. It borrows `pdf.Paint`, so each page carries the same path subset as `RewritePDF` level 0, re-emitted as `setrgbcolor` or `setgray`, `setlinewidth`, `m` and `l`, and `S`, `f`, or `f*`. Coordinates are 72 dpi points.
+
+The program starts with `%!PS-Adobe-3.0` and a fixed `%%BoundingBox: 0 0 612 792`. A prolog defines the short path names in terms of `moveto`, `lineto`, `stroke`, `fill`, and `eofill`, because a bare `m` or `S` is not a PostScript operator. Each page gets a `%%Page` comment and one `showpage`, and the program ends with `%%EOF`. There is no creation date, and two calls on the same document return equal buffers, so `CompareFiles` is the proof.
+
+The PDF painter flattens `c` into straight segments before the recorder sees it, so the writer emits what `pdf.Paint` gives and never writes `curveto`. The recorder refuses text and images: `Tj` returns `undefined in Tj`, so a text page does not leave as a silently blank program. The proof is a round trip: a PDF page with `re`/`f`, `m`/`l`/`S`, a curve, and `q`/`Q`/`cm` becomes PostScript, runs back through `RunPostScript` at 72 dpi, and matches under `CompareRaster`.
 
 ## Bitmap PDF
 
 `ImagePDF` wraps each `PageImage` in one PDF page. The default image is 24-bit RGB, 8 bits per component, `/ColorSpace /DeviceRGB`, `/Filter /FlateDecode`. `ImagePDFColor` also writes DeviceGray and DeviceCMYK. The stored stream is the tightly packed rows, so stride padding is dropped. `/MediaBox` is `[0 0 width*72/dpi height*72/dpi]` points, and a `dpi` of zero or less selects 72.
 
-Each page has one content stream and one image XObject. The content stream is `q W 0 0 H 0 0 cm /Im0 Do Q`, and `/Resources` carries the XObject. Spectre's PDF interpreter still returns `undefined` for `Do`, so rasterizing this output is not the proof. The test decodes the image stream and compares it with `PageImage`.
+Each page has one content stream and one image XObject. The content stream is `q W 0 0 H 0 0 cm /Im0 Do Q`, and `/Resources` carries the XObject. Rasterizing this output is a round trip: the reopened file decodes the image and stamps it back at 1:1 through the same `Do` path, so `RasterizePage` matches the source `PageImage` under `CompareRaster` for the RGB and gray spaces.
 
 The writer emits objects in a fixed order, adds no `/Info`, and sets both trailer `/ID` strings to the SHA-256 of the concatenated Flate image streams. Two calls on the same pages return equal buffers, and `CompareFiles` is the proof. The output is not `pdfwrite` and it is not a DCT encode.
 
@@ -117,7 +188,57 @@ Worked example. Pure red is `(255, 0, 0)`.
 
 For PostScript, any `JobError` fails the command. For PDF, repair-and-continue is not the default of this command. A bad xref, a bad stream, or an unsupported operator fails the command with that `JobError`. Rendering commands may later warn and continue. `validate` does not.
 
-`validate` does not write PDF/A metadata and does not claim conformance. PDF/A creation, if it is ever added, is a rewrite option and still not a certificate.
+`validate` does not write PDF/A metadata and does not run the PDF/A preflight. PDF/A creation is the rewrite option below, and its result is not a certificate.
+
+## PDF/A-4 profile preflight
+
+`RewritePDF` with `RewriteOptions.PDFA` set writes a pass-through rewrite and appends a PDF/A-4 claim. `PDFA4` is the base claim and `PDFA4F` claims PDF/A-4f. PDF/A-4e stays out of scope.
+
+The claim is a profile preflight, not a certificate. Every line in this file and in the CLI treats it as a claim.
+
+The writer changes three things:
+
+- The header becomes `%PDF-2.0` followed by a marker line whose four bytes are above byte 127. The trailer keeps `/ID` and writes no `/Encrypt`.
+- The catalog gains `/Metadata` on an XMP stream and `/OutputIntents` on one output intent. Every other catalog entry is copied unchanged, and every other source object is copied by the pass-through writer.
+- The XMP stream is a static UTF-8 packet with `pdfaid:part` 4 and `pdfaid:rev` 2020. PDF/A-4f adds the `F` conformance letter. The packet carries no dates.
+
+The output intent is `/S /GTS_PDFA1`. It carries `/DestOutputProfile` on a generated D50 sRGB matrix-shaper ICC profile and writes no `/DestOutputProfileRef`. The profile is built in `internal/pdfa`, not copied from another file.
+
+`RewriteOptions.Level` still selects stream and image handling. Level 0 copies streams unchanged, and levels 1 through 5 use the level table above. A PDF/A rewrite uses the pass-through writer and never the level 0 path re-emitter, so text and fonts are copied.
+
+The preflight refuses the claim with a `JobError` whose `Op` is `PDFA` and whose `Msg` is the failed rule:
+
+| Rule | Refusal |
+| --- | --- |
+| `font-not-embedded` | A font dictionary with no `/FontFile`, `/FontFile2`, or `/FontFile3` on its descriptor. A Type 3 font is exempt. |
+| `lzwdecode` | A stream filter chain that names `LZWDecode`. |
+| `filter-not-allowed` | A filter name outside the ISO 32000-2 filter table, including `Crypt`. |
+| `cmyk-without-profile` | A dictionary color space that names `DeviceCMYK`. The output intent is RGB, so no matching CMYK profile exists. |
+| `alternates-not-allowed` | An image dictionary with `/Alternates`. |
+| `opi-not-allowed` | An image dictionary with `/OPI`. |
+| `blend-mode-not-allowed` | A `/BM` entry whose value is not `Normal`. |
+| `embedded-files-need-4f` | `PDFA4` on an input whose catalog has `/Names /EmbeddedFiles`. |
+| `4f-needs-embedded-files` | `PDFA4F` on an input with no `/Names /EmbeddedFiles`. |
+
+The scan walks every in-use object, not only the page tree, so an unused font or stream can still refuse the claim. The scan reads dictionaries and not content streams, so a `k` or `K` color operator in page content is not caught. The preflight does not embed fonts, convert color, or decode LZW.
+
+`make pdfa-check` runs `verapdf --flavour 4` over the PDFs under `sampledata/pdfa/` and skips when the CLI is absent. A `negative/` subfolder is excluded. On 2026-09-25, veraPDF 1.30.2 reported both `path-a4.pdf`, a Spectre write, and the copied `compliant-a4.pdf` valid for PDF/A-4 with 0 failed jobs. That is veraPDF's verdict for those files, not a Spectre certificate.
+
+Two rewrites of the same input and mode return equal bytes, because the packet, the profile, and the trailer `/ID` are fixed.
+
+## Text and fonts
+
+Fonts come from `internal/font` for the standard 14 metrics, encodings, and glyph names, and from `golang.org/x/image/font/sfnt` for embedded TrueType and OpenType programs. The model, its sources, and the painting policy are in `documentation/fonts.md`.
+
+PDF text operators: `BT`, `ET`, `Tf`, `Td`, `TD`, `Tm`, `T*`, `Tc`, `Tw`, `Tz`, `TL`, `Ts`, `Tj`, `TJ`, `'`, and `"`. The text state and the text matrices follow ISO 32000-1. `q` and `Q` save and restore the text state, and `BT` resets both matrices.
+
+A simple font reads `/Widths`, `/FirstChar`, `/MissingWidth`, `/FontDescriptor`, and `/BaseFont`, with the standard 14 metrics as the fallback when `/Widths` is absent. `/Encoding` names StandardEncoding, WinAnsiEncoding, or MacRomanEncoding, and `/Differences` overrides codes by name. `/ToUnicode` CMaps (`bfchar` and `bfrange`) win over the encoding and the Adobe Glyph List. A Type0 font reads `/Encoding /Identity-H`, a CIDFontType2 descendant, `/CIDToGIDMap`, `/W`, and `/DW`.
+
+The show operators deliver each positioned glyph to the `TextOptions.Sink` seam with its code, Unicode, advance, and device box. `File.ExtractText` reads that sink and lays the glyphs out: lines sort top to bottom, glyphs on one baseline sort left to right, a gap wider than a quarter of the box height inserts a space, and each line ends with CRLF. A font with no `/ToUnicode` and no named encoding falls back to the code point.
+
+Painting needs an outline program. The standard 14 ship no outlines and Spectre does not substitute host fonts, so painting a standard 14 glyph returns `invalidfont`. Advances, encodings, and extraction still work, because the glyph box and the text need metrics only. A `/FontFile2` or OpenType `/FontFile3` stream is the outline source when one exists. Type 1 `/FontFile`, bare CFF, and Type0 fonts outside Identity-H are out of this tag.
+
+Text pixels never byte-match Ghostscript, because hinting and antialiasing differ. Text tests compare shapes and advances, and extraction tests compare text and geometry, never `CompareRaster` against `gs`.
 
 ## PDF subset for the first PDF tag
 
@@ -126,24 +247,22 @@ Phase 06 reads:
 - A header starting with `%PDF-`.
 - Classic xref tables, then xref streams in a following row of the same phase.
 - Flate-decoded content streams via `compress/flate`.
-- Page content operators `m l c h re S s f f* n q Q cm w RG rg g G`.
+- Page content operators `m l c h re S s f f* n q Q cm w RG rg g G Do BT ET Tf Td TD Tm T* Tc Tw Tz TL Ts Tj TJ ' "`.
 
 Those operators map to the same path and color operations as `moveto` `lineto` `curveto` `closepath` `stroke` `fill` `eofill` `gsave` `grestore` `concat` `setlinewidth` `setrgbcolor` `setgray`.
 
-`Tj`, `TJ`, `'`, `"`, and `Do` return `undefined` with the operator name filled in, unless a later phase defines them. A page that uses them does not rasterize as a blank success.
+`Do` paints an image XObject and returns `undefined` with the `Do` operator name when the name or image cannot decode. The text operators paint and extract through the font machine above. A font with no outline source paints as `invalidfont`, and a Type 1, bare CFF, or non-Identity Type0 font is out of this tag. A page that uses an unsupported operator does not rasterize as a blank success.
 
 Encrypted files return `invalidaccess`. Unknown filters return `undefined`.
 
 ## Shared device interface inside the module
 
-Unexported, owned by `internal/graphics` once phase 04 starts:
+Owned by `internal/graphics`. The pixmap device and the PDF rewrite recorder both implement it. The PostScript operators and the PDF content interpreter call it. They do not call each other's parsers.
 
 ```go
-type Device interface {
-    Stroke(path Path, style Style)
-    Fill(path Path, style Style, evenOdd bool)
-    ShowPage()
+type Marker interface {
+    Stroke(pts []Point, width, red, green, blue float64)
+    Fill(pts []Point, red, green, blue float64, evenOdd bool)
+    DrawImage(pic image.Image, ctm Matrix, scale float64)
 }
 ```
-
-The pixmap device and the PDF rewrite device both implement it. The PostScript operators and the PDF content interpreter call it. They do not call each other's parsers.

@@ -97,10 +97,10 @@ func TestRunPostScript(t *testing.T) {
 		t.Fatalf("default page %dx%d count %d", pages[0].Width, pages[0].Height, len(pages))
 	}
 	in := newInst(t)
-	_, err := in.RunPostScript(t.Context(), []byte("show"), spectreps.RunOptions{})
+	_, err := in.RunPostScript(t.Context(), []byte("/Nope findfont"), spectreps.RunOptions{})
 	var job spectreps.JobError
-	if !errors.As(err, &job) || job.Msg != "undefined" || job.Op != "show" {
-		t.Fatalf("show error = %v", err)
+	if !errors.As(err, &job) || job.Msg != "invalidfont" || job.Op != "findfont" {
+		t.Fatalf("findfont error = %v", err)
 	}
 }
 
@@ -111,7 +111,7 @@ func TestFixturePPM(t *testing.T) {
 		ResolutionDPI: 72,
 	})
 	got := encodePPM(pages[0])
-	want, err := os.ReadFile("../testdata/line-bottom.ppm")
+	want, err := os.ReadFile("../sampledata/fixtures/line-bottom.ppm")
 	if err != nil {
 		t.Fatal(err)
 	}

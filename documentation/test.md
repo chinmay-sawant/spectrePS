@@ -2,7 +2,7 @@
 
 These are the tests for the jobs in `documentation/covered-and-not-covered.md`. Each bullet is one case. The expected result is the contract in `documentation/language.md`, `documentation/devices.md`, `documentation/cli.md`, and `documentation/public-api.md`.
 
-Tests call package `spectreps` or the `spectreps` binary. They do not run `/usr/bin/gs`. Fixtures are Spectre output, checked in under `testdata/` when the first raster or PDF case lands. PNG file bytes are not an equality oracle. The oracle is `PageImage`, or a PPM raw body when the header is part of the case.
+Tests call package `spectreps` or the `spectreps` binary. They do not run `/usr/bin/gs`. Fixtures are Spectre output or hand-built, checked in under `sampledata/fixtures/`. PNG file bytes are not an equality oracle. The oracle is `PageImage`, or a PPM raw body when the header is part of the case. Text extraction is not a raster test either: the oracle is the text and the geometry, because text pixels never byte-match Ghostscript.
 
 External tests use `package spectreps_test`, so they only see the exported API.
 
@@ -15,7 +15,7 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - Unknown command, unknown flag, and a missing input file exit 2.
 - A missing input path that the program tries to read exits 3.
 - `raster` and `rewrite` without `-o` exit 2, including while the job itself is still `ErrNotImplemented`.
-- A cancelled context passed to `RunPostScript`, `OpenPDF`, `RasterizePage`, `RewritePDF`, or `ImagePDF` returns `ctx.Err()` and no partial success.
+- A cancelled context passed to `RunPostScript`, `OpenPDF`, `RasterizePage`, `ExtractText`, `RewritePDF`, or `ImagePDF` returns `ctx.Err()` and no partial success.
 
 ## PostScript subset
 
@@ -26,7 +26,7 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - `div` pushes a real. Division by zero is `undefinedresult`. Integer overflow on `add` is `rangecheck`. `copy` with a non-integer top operand is `typecheck`.
 - `eq` treats int 1 and real 1.0 as equal. `eq` on two distinct arrays with the same elements is false. `eq` on the same array object is true.
 - Dictionary `forall` walks entries in insertion order.
-- `def` into `systemdict` is `invalidaccess`. `def` into `userdict` succeeds. `end` when only `systemdict` remains is `dictstackunderflow`. `]` with no mark is `unmatchedmark`. `exit` outside a loop is `invalidexit`. `show` is `undefined`.
+- `def` into `systemdict` is `invalidaccess`. `def` into `userdict` succeeds. `end` when only `systemdict` remains is `dictstackunderflow`. `]` with no mark is `unmatchedmark`. `exit` outside a loop is `invalidexit`. `save` is `undefined`.
 - Operand stack past 8192 is `stackoverflow`. Execution stack past 500, dictionary stack past 20, and procedure nesting past 128 are `limitcheck`.
 - `for` with a zero increment is `rangecheck`.
 
@@ -73,21 +73,47 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - A fixture with a `%PDF-` header, a classic xref, and a Flate content stream opens. The page count is the page tree length.
 - A fixture that uses an xref stream and a Flate object stream opens, and the page count is right.
 - Content operators `m l c h re S s f f* n q Q cm w RG rg g G` paint through the same device as the PostScript path operators. A one-page path PDF and the PostScript program of the same marks compare equal with `CompareRaster`.
-- `Tj`, `TJ`, `'`, `"`, and `Do` each return `JobError` with the operator name filled in. The page is not a blank success.
+- `Do` resolves a name in the page's `/XObject` resources, requires `/Subtype /Image`, decodes the image once per name, and stamps it into the unit square through the CTM and the paint scale. `/Resources` on a `/Pages` ancestor is inherited. A missing name, a non-image subtype, an image with an `/SMask`, and a decode error each return `JobError` with `Do` and `undefined`. The rejected page is not a blank success.
 - An encrypted file returns `invalidaccess`. An unknown stream filter returns `undefined`. A truncated xref returns `JobError`.
 - `RasterizePage` with a negative index, or an index past the last page, returns `rangecheck`.
 - `spectreps raster -o out.ppm in.pdf` writes the P6 file for a path-only fixture.
+
+## Text and extraction
+
+- `BT`, `ET`, `Tf`, `Td`, `TD`, `Tm`, `T*`, `Tc`, `Tw`, `Tz`, `TL`, and `Ts` maintain the text state. `q` and `Q` save and restore it, and `BT` resets the text matrices. `Q` does not restore the matrices, which are not part of the graphics state.
+- A simple font reads `/Widths`, `/FirstChar`, `/MissingWidth`, `/FontDescriptor`, and `/BaseFont`, with the standard 14 metrics as the fallback when `/Widths` is absent. `/Encoding` with `/Differences` renames codes, and a `bfchar` or `bfrange` CMap overrides the encoding and the glyph list.
+- A `/FontFile2` or OpenType `/FontFile3` program maps a code through the program's glyph names and then its cmap. `/Widths` wins for the advance and the program advance is the fallback. A Type0 Identity-H font maps two-byte codes through `/CIDToGIDMap`, with `/W` and `/DW` for the advances. The embedded-font fixture is a synthetic program built in the test helper, so no third-party font bytes are checked in.
+- `Tj`, `TJ`, `'`, and `"` deliver each positioned glyph to the sink with its code, Unicode, advance, and device box. TJ numbers, `'`, and `"` move the next glyph with the widths and the character and word spacing.
+- Painting a standard 14 glyph, a Type 1 `/FontFile`, or a bare CFF stream returns `invalidfont` and leaves the page white, while the sink still records the advance and Unicode. Embedded outlines blend coverage through `x/image/vector`; a checked-in PPM locks the result and a translated glyph moves the marked box.
+- `File.ExtractText` and `spectreps.ExtractText` sort by Y then X, merge close runs, insert a space for a gap wider than a quarter box, end every line with CRLF, and fall back to the code point. A two-line fixture locks `Hello\r\nWorld\r\n` and a symbolic font locks `AB\r\n`. A bad page index is `rangecheck`.
+- `spectreps text [-pages range] file.pdf` prints the selected pages to stdout. The command accepts no other option, and `-pages` follows the shared grammar.
+- PostScript `findfont`, `scalefont`, `setfont`, and `show` resolve the standard 14 names. `show` advances the current point, needs a current point, and returns `invalidfont` on a pixmap because the standard 14 have no outline program.
 
 ## PDF rewrite
 
 - `RewritePDF` on a document this module can rasterize returns a PDF. Opening that PDF and rasterizing page 0 matches `RasterizePage` of the input, via `CompareRaster`.
 - `DefaultRewriteOptions` selects level 0 and Flate-compresses page content streams. `CompressStreams` false leaves those streams uncompressed. Both outputs still match the input pixels.
 - `RewriteOptions.Level` is 0 by default. Level 0 re-emits the path subset. Levels 1 through 5 use the pass-through writer, so text, fonts, and the page tree are copied and the page count and boxes match the input. A level outside 0 through 5 returns `rangecheck` from `RewritePDF` and exits 2 from the CLI.
-- Level 1 Flates every uncompressed content stream. Level 2 also re-encodes Flate and raw image streams losslessly with no resample. Levels 3 through 5 also re-encode images as DCT. The longest-side caps are 1754, 1123, and 842 pixels, at qualities 80, 60, and 40. An image at or below the cap keeps its size. An image Spectre cannot decode, and an image with an `/SMask`, is copied unchanged.
+- A source `/Type /XRef` or `/Type /ObjStm` container is not copied: its object number gets a free xref row, the `/ID` covers only the written bodies, and the page count and boxes hold. `CopyOptions.PackObjects` writes the optional packed form, `%PDF-1.5` with one Flate `/Type /ObjStm` for non-stream bodies and a Flate `/Type /XRef` stream. The packed and classic forms carry the same `/ID`, and two calls in either form are equal.
+- Level 1 Flates every uncompressed content stream. Level 2 also re-encodes Flate, raw, and CCITT image streams losslessly with no resample. Levels 3 through 5 also re-encode images as DCT. The longest-side caps are 1754, 1123, and 842 pixels, at qualities 80, 60, and 40. An image at or below the cap keeps its size. An image Spectre cannot decode, and an image with an `/SMask`, is copied unchanged.
+- A Group 4 CCITT image decodes to exact gray pixels at every level: level 2 re-encodes it as Flate RGB and levels 3 through 5 as DCT. A Group 3 stream needs `/EndOfLine true`, and a byte-aligned Group 3 stream needs `/EncodedByteAlign true`. `/K > 0`, a missing end-of-line marker, an 8-bit depth, and a `DeviceRGB` space return `undefined`; a stream truncated inside a row returns `syntaxerror`; `Columns * Rows` above 32 MiB returns `limitcheck`. An undecodable CCITT stream copies through at every level.
 - Two `RewritePDF` calls at any level on the same input return buffers `CompareFiles` reports equal. The output contains no `CreationDate` or `ModDate`.
 - The rewritten bytes are not required to equal the input bytes, and they are not compared with Ghostscript `pdfwrite`.
 - `spectreps rewrite` without `-o` exits 2. `-compress=false` selects the uncompressed level 0 option. `-level 1` through `-level 5` succeed on a text stream that level 0 rejects with `undefined`. A successful rewrite exits 0.
 - `sampledata/compress/whatisthis.pdf` and `sampledata/compress/path.pdf` rewrite at every level with the input page count. The JPEG image decodes, the caps hold, and level 5 is the smallest of the five. The test skips when `sampledata/` is absent.
+
+## PDF/A-4 profile preflight
+
+- The PDF/A writer emits `%PDF-2.0` followed by a binary marker whose four bytes are above byte 127. The trailer keeps `/ID` and writes no `/Encrypt`. Both `WriteWithOptions` and `WriteCopy` take the option.
+- `CopyOptions.AppendObjects` writes complete bodies after the highest source object number, and `CopyOptions.CatalogOverride` replaces the root body. The copied catalog keeps its other entries.
+- The XMP packet is static UTF-8 with `pdfaid:part` 4, `pdfaid:rev` 2020, and the `F` letter for 4f. It carries no dates, and two calls return equal bytes.
+- The generated ICC profile is a D50 sRGB matrix-shaper with the `desc`, `cprt`, `wtpt`, `rXYZ`, `gXYZ`, `bXYZ`, `rTRC`, `gTRC`, and `bTRC` tags. The output intent is `/S /GTS_PDFA1` with `/DestOutputProfile` and no `/DestOutputProfileRef`.
+- The preflight refuses a font with no embedded file, `LZWDecode`, a filter outside the ISO 32000-2 table, `DeviceCMYK`, `/Alternates`, `/OPI`, and a `/BM` other than `Normal`. Every refusal is a `JobError` with `Op` `PDFA` and the failed rule in `Msg`.
+- `PDFA4` is refused when the catalog carries `/Names /EmbeddedFiles`, and `PDFA4F` is refused when it does not.
+- `RewritePDF` with a PDF/A mode returns bytes that open with the same page count. Two calls on the same document return equal buffers, and the output carries no `CreationDate`, `ModDate`, or `xmp:MetadataDate`.
+- `spectreps rewrite -pdfa 4|4f` writes the file and exits 0, a refusal exits 1 with `Error: /rule in PDFA`, and any other `-pdfa` value exits 2. A refusal writes no output file.
+- `make pdfa-check` runs `verapdf --flavour 4` over the PDFs under `sampledata/pdfa/`, excludes a `negative/` subfolder, prefers a local copy at `./verapdf/verapdf`, falls back to `verapdf` on PATH, and prints a skip when neither exists. The local copy is gitignored. veraPDF is a proof tool, not a dependency, and it stays out of `make test`. On 2026-09-25, veraPDF 1.30.2 reported `compliant="2" nonCompliant="0"` for `path-a4.pdf` and `compliant-a4.pdf`. The verdict is veraPDF's; the claim wording stays "profile preflight".
+- `make pdfua2-check` runs `verapdf --flavour ua2 --format json` over the PDFs under `sampledata/pdfua2/`, uses the same local-copy preference and skip, and excludes `negative/`. On 2026-09-25, veraPDF 1.30.2 reported 1727 passed rules and 0 failed rules for `tagged-ua2.pdf` and `compliant-ua2.pdf`. The `negative/untagged.pdf` fixture fails `ua2-marked` by design.
 
 ## Bitmap PDF
 
@@ -97,7 +123,7 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - CMYK is `K = 1 - max(r, g, b)` with `C = (1 - r - K) / (1 - K)` and the same for M and Y, each rounded to a byte, and `C = M = Y = 0` when `K >= 1`. Pure red decodes to `0 255 255 0`.
 - `spectreps pdfimage -colorspace gray|cmyk` writes those streams, `-colorspace rgb` is the same as the default, and any other value exits 2.
 - `/MediaBox` is `[0 0 width*72/dpi height*72/dpi]` points. `dpi` of 0 or less selects 72.
-- The content stream paints `/Im0 Do` and the page resources carry the XObject. `Do` still returns `undefined` when Spectre opens the file, so the test decodes the image stream from the bytes instead of rasterizing the output.
+- The content stream paints `/Im0 Do` and the page resources carry the XObject. The output reopens and rasterizes: `RasterizePage` matches the source `PageImage` under `CompareRaster` for RGB and gray, and `spectreps raster` on the `pdfimage` output matches the PPM of the source program.
 - Two `ImagePDF` calls on the same pages return buffers `CompareFiles` reports equal. The bytes contain no `CreationDate`, `ModDate`, or `/Info`. Both trailer `/ID` strings are the SHA-256 of the concatenated image streams.
 - `spectreps pdfimage` without `-o` exits 2. A `.pdf` input rasterizes every selected page with `RasterizePage`; any other input uses `RunPostScript`. `-pages` picks the pages either way, and the output has one page per selected input page. The output file is mode `0o600`.
 - `pdfimage` is not `pdfwrite` and it does not DCT-encode.

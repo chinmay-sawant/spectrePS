@@ -8,6 +8,9 @@ import (
 	"github.com/chinmay-sawant/spectrePS/internal/pdf"
 )
 
+// pdfHeaderPrefix is the start of every PDF header block.
+const pdfHeaderPrefix = "%PDF-"
+
 // CopySource is the reader view the copy writer needs.
 // *pdf.File implements it.
 type CopySource interface {
@@ -19,13 +22,76 @@ type CopySource interface {
 
 // CopyOptions holds complete replacement object bodies keyed by object number.
 // An override wins over the source body and is written as given.
+// PackObjects writes PDF 1.5: non-stream bodies go into a Flate /Type /ObjStm
+// and a /Type /XRef stream carries the rows and the trailer. The /ID digest
+// does not change, so it stays independent of packing.
 type CopyOptions struct {
-	Overrides map[int][]byte
+	Overrides   map[int][]byte
+	PackObjects bool
+	// AppendObjects holds complete bodies written after the highest in-use
+	// source object number, in order. The body at index 0 is object
+	// ObjectCount()+1.
+	AppendObjects [][]byte
+	// CatalogOverride replaces the copied catalog body when it is non-nil and
+	// the source root number is in use. Every other object is copied unchanged.
+	CatalogOverride []byte
+	// PDFA selects the %PDF-2.0 header with a binary marker above byte 127.
+	// The trailer keeps /ID and writes no /Encrypt.
+	PDFA bool
 }
 
-// WriteCopy builds a classic PDF 1.4 file from every in-use source object.
+// headerSource is a CopySource that knows its PDF header block and whether the
+// source carries tags. A tagged source keeps its header version, so a PDF 2.0
+// file with tags does not leave as a 1.4 shell.
+type headerSource interface {
+	Header() []byte
+	HasStructTree() bool
+}
+
+// copyHeader returns the source header block. An untagged source, and a source
+// that does not expose a header, writes the classic PDF 1.4 header. A tagged
+// source keeps its own header, including a PDF 2.0 binary marker.
+func copyHeader(src CopySource) []byte {
+	tagged, ok := src.(headerSource)
+	if !ok || !tagged.HasStructTree() {
+		return []byte(headerLine)
+	}
+	header := tagged.Header()
+	if !bytes.HasPrefix(header, []byte(pdfHeaderPrefix)) {
+		return []byte(headerLine)
+	}
+	if len(header) == 0 || header[len(header)-1] != '\n' {
+		header = append(header, '\n')
+	}
+	return header
+}
+
+// The dead container objects of a source file. A classic copy writes neither,
+// so their object numbers become free xref rows.
+const (
+	keyContainerType = "Type"
+	containerXRef    = "XRef"
+	containerObjStm  = "ObjStm"
+)
+
+// isContainer reports whether val is a /Type /XRef or /Type /ObjStm object.
+func isContainer(val pdf.Value) bool {
+	name, ok := val.NameEntry(keyContainerType)
+	if !ok {
+		return false
+	}
+	return name == containerXRef || name == containerObjStm
+}
+
+// WriteCopy builds a copied PDF from every in-use source object.
 // An object uses the override when present, then the stored source bytes, then
-// pdf.SerializeValue. A free or missing number stays free.
+// pdf.SerializeValue. A free or missing number stays free. A source /Type
+// /XRef or /Type /ObjStm container is not copied, so its number stays free.
+// AppendObjects are written after the source numbers, and CatalogOverride
+// replaces the root body when it is set.
+// An untagged source writes the classic PDF 1.4 header. A tagged source keeps
+// its own header block, so a PDF 2.0 file with tags does not leave as a 1.4
+// shell. When PDFA is set, the PDF/A-4 header wins over both.
 // The trailer uses /Root from src and /ID as the SHA-256 of the written bodies.
 // Two calls on the same source return equal bytes, and the file carries no
 // /Info and no dates.
@@ -42,7 +108,26 @@ func WriteCopy(ctx context.Context, src CopySource, opt CopyOptions) ([]byte, er
 	if err != nil {
 		return nil, err
 	}
-	return buildCopyFile(src.RootNum(), objects), nil
+	objects = applyCopyExtras(src, opt, objects)
+	if opt.PackObjects {
+		return buildPackedCopyFile(src.RootNum(), objects)
+	}
+	header := copyHeader(src)
+	if opt.PDFA {
+		header = []byte(headerFor(true))
+	}
+	return buildCopyFile(src.RootNum(), objects, header), nil
+}
+
+// applyCopyExtras returns objects with the catalog override applied and the
+// appended bodies at the end. A root number that is not an in-use source
+// object leaves the copied catalog alone.
+func applyCopyExtras(src CopySource, opt CopyOptions, objects [][]byte) [][]byte {
+	root := src.RootNum()
+	if opt.CatalogOverride != nil && root > 0 && root < len(objects) {
+		objects[root] = opt.CatalogOverride
+	}
+	return append(objects, opt.AppendObjects...)
 }
 
 // collectCopy returns one body per object number. Index 0 is unused, and a nil
@@ -59,26 +144,32 @@ func collectCopy(src CopySource, opt CopyOptions) ([][]byte, error) {
 	return objects, nil
 }
 
+// copyBody returns the body for one object number, or nil for a free number.
+// An override wins and is written as given. A source /Type /XRef or /Type
+// /ObjStm container is skipped: the copy writes a classic xref instead.
 func copyBody(src CopySource, opt CopyOptions, num int) ([]byte, error) {
 	if body, ok := opt.Overrides[num]; ok {
 		return body, nil
 	}
-	if body, ok := src.RawObject(num); ok {
-		return body, nil
-	}
-	val, ok, err := src.ObjectValue(num)
+	val, found, err := src.ObjectValue(num)
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
+	if found && isContainer(val) {
+		return nil, nil
+	}
+	if body, ok := src.RawObject(num); ok {
+		return body, nil
+	}
+	if !found {
 		return nil, nil
 	}
 	return pdf.SerializeValue(val), nil
 }
 
-func buildCopyFile(root int, objects [][]byte) []byte {
+func buildCopyFile(root int, objects [][]byte, header []byte) []byte {
 	var buf bytes.Buffer
-	buf.WriteString(headerLine)
+	buf.Write(header)
 	offsets := make([]int, len(objects))
 	written := make([][]byte, 0, len(objects))
 	for num := 1; num < len(objects); num++ {

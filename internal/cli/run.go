@@ -33,6 +33,7 @@ const (
 	jpegMinQuality     = 1
 	jpegMaxQuality     = 100
 	maxRewriteLevel    = 5
+	inkPercentScale    = 100
 )
 
 // Run parses args and returns the process exit code.
@@ -44,6 +45,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	return dispatch(args, stdout, stderr)
 }
 
+//nolint:cyclop // one case per command, and the list is the CLI
 func dispatch(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "version":
@@ -54,32 +56,41 @@ func dispatch(args []string, stdout, stderr io.Writer) int {
 		return cmdRaster(args[1:], stderr)
 	case "pdfimage":
 		return cmdPDFImage(args[1:], stderr)
-	case "bbox", "inkcov":
+	case "bbox", "inkcov", "ink_cov":
 		return cmdMeasure(args[0], args[1:], stdout, stderr)
 	case "rewrite":
 		return cmdRewrite(args[1:], stderr)
+	case "ps":
+		return cmdPS(args[1:], stderr)
 	case "validate":
 		return cmdValidate(args[1:], stderr)
+	case "text":
+		return cmdText(args[1:], stdout, stderr)
 	case "compare":
 		return cmdCompare(args[1:], stdout, stderr)
-	default:
-		usage(stderr)
-		return exitUsage
+	case "gs":
+		return cmdGS(args[1:], stdout, stderr)
 	}
+	usage(stderr)
+	return exitUsage
 }
 
 func usage(w io.Writer) {
 	fmt.Fprint(w, `spectreps version
 spectreps run [-w points] [-h points] [-r dpi] [-o path] file
-spectreps raster [-w points] [-h points] [-r dpi] [-jpegq quality]
-                [-tiffcompress none|deflate] [-pages range] -o path file
+spectreps raster [-w points] [-h points] [-r dpi] [-format ppm|png|jpeg|tiff]
+                [-jpegq quality] [-tiffcompress none|deflate] [-pages range] -o path file
 spectreps pdfimage [-w points] [-h points] [-r dpi] [-colorspace rgb|gray|cmyk] [-pages range] -o path file
 spectreps bbox [-w points] [-h points] [-r dpi] [-pages range] file
 spectreps inkcov [-w points] [-h points] [-r dpi] [-pages range] file
-spectreps rewrite [-compress] [-level N] -o path file.pdf
+spectreps ink_cov [-w points] [-h points] [-r dpi] [-pages range] file
+spectreps rewrite [-compress] [-level N] [-pdfa 4|4f] -o path file.pdf
+spectreps ps -o path file.pdf
 spectreps validate file
+spectreps text [-pages range] file.pdf
 spectreps compare bytes fileA fileB
 spectreps compare raster [-w points] [-h points] [-r dpi] [-pages range] [-o path] fileA fileB
+spectreps gs [-sDEVICE=name] [-sOutputFile=path] [switches] file
 `)
 }
 
@@ -116,6 +127,7 @@ func cmdRaster(args []string, stderr io.Writer) int {
 	outPath := set.String("o", "", "output path")
 	jpegq := set.Int("jpegq", jpegDefaultQuality, "jpeg quality, 1 to 100")
 	tiffcompress := set.String("tiffcompress", "deflate", "tiff compression, none or deflate")
+	format := set.String("format", "", "output format: ppm, png, jpeg, or tiff")
 	sel := pageFlag(set)
 	rest, code := parseSet(set, args)
 	if code != 0 {
@@ -128,6 +140,11 @@ func cmdRaster(args []string, stderr io.Writer) int {
 	encoding, ok := tiffEncodingFromFlag(*tiffcompress)
 	if !ok {
 		fmt.Fprintf(stderr, "spectreps: -tiffcompress wants none or deflate, got %q\n", *tiffcompress)
+		return exitUsage
+	}
+	formatChoice, ok := parseRasterFormat(*format)
+	if !ok {
+		fmt.Fprintf(stderr, "spectreps: -format wants ppm, png, jpeg, or tiff, got %q\n", *format)
 		return exitUsage
 	}
 	opt := spectreps.RunOptions{
@@ -155,7 +172,7 @@ func cmdRaster(args []string, stderr io.Writer) int {
 			Op: "RasterizePage", Msg: "rangecheck", Filename: "", Line: 0, Column: 0,
 		})
 	}
-	return writePages(*outPath, pages, clampJPEGQuality(*jpegq), encoding, stderr)
+	return writePages(*outPath, pages, clampJPEGQuality(*jpegq), encoding, formatChoice, stderr)
 }
 
 func cmdPDFImage(args []string, stderr io.Writer) int {
@@ -194,7 +211,7 @@ func cmdPDFImage(args []string, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
-	pages, err := pageImages(in, path, src, opt, *sel)
+	pages, err := pageImagesPolicy(in, path, src, opt, *sel, true)
 	if err != nil {
 		return finish(stderr, err)
 	}
@@ -225,9 +242,12 @@ func cmdMeasure(name string, args []string, stdout, stderr io.Writer) int {
 		return code
 	}
 	for i, page := range pages {
-		if name == "bbox" {
+		switch name {
+		case "bbox":
 			writeBBox(stdout, page, opt.ResolutionDPI)
-		} else {
+		case "ink_cov":
+			writeInkAmount(stdout, i+1, page)
+		default:
 			writeInk(stdout, i+1, page)
 		}
 	}
@@ -285,11 +305,20 @@ func writeInk(w io.Writer, page int, img spectreps.PageImage) {
 	fmt.Fprintf(w, "%.5f %.5f %.5f RGB\n", ink.R, ink.G, ink.B)
 }
 
+// writeInkAmount prints the weighted amount as a percent per channel.
+func writeInkAmount(w io.Writer, page int, img spectreps.PageImage) {
+	ink := spectreps.MeasureInkAmount(img)
+	fmt.Fprintf(w, "Page %d\n", page)
+	fmt.Fprintf(w, "%.5f %.5f %.5f RGB\n",
+		ink.R*inkPercentScale, ink.G*inkPercentScale, ink.B*inkPercentScale)
+}
+
 func cmdRewrite(args []string, stderr io.Writer) int {
 	set := newFlagSet("rewrite", stderr)
 	outPath := set.String("o", "", "output path")
 	compress := set.Bool("compress", true, "flate content streams at level 0")
 	level := set.Int("level", 0, "compression level, 0 through 5")
+	pdfaFlag := set.String("pdfa", "", "PDF/A profile, 4 or 4f")
 	rest, code := parseSet(set, args)
 	if code != 0 {
 		return code
@@ -298,20 +327,40 @@ func cmdRewrite(args []string, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "spectreps: -level wants 0 through 5, got %d\n", *level)
 		return exitUsage
 	}
+	mode, ok := parsePDFAMode(*pdfaFlag)
+	if !ok {
+		fmt.Fprintf(stderr, "spectreps: -pdfa wants 4 or 4f, got %q\n", *pdfaFlag)
+		return exitUsage
+	}
 	if len(rest) != 1 || *outPath == "" {
 		usage(stderr)
 		return exitUsage
 	}
-	return rewriteToFile(stderr, rest[0], *outPath, rewriteOptions(*level, *compress))
+	return rewriteToFile(stderr, rest[0], *outPath, rewriteOptions(*level, *compress, mode))
+}
+
+// parsePDFAMode maps the -pdfa flag. An empty value leaves the claim off.
+func parsePDFAMode(value string) (spectreps.PDFAMode, bool) {
+	switch value {
+	case "":
+		return spectreps.PDFANone, true
+	case "4":
+		return spectreps.PDFA4, true
+	case "4f":
+		return spectreps.PDFA4F, true
+	default:
+		return spectreps.PDFANone, false
+	}
 }
 
 // rewriteOptions maps the flags. An explicit level above 0 wins. Level 0 keeps
-// the -compress switch as the Flate option.
-func rewriteOptions(level int, compress bool) spectreps.RewriteOptions {
+// the -compress switch as the Flate option, and a PDF/A mode switches the
+// writer.
+func rewriteOptions(level int, compress bool, mode spectreps.PDFAMode) spectreps.RewriteOptions {
 	if level > 0 {
-		return spectreps.RewriteOptions{CompressStreams: true, Level: level}
+		return spectreps.RewriteOptions{CompressStreams: true, Level: level, PDFA: mode}
 	}
-	return spectreps.RewriteOptions{CompressStreams: compress, Level: 0}
+	return spectreps.RewriteOptions{CompressStreams: compress, Level: 0, PDFA: mode}
 }
 
 func rewriteToFile(stderr io.Writer, inPath, outPath string, opt spectreps.RewriteOptions) int {
@@ -349,6 +398,47 @@ func writeRewrite(path string, payload []byte, stderr io.Writer) int {
 		return exitIO
 	}
 	return exitOK
+}
+
+func cmdPS(args []string, stderr io.Writer) int {
+	set := newFlagSet("ps", stderr)
+	outPath := set.String("o", "", "output path")
+	rest, code := parseSet(set, args)
+	if code != 0 {
+		return code
+	}
+	if len(rest) != 1 || *outPath == "" {
+		usage(stderr)
+		return exitUsage
+	}
+	return psToFile(stderr, rest[0], *outPath)
+}
+
+// psToFile opens a PDF and writes its path subset as PostScript.
+func psToFile(stderr io.Writer, inPath, outPath string) int {
+	in, code := newInstance(stderr)
+	if code != 0 {
+		return code
+	}
+	defer in.Close()
+	src, code := readFile(inPath, stderr)
+	if code != 0 {
+		return code
+	}
+	payload, err := psBytes(in, src)
+	if err != nil {
+		return finish(stderr, err)
+	}
+	return writeRewrite(outPath, payload, stderr)
+}
+
+func psBytes(in *spectreps.Instance, src []byte) ([]byte, error) {
+	ctx := context.Background()
+	doc, err := in.OpenPDF(ctx, src)
+	if err != nil {
+		return nil, err
+	}
+	return in.WritePostScript(ctx, doc, spectreps.PostScriptOptions{})
 }
 
 func cmdValidate(args []string, stderr io.Writer) int {
@@ -480,6 +570,7 @@ func writePages(
 	pages []spectreps.PageImage,
 	jpegQuality int,
 	tiffCompress tiffEncoding,
+	format rasterFormat,
 	stderr io.Writer,
 ) int {
 	if len(pages) > 1 && !strings.Contains(outPath, "%d") {
@@ -491,7 +582,7 @@ func writePages(
 		if strings.Contains(path, "%d") {
 			path = strings.ReplaceAll(path, "%d", strconv.Itoa(i+1))
 		}
-		payload, err := encodePage(path, page, jpegQuality, tiffCompress)
+		payload, err := encodePage(path, page, jpegQuality, tiffCompress, format)
 		if err != nil {
 			fmt.Fprintln(stderr, err.Error())
 			return exitIO
@@ -507,7 +598,25 @@ func writePages(
 	return exitOK
 }
 
-func encodePage(path string, page spectreps.PageImage, jpegQuality int, tiffCompress tiffEncoding) ([]byte, error) {
+func encodePage(
+	path string,
+	page spectreps.PageImage,
+	jpegQuality int,
+	tiffCompress tiffEncoding,
+	format rasterFormat,
+) ([]byte, error) {
+	switch format {
+	case rasterPPM:
+		return encodePPM(page), nil
+	case rasterPNG:
+		return encodePNG(page)
+	case rasterJPEG:
+		return encodeJPEG(page, jpegQuality)
+	case rasterTIFF:
+		return encodeTIFF(page, tiffCompress)
+	case rasterFromPath:
+		// The zero value follows the -o suffix below.
+	}
 	switch {
 	case strings.HasSuffix(path, ".png"):
 		return encodePNG(page)

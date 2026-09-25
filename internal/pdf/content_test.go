@@ -14,6 +14,7 @@ const (
 	nameLimit     = "limitcheck"
 	nameNoPoint   = "nocurrentpoint"
 	nameUnderflow = "stackunderflow"
+	nameType      = "typecheck"
 	rgbBytes      = 3
 	whiteByte     = 255
 	pageSide      = 20
@@ -48,25 +49,95 @@ func TestPaintRedRect(t *testing.T) {
 	wantPixel(t, img, 15, 15, whiteByte, whiteByte, whiteByte)
 }
 
+// TestContentScannerNameText locks the seam that carries name text to the
+// operand stack, so Do and Tf can read name operands.
+func TestContentScannerNameText(t *testing.T) {
+	lex := scanner{src: []byte("/Im Do"), pos: 0}
+	tok, ok, err := lex.next()
+	if err != nil || !ok {
+		t.Fatalf("next: ok=%v err=%v", ok, err)
+	}
+	if tok.kind != ctokName || tok.text != "Im" {
+		t.Fatalf("name token = %+v", tok)
+	}
+	run := newRunner(nil, 1)
+	if err := run.take(tok); err != nil {
+		t.Fatal(err)
+	}
+	name, err := run.popName("Do")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name != "Im" {
+		t.Fatalf("popName = %q", name)
+	}
+}
+
+// TestPaintNameOperand locks the name seam: the scanner carries name text to
+// the operand stack and popName returns it. A non-name operand is typecheck
+// and a missing operand is stackunderflow, both with the Do operator name.
+func TestPaintNameOperand(t *testing.T) {
+	cases := []struct {
+		name    string
+		src     string
+		want    string
+		errName string
+	}{
+		{name: "name", src: "/Im", want: "Im"},
+		{name: "missing", errName: nameUnderflow},
+		{name: "number", src: "1", errName: nameType},
+		{name: "string", src: "(Hi)", errName: nameType},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			run := newRunner(nil, 1)
+			lex := scanner{src: []byte(tt.src), pos: 0}
+			for {
+				tok, ok, err := lex.next()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !ok {
+					break
+				}
+				if err := run.take(tok); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got, err := run.popName("Do")
+			if tt.errName != "" {
+				wantJobErr(t, err, "Do", tt.errName)
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Fatalf("popName = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestPaintUndefined(t *testing.T) {
 	pixmap := graphics.NewPixmap(4, 4)
 	cases := []struct {
 		src    string
 		opName string
+		want   string
 	}{
-		{src: "(Hi) Tj", opName: "Tj"},
-		{src: "/Im Do", opName: "Do"},
-		{src: "TJ", opName: "TJ"},
-		{src: "'", opName: "'"},
-		{src: `"`, opName: `"`},
-		{src: "[ (Hi) 20 ] TJ", opName: "TJ"},
-		{src: "<4869> Tj", opName: "Tj"},
-		{src: "<< /Im /X >> Do", opName: "Do"},
+		{src: "(Hi) Tj", opName: "Tj", want: nameUndefined},
+		{src: "/Im Do", opName: "Do", want: nameUndefined},
+		{src: "1 Do", opName: "Do", want: nameType},
+		{src: "<< /Im /X >> Do", opName: "Do", want: nameType},
+		{src: "[ (Hi) 20 ] TJ", opName: "TJ", want: nameUndefined},
+		{src: "(Hi) '", opName: "'", want: nameUndefined},
+		{src: "1 1 (Hi) \"", opName: "\"", want: nameUndefined}, {src: "<4869> Tj", opName: "Tj", want: nameUndefined},
 	}
 	for _, tt := range cases {
-		t.Run(tt.opName, func(t *testing.T) {
+		t.Run(tt.src, func(t *testing.T) {
 			err := Paint(t.Context(), []byte(tt.src), pixmap, 1)
-			wantJobErr(t, err, tt.opName, nameUndefined)
+			wantJobErr(t, err, tt.opName, tt.want)
 		})
 	}
 }
@@ -141,6 +212,7 @@ func TestPaintStackUnderflow(t *testing.T) {
 		{src: "w", opName: "w"},
 		{src: "rg", opName: "rg"},
 		{src: "G", opName: "G"},
+		{src: "Do", opName: "Do"},
 	}
 	for _, tt := range cases {
 		t.Run(tt.src, func(t *testing.T) {

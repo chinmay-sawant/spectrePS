@@ -6,7 +6,12 @@ import (
 
 	"github.com/chinmay-sawant/spectrePS/internal/pdf"
 	"github.com/chinmay-sawant/spectrePS/internal/pdfout"
+	"github.com/chinmay-sawant/spectrePS/internal/psout"
 )
+
+// taggedMsg is the JobError message for a tagged input a generated writer
+// cannot keep. It reads "Error: /tagged in <op>".
+const taggedMsg = "tagged"
 
 // Document is an open PDF. file holds the parsed objects.
 type Document struct {
@@ -20,6 +25,15 @@ func (doc *Document) PageCount() int {
 		return 0
 	}
 	return doc.file.PageCount()
+}
+
+// Tagged reports whether the document carries a structure tree or a
+// /MarkInfo /Marked true claim. A nil document reports false.
+func (doc *Document) Tagged() bool {
+	if doc == nil || doc.file == nil {
+		return false
+	}
+	return doc.file.HasStructTree()
 }
 
 // OpenPDF opens a PDF and returns its document.
@@ -41,6 +55,9 @@ func (in *Instance) OpenPDF(ctx context.Context, src []byte) (*Document, error) 
 // RewritePDF writes a new PDF from the open document.
 // Level 0 re-emits the path subset. Levels 1 through 5 use the pass-through
 // writer. A level outside 0 through 5 is rangecheck.
+// A PDFA mode uses the pass-through writer, runs the profile preflight, and
+// appends the PDF/A-4 metadata and output intent. A refused preflight returns
+// a JobError with Op "PDFA" and the failed rule in Msg.
 func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOptions) ([]byte, error) {
 	if ctx == nil {
 		panic("spectreps: nil context")
@@ -50,10 +67,16 @@ func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOp
 	}
 	_ = in
 	if doc == nil || doc.file == nil {
-		return nil, JobError{Op: "RewritePDF", Msg: "rangecheck", Filename: "", Line: 0, Column: 0}
+		return nil, rewriteJobError("rangecheck")
 	}
-	if opt.Level < 0 || opt.Level > pdfout.MaxCompressionLevel {
-		return nil, JobError{Op: "RewritePDF", Msg: "rangecheck", Filename: "", Line: 0, Column: 0}
+	if !rewriteRangeOK(opt) {
+		return nil, rewriteJobError("rangecheck")
+	}
+	if opt.PDFA != PDFANone {
+		return rewritePDFA(ctx, doc.file, opt)
+	}
+	if opt.Level == 0 && doc.Tagged() {
+		return nil, JobError{Op: "RewritePDF", Msg: taggedMsg, Filename: "", Line: 0, Column: 0}
 	}
 	if opt.Level == 0 {
 		return rewriteEmitted(ctx, doc.file, opt.CompressStreams)
@@ -61,15 +84,19 @@ func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOp
 	return rewriteLevel(ctx, doc.file, opt.Level)
 }
 
+// rewriteRangeOK reports whether the option values are in range.
+func rewriteRangeOK(opt RewriteOptions) bool {
+	if opt.Level < 0 || opt.Level > pdfout.MaxCompressionLevel {
+		return false
+	}
+	return opt.PDFA >= PDFANone && opt.PDFA <= PDFA4F
+}
+
 func rewriteEmitted(ctx context.Context, file *pdf.File, compress bool) ([]byte, error) {
 	count := file.PageCount()
 	pages := make([]pdfout.Page, 0, count)
 	for i := range count {
-		content, err := file.Content(i)
-		if err != nil {
-			return nil, asPDFJobError(err)
-		}
-		emitted, err := pdfout.Emit(ctx, content)
+		emitted, err := pdfout.EmitPage(ctx, file, i)
 		if err != nil {
 			return nil, asPDFJobError(err)
 		}
@@ -87,7 +114,63 @@ func rewriteLevel(ctx context.Context, file *pdf.File, level int) ([]byte, error
 	if err != nil {
 		return nil, asPDFJobError(err)
 	}
-	out, err := pdfout.WriteCopy(ctx, file, pdfout.CopyOptions{Overrides: overrides})
+	opt := pdfout.CopyOptions{
+		Overrides:       overrides,
+		PackObjects:     false,
+		AppendObjects:   nil,
+		CatalogOverride: nil,
+		PDFA:            false,
+	}
+	out, err := pdfout.WriteCopy(ctx, file, opt)
+	if err != nil {
+		return nil, asPDFJobError(err)
+	}
+	return out, nil
+}
+
+// WritePostScript writes a date-free PostScript program from the open document.
+// The same path subset as RewritePDF level 0 is re-emitted: setrgbcolor or
+// setgray, setlinewidth, m and l, and S, f, or f*. Coordinates are 72 dpi
+// points in a fixed 612 by 792 box, with one showpage per page.
+// Text and images wait for the font and image machines, so a content operator
+// Spectre cannot emit returns undefined with its operator name, the same error
+// RewritePDF returns. A text page fails with undefined in Tj.
+// A nil document returns rangecheck. A nil context panics and a canceled
+// context returns ctx.Err().
+func (in *Instance) WritePostScript(
+	ctx context.Context,
+	doc *Document,
+	opt PostScriptOptions,
+) ([]byte, error) {
+	if ctx == nil {
+		panic("spectreps: nil context")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	_ = in
+	_ = opt
+	if doc == nil || doc.file == nil {
+		return nil, JobError{Op: "WritePostScript", Msg: "rangecheck", Filename: "", Line: 0, Column: 0}
+	}
+	return writePostScript(ctx, doc.file)
+}
+
+func writePostScript(ctx context.Context, file *pdf.File) ([]byte, error) {
+	count := file.PageCount()
+	pages := make([]psout.Page, 0, count)
+	for i := range count {
+		content, err := file.Content(i)
+		if err != nil {
+			return nil, asPDFJobError(err)
+		}
+		emitted, err := psout.Emit(ctx, content)
+		if err != nil {
+			return nil, asPDFJobError(err)
+		}
+		pages = append(pages, psout.Page{Content: emitted})
+	}
+	out, err := psout.Write(ctx, pages, psout.WriteOptions{})
 	if err != nil {
 		return nil, asPDFJobError(err)
 	}

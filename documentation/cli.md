@@ -2,7 +2,7 @@
 
 Binary name `spectreps`, built at `bin/spectreps` by `make build`.
 
-The CLI is a caller of package `spectreps`. Flags exist to fill `RunOptions`, `RewriteOptions`, and file paths. Ghostscript's full switch grammar is not a goal of the current tags. A compatibility mode that accepts a `gs` argv can be proposed later in `plans/v0.0.1/10-deferred.md`. The switches the current subcommands can already express are mapped in `documentation/gs-argv-mapping.md`; Spectre does not accept a `gs` argv.
+The CLI is a caller of package `spectreps`. Flags exist to fill `RunOptions`, `RewriteOptions`, and file paths. Ghostscript's full switch grammar is not a goal. The bounded mode under `spectreps gs` accepts the allowlisted switches in `documentation/gs-argv-grammar.md`; `documentation/gs-argv-mapping.md` maps a rewritten `gs` job onto a plain Spectre command line.
 
 ## Commands
 
@@ -13,15 +13,21 @@ spectreps raster [options] file.ps|file.pdf
 spectreps pdfimage [options] file.ps|file.pdf
 spectreps bbox [options] file.ps|file.pdf
 spectreps inkcov [options] file.ps|file.pdf
+spectreps ink_cov [options] file.ps|file.pdf
 spectreps rewrite [options] file.pdf
+spectreps ps -o path file.pdf
+spectreps text [-pages range] file.pdf
 spectreps validate [options] file.ps|file.pdf
 spectreps compare bytes fileA fileB
 spectreps compare raster [options] fileA fileB
+spectreps gs [switches] file.ps|file.pdf
 ```
+
+`gs` is the bounded compatibility mode. It accepts only the switches in `documentation/gs-argv-grammar.md` and routes the job to the commands above. Any other switch exits 2 with a message that names it.
 
 `version` prints `0.0.2`. Exit 0.
 
-Shared options for `run`, `raster`, `pdfimage`, `bbox`, `inkcov`, and `compare raster`:
+Shared options for `run`, `raster`, `pdfimage`, `bbox`, `inkcov`, `ink_cov`, and `compare raster`:
 
 | Flag | Meaning | Default |
 | --- | --- | --- |
@@ -50,7 +56,7 @@ Any other `-colorspace` value exits 2. `rgb` keeps the 24-bit RGB bytes from ear
 
 `run` and `compare raster` do not accept `-jpegq`, `-tiffcompress`, or `-colorspace`.
 
-`bbox` and `inkcov` write their report to stdout and do not write a file.
+`bbox`, `inkcov`, and `ink_cov` write their report to stdout and do not write a file.
 
 `rewrite` options:
 
@@ -59,10 +65,23 @@ Any other `-colorspace` value exits 2. `rgb` keeps the 24-bit RGB bytes from ear
 | `-o` | Output PDF path | required |
 | `-compress` | Flate content streams at level 0 | true |
 | `-level` | Compression level, 0 through 5 | 0 |
+| `-pdfa` | PDF/A-4 claim: `4` or `4f` | omitted |
 
-`-level 0` re-emits the path subset and keeps `-compress` as the Flate switch. `-level 1` through `-level 5` use the pass-through writer, so text, fonts, and content Spectre cannot interpret are copied. A level above 0 Flates content streams and ignores `-compress`. The image policy per level is in `documentation/devices.md`. Any other value exits 2.
+`-level 0` re-emits the path subset and keeps `-compress` as the Flate switch. `-level 1` through `-level 5` use the pass-through writer, so text, fonts, and content Spectre cannot interpret are copied. A level above 0 Flates content streams and ignores `-compress`. The image policy per level is in `documentation/devices.md`. Any other value exits 2. A tagged PDF at `-level 0` exits 1 with `Error: /tagged in RewritePDF`; levels 1 through 5 keep the tags and the source header version.
 
-`validate` takes one input and writes errors to stderr. It has no output file.
+`-pdfa 4` claims PDF/A-4 base and `-pdfa 4f` claims PDF/A-4f. A claim uses the pass-through writer at the selected level, appends the XMP metadata and the sRGB output intent, and changes the header to `%PDF-2.0` with a binary marker. The command runs the profile preflight first. A known violation exits 1 with one stderr line in the form `Error: /rule in PDFA`, and writes no output file. The rules are the table in `documentation/devices.md`. The claim is a profile preflight, not a certificate.
+
+`ps` options:
+
+| Flag | Meaning | Default |
+| --- | --- | --- |
+| `-o` | Output PostScript path | required |
+
+`ps` opens a PDF and re-emits each page's path subset as one date-free PostScript program. The header is `%!PS-Adobe-3.0` with a fixed 612 by 792 box. Marks are `setrgbcolor` or `setgray`, `setlinewidth`, `m`/`l`, and `S`/`f`/`f*` in 72 dpi points, and a prolog defines the short names. Text and images are not emitted: a page with `Tj` exits 1 with `Error: /undefined in Tj`. The file is written at mode `0o600`, and bytes are stable across two runs. `documentation/devices.md` has the shape.
+
+`text` opens a PDF and prints the extracted text of the selected pages to stdout. Lines run top to bottom and left to right, each line ends with CRLF, and a font with neither `/ToUnicode` nor a named encoding falls back to the code point. The command accepts `-pages` and no other option. Extraction is compared as text and geometry, not as raster bytes: text pixels never byte-match Ghostscript, because hinting and antialiasing differ. `documentation/devices.md` has the layout.
+
+`validate` takes one input and writes errors to stderr. It has no output file. `validate` does not run the PDF/UA-2 preflight yet. That preflight is `internal/pdfa.PreflightUA2`, it runs only for a UA-2 request, and its rules are in `documentation/devices.md`. The scope is preserve and preflight, and the claim is preflight only.
 
 `compare bytes` takes two paths and no device flags. `compare raster` rasterizes the selected pages of both inputs with the same options and calls `CompareRaster` on each page pair. A `.pdf` input opens with `OpenPDF` and paints each selected page with `RasterizePage`; any other input uses `RunPostScript`. Different selected page counts print `mismatch length` and exit 1. It does not hash the encoded files.
 
@@ -94,9 +113,20 @@ Page 1
 
 The three fractions are RGB occupancy with five digits after the point. They are not CMYK, and the line does not end in `CMYK OK`.
 
+`ink_cov` writes the same two lines per page with the weighted amount as a percent per channel:
+
+```
+Page 1
+25.00000 0.00000 0.00000 RGB
+```
+
+The formula and both worked examples are in `documentation/devices.md`. The channels are R, G, and B because the pixmap is RGB, so the line still ends in `RGB`. The CLI prints `MeasureInkAmount` times 100.
+
 `rewrite` writes one PDF. The compression levels are in `documentation/devices.md`.
 
-`pdfimage` writes one PDF with one image page per input page. `-colorspace` selects 24-bit RGB, 8-bit DeviceGray, or 32-bit DeviceCMYK image streams, and `rgb` is the default. The input is a PostScript file or a PDF. A PDF input paints every page with `RasterizePage`, and any other input uses `RunPostScript`. The `-o` path is required and does not use `%d`. `-r 0` writes 72 dpi.
+`ps` writes one PostScript program with a date-free `%!PS-Adobe-3.0` header. The marks and the fixed box are in `documentation/devices.md`.
+
+`pdfimage` writes one PDF with one image page per input page. `-colorspace` selects 24-bit RGB, 8-bit DeviceGray, or 32-bit DeviceCMYK image streams, and `rgb` is the default. The input is a PostScript file or a PDF. A PDF input paints every page with `RasterizePage`, and any other input uses `RunPostScript`. A tagged PDF input exits 1 with `Error: /tagged in ImagePDF`, because the image PDF has no tags to keep. The `-o` path is required and does not use `%d`. `-r 0` writes 72 dpi.
 
 ## Exit codes
 
@@ -107,7 +137,7 @@ The three fractions are RGB occupancy with five digits after the point. They are
 | 2 | Usage. Missing file, unknown flag, unknown command, missing `-o`. |
 | 3 | A read or write failed before the interpreter ran. |
 
-`bbox` and `inkcov` exit 0 after printing every page, 1 on an interpreter error, and 2 on a missing input or a bad flag.
+`bbox`, `inkcov`, and `ink_cov` exit 0 after printing every page, 1 on an interpreter error, and 2 on a missing input or a bad flag.
 
 Mismatch text for compare, one line on stdout:
 

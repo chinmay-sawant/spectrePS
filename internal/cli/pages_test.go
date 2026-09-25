@@ -201,13 +201,13 @@ func pageSelectionRangeErrors(t *testing.T) {
 func pageSelectionPSFailure(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "bad.ps")
-	if err := os.WriteFile(src, []byte(pagePSRed+" showpage show"), 0o600); err != nil {
+	if err := os.WriteFile(src, []byte(pagePSRed+" showpage save"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	out := filepath.Join(dir, "bad-%d.ppm")
 	// Page 1 paints, but the range filter runs after RunPostScript, so the
 	// failing page 2 still fails the command.
-	want(t, pageRasterArgs(src, "1", out), 1, "", "Error: /undefined in show\n")
+	want(t, pageRasterArgs(src, "1", out), 1, "", "Error: /undefined in save\n")
 	pageNoFile(t, filepath.Join(dir, "bad-1.ppm"))
 }
 

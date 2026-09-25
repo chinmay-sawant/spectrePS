@@ -31,6 +31,47 @@ func TestImagePDFStable(t *testing.T) {
 	checkStableMismatch(t, in, pages[0], first)
 }
 
+// TestRasterizeOwnImagePDF proves the round trip: RunPostScript paints the
+// source page, ImagePDF wraps it, and RasterizePage of the reopened document
+// matches the source pixels under CompareRaster, for RGB and gray.
+func TestRasterizeOwnImagePDF(t *testing.T) {
+	in := newInst(t)
+	opt := spectreps.RunOptions{PageWidthPt: 20, PageHeightPt: 20, ResolutionDPI: 72}
+	pages, err := in.RunPostScript(t.Context(), []byte("0 0 moveto 10 0 lineto stroke"), opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pages) != 1 {
+		t.Fatalf("pages = %d", len(pages))
+	}
+	cases := []struct {
+		name  string
+		color spectreps.ImageColor
+	}{
+		{name: "rgb", color: spectreps.ImageColorRGB},
+		{name: "gray", color: spectreps.ImageColorGray},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			payload, err := in.ImagePDFColor(t.Context(), pages, 72, tt.color)
+			if err != nil {
+				t.Fatal(err)
+			}
+			doc, err := in.OpenPDF(t.Context(), payload)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := in.RasterizePage(t.Context(), doc, 0, opt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res := spectreps.CompareRaster(pages[0], got); !res.Equal {
+				t.Fatalf("CompareRaster = %+v", res)
+			}
+		})
+	}
+}
+
 func imagePDFBytes(t *testing.T, in *spectreps.Instance, pages []spectreps.PageImage, dpi float64) []byte {
 	t.Helper()
 	got, err := in.ImagePDF(t.Context(), pages, dpi)
