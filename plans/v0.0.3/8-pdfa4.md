@@ -50,11 +50,11 @@ PDF/A-4 base is the default claim, with 4f offered only when the input already c
 
 ### 4.1 Option and CLI
 
-- [ ] `RewriteOptions` gains a PDF/A mode, and `spectreps rewrite -pdfa 4[4f]` refuses non-conforming input with exit 1. Proof: `go test -count=1 ./spectreps -run TestRewritePDFA4` and `go test -count=1 ./internal/cli -run TestRewritePDFA4CLI`.
+- [x] `RewriteOptions` gains a PDF/A mode, and `spectreps rewrite -pdfa 4[4f]` refuses non-conforming input with exit 1. Proof: `go test -count=1 ./spectreps -run TestRewritePDFA4` and `go test -count=1 ./internal/cli -run TestRewritePDFA4CLI`. 2026-09-25: both pass. The CLI check also covers exit 2 on `-pdfa 5` and no output file on a refusal.
 
 ### 4.2 Stable bytes
 
-- [ ] Two runs with the same input and mode return equal bytes, with no dates. Proof: `go test -count=1 ./spectreps -run TestRewritePDFA4Stable`.
+- [x] Two runs with the same input and mode return equal bytes, with no dates. Proof: `go test -count=1 ./spectreps -run TestRewritePDFA4Stable`. 2026-09-25: pass.
 
 ## Phase 5: Validation, docs, and closure
 
