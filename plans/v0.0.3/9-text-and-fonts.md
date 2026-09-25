@@ -98,15 +98,18 @@ One glyph source serves both front ends: advances in 1/1000 em, outlines, encodi
 
 ### 4.1 Glyph sink
 
-- [ ] The sink records each positioned glyph with its code, Unicode, advance, and bounding box. Proof: `go test -count=1 ./internal/pdf -run TestTextSink`.
+- [x] The sink records each positioned glyph with its code, Unicode, advance, and bounding box. Proof: `go test -count=1 ./internal/pdf -run TestTextSink`.
+  Run 2026-09-25: `ok github.com/chinmay-sawant/spectrePS/internal/pdf 0.002s`. `Glyph.Box` is the device advance box: the baseline origin to the advanced origin horizontally, the nominal ascent and descent of the text size vertically. Building it never needs an outline program, and a translated CTM moves the box.
 
 ### 4.2 Layout
 
-- [ ] Fragments sort by Y then X, merge close runs, insert spaces, and write UTF-8 with CRLF per line, following the `txtwrite` default. Proof: `go test -count=1 ./internal/pdf -run TestExtractLayout`.
+- [x] Fragments sort by Y then X, merge close runs, insert spaces, and write UTF-8 with CRLF per line, following the `txtwrite` default. Proof: `go test -count=1 ./internal/pdf -run TestExtractLayout`.
+  Run 2026-09-25: `ok github.com/chinmay-sawant/spectrePS/internal/pdf 0.002s`. Lines sort top to bottom, glyphs on one baseline merge and sort left to right, a gap wider than a quarter box inserts a space, the code-point fallback fills a missing Unicode value, and every line ends with CRLF. The test also runs the whole path through `File.ExtractText` with a standard 14 font.
 
 ### 4.3 Public method and CLI
 
-- [ ] `spectreps.ExtractText` and a CLI command return the text, with a code-point fallback for fonts without `ToUnicode`. Proof: `go test -count=1 ./spectreps -run TestExtractTextGolden` against a two-line fixture.
+- [x] `spectreps.ExtractText` and a CLI command return the text, with a code-point fallback for fonts without `ToUnicode`. Proof: `go test -count=1 ./spectreps -run TestExtractTextGolden` against a two-line fixture.
+  Run 2026-09-25: `ok github.com/chinmay-sawant/spectrePS/spectreps 0.004s` for the two-line golden `Hello\r\nWorld\r\n`, the symbolic-font fallback `AB\r\n`, and `rangecheck in ExtractText`. CLI test: `go test -count=1 ./internal/cli -run TestTextCommand` `ok github.com/chinmay-sawant/spectrePS/internal/cli 0.005s`. `spectreps text [-pages range] file.pdf` prints the selected pages to stdout.
 
 ## Phase 5: Docs and closure
 
