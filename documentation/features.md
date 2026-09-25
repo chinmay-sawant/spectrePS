@@ -72,11 +72,11 @@ The released tag is v0.0.3. v0.0.2 added the page summaries, JPEG and TIFF raste
 
 | Feature | Why it waits | Next gate |
 | --- | --- | --- |
-| PDF/UA-2 tag generation | Reading order and role assignment are not implemented. Preservation and preflight landed in v0.0.3, and the font and text machine now exist. | A new plan file. |
+| PDF/UA-2 tag generation | Reading order and role assignment are not implemented. Preservation and preflight landed in v0.0.3, and the font and text machine now exist. | `plans/v0.0.4/3-pdfua2-tags.md`. |
 | PCLm | A different image-PDF flavor. | A plan file. |
-| Spot-color separations (`tiffsep`) | No separation model. | A plan file. |
-| PDF info, linearization, output encryption | Out of the current tags. | A new plan file. |
-| Full PDF 1.7 and PDF 2.0, including transparency and optional content | The reader is a subset of ISO 32000-2; transparency, optional content, encryption, and color management are out. | A new plan file. |
-| `bind`, `save`, `restore`, `clip`, and filters other than Flate | Out of the current PostScript subset. | A new plan file. |
-| Font embedding and subsetting | The font machine reads metrics and embedded programs; writing or subsetting a font is a separate job. | A new plan file. |
+| Spot-color separations (`tiffsep`) | No separation model. | `plans/v0.0.4/4-pdf-coverage.md`. |
+| PDF info, linearization, output encryption | Out of the current tags. `spectreps info` is phase 6 of the coverage plan; encryption and linearization need their own plan. | `spectreps info`: `plans/v0.0.4/4-pdf-coverage.md` phase 6. Encryption and linearization: a new plan file. |
+| Full PDF 1.7 and PDF 2.0, including transparency and optional content | The reader is a subset of ISO 32000-2; encryption and color management are out. | `plans/v0.0.4/4-pdf-coverage.md`. |
+| `bind`, `save`, `restore`, `clip`, and filters other than Flate | The PostScript operators stay out. PDF clip `W` and the remaining stream filters (LZW, ASCII85, ASCIIHex, RunLength, and Flate predictors) are planned. | `plans/v0.0.4/4-pdf-coverage.md`. |
+| Font embedding and subsetting | The font machine reads metrics and embedded programs; writing or subsetting a font is a separate job. | `plans/v0.0.4/4-pdf-coverage.md`. |
 | Printer languages: PCL, PXL, XPS, and the `gs -h` device list | GhostPCL, GhostXPS, and printer drivers are separate products from the PostScript and PDF interpreter. | A named device request opens a program plan. |

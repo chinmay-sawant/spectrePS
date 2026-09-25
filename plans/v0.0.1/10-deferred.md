@@ -12,21 +12,27 @@ Rows here are `[~]` on purpose. They are not a second active checklist. When one
 
 ## Executive summary
 
-Ghostscript 9.55.0 exposes hundreds of printer devices, plus PCL and XPS in sister products. Spectre's v0.0.1 release is the PostScript subset, the path-only PDF, one pixmap, Flate rewrite, validate, and byte compare. v0.0.2 added the page summaries, JPEG and TIFF raster, page ranges, gray and CMYK image PDF, the `gs` switch map, the object pass-through writer, and compression levels 1 to 5. v0.0.3 adds painting `Do`, CCITT and JPEG2000 decoding, `ink_cov` weights, the writer container cleanup, PDF/A-4, PDF/UA-2 preservation and preflight, PostScript output, the full `gs` grammar, and the font and text machine. What waits now is the remaining text machine and the printer languages. The text row's phase file is `plans/v0.0.3/9-text-and-fonts.md`.
+Ghostscript 9.55.0 exposes hundreds of printer devices, plus PCL and XPS in sister products. Spectre's v0.0.1 release is the PostScript subset, the path-only PDF, one pixmap, Flate rewrite, validate, and byte compare. v0.0.2 added the page summaries, JPEG and TIFF raster, page ranges, gray and CMYK image PDF, the `gs` switch map, the object pass-through writer, and compression levels 1 to 5. v0.0.3 adds painting `Do`, CCITT and JPEG2000 decoding, `ink_cov` weights, the writer container cleanup, PDF/A-4, PDF/UA-2 preservation and preflight, PostScript output, the full `gs` grammar, and the font and text machine. What waits now is Type 1 fonts, PDF/UA-2 tag generation, the remaining PDF coverage, and the printer languages. The first three have phase files under `plans/v0.0.4/`; the printer languages stay out of product.
 
 ## Phase 10: Deferred
 
 ### 10.1 Outputs that need an image or text model
 
-- [~] Type 1 charstrings and `seac`. Reason: `documentation/fonts.md` defers Type 1 and bare CFF, so the font model reads TrueType and OpenType through `sfnt` only. Deferred in v0.0.3 (`plans/v0.0.3/9-text-and-fonts.md`, row 3.6).
+- [~] Type 1 charstrings and `seac`. Reason: `documentation/fonts.md` defers Type 1 and bare CFF, so the font model reads TrueType and OpenType through `sfnt` only. Detail moved to `plans/v0.0.4/2-type1-fonts.md` (bare CFF is the gated last phase).
 
 ### 10.2 PDF jobs and variants
 
-- [~] Tag generation for PDF/UA-2. Reason: needs the text and font machine from phase 9, then reading order and role assignment. Preservation and preflight landed in v0.0.3 (`plans/v0.0.3/10-pdfua2.md`).
+- [~] Tag generation for PDF/UA-2. Reason: needs reading order and role assignment on top of the text and font machine, which landed in v0.0.3. Preservation and preflight landed in v0.0.3 (`plans/v0.0.3/10-pdfua2.md`). Detail moved to `plans/v0.0.4/3-pdfua2-tags.md`.
+- [~] PDF content graphics: clip `W`, Form XObjects, and `/ExtGState`. Reason: the content interpreter returns `undefined` for them, and transparency and separations need forms and clip. Detail moved to `plans/v0.0.4/4-pdf-coverage.md`.
+- [~] Transparency: `/SMask`, `/Mask`, alpha, and blend modes. Reason: the painter refuses `/SMask` and has no alpha or blend seam. Detail moved to `plans/v0.0.4/4-pdf-coverage.md`.
+- [~] Spot colors and separations (`/Separation`, `/DeviceN`, and a `tiffsep`-style plate output). Reason: color is one RGB triple end to end. Detail moved to `plans/v0.0.4/4-pdf-coverage.md`.
+- [~] Font embedding and subsetting. Reason: the font machine reads fonts; writing and subsetting them is a separate job. Detail moved to `plans/v0.0.4/4-pdf-coverage.md`.
+- [~] Stream filters beyond Flate, DCT, CCITT, and JPX: LZW, ASCII85, ASCIIHex, RunLength, and predictors; optional content default visibility. Reason: the generic stream decoder decodes Flate only and holds no optional-content state. Detail moved to `plans/v0.0.4/4-pdf-coverage.md`.
+- [~] Encryption, linearization, and output encryption. Reason: encryption needs key derivation (RC4, AES-128, AES-256), a crypt filter model, and decryption at every string and stream read. Next gate: a new plan file; v0.0.4 keeps it out.
 
 ### 10.3 Out of product
 
-- [~] PCL, PXL, XPS, and the printer device list from `gs -h`. Reason: GhostPCL, GhostXPS, and the printer drivers are separate products from the PostScript and PDF interpreter. Next gate: a new program plan only if a named device is requested. No work starts from this row alone.
+- [~] PCL, PXL, XPS, and the printer device list from `gs -h`. Reason: GhostPCL, GhostXPS, and the printer drivers are separate products from the PostScript and PDF interpreter. Explicitly deferred on 2026-09-25: no plan file exists, and no work starts from this row alone. A named device request opens a program plan.
 
 ### 10.4 Landed
 
