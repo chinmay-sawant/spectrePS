@@ -1,7 +1,7 @@
 # v0.0.3 - Compression writer cleanup
 
 > **Parent:** `plans/v0.0.3/00-program.md` - program ledger
-> **Status:** partially implemented. 1.1, 2.1, and 3.1 landed. 1.2 is open because the guard cannot pass.
+> **Status:** partially implemented. 1.1, 2.1, 3.1, and 3.2 landed. 1.2 is open because the guard cannot pass.
 > **Estimated effort:** half a day for the skip and the measurement, about a week for the packing phase
 
 ---
@@ -40,7 +40,7 @@ Two changes are format-neutral and cheap: skip the dead container objects, and r
 
 ### 3.2 Closure
 
-- [ ] `make lint` and `make test` pass. Outcomes recorded on the day.
+- [x] `make lint` and `make test` pass. Outcomes recorded on the day. On 2026-09-25, `make lint` exited 0: `gofmt -l .` printed nothing, `golangci-lint run ./...` exited 0, and `size-check` reported 0 over-limit files. `make test` exited 0, and `go test -count=1 -p 4 ./...` exited 0 with every package `ok`.
 
 ## Dependencies
 
