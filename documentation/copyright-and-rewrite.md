@@ -61,7 +61,7 @@ Byte compare and pixel compare are Spectre commands. Ghostscript 9.55.0 has no `
 - Fonts, `show`, text extraction (`txtwrite`, `ps2ascii`), and OCR (`pdfocr`, Tesseract).
 - Images inside a PDF, DCT and CCITT compression, downsampling, and JPEG2000.
 - Font embedding and subsetting.
-- PDF/A-1b, PDF/A-2b, and PDF/A-3b creation.
+- PDF/A-1b, PDF/A-2b, PDF/A-3b, and PDF/A-4e creation. The PDF/A-4 and 4f claim landed as a rewrite option with a profile preflight.
 - PDF/X creation.
 - PDF to PostScript (`pdf2ps`, `ps2write`) and EPS rewrite (`eps2write`, `ps2epsi`).
 - XPS output (`xpswrite`), DOCX output (`docxwrite`), and PCL-XL output (`pxlmono`, `pxlcolor`).
@@ -79,7 +79,7 @@ The maintained short list is `documentation/covered-and-not-covered.md`. Rows th
 
 Ghostscript does not grade an existing PDF as PDF/A compliant. PDF/A in Ghostscript means `pdfwrite` paints the pages and writes a second file. The usual shape is `pdfwrite` with `-dPDFA=1`, `-dPDFA=2`, or `-dPDFA=3`, a color strategy, and `PDFA_def.ps` in front of the input. The input file stays where it is. The manual says converting to PDF/A creates a new PDF whose insides are not the original.
 
-Ghostscript can create PDF/A-1b, PDF/A-2b, and PDF/A-3b. With the default `PDFACompatibilityPolicy` of 0, a feature that breaks PDF/A can be kept, and the file can still carry PDF/A metadata. That is creation, and it is not a certificate. The validation Spectre is building is the other job: stop on the first interpreter error. Spectre does not write PDF/A metadata.
+Ghostscript can create PDF/A-1b, PDF/A-2b, and PDF/A-3b. With the default `PDFACompatibilityPolicy` of 0, a feature that breaks PDF/A can be kept, and the file can still carry PDF/A metadata. That is creation, and it is not a certificate. The validation Spectre is building is the other job: stop on the first interpreter error. Spectre's PDF/A-4 claim is a rewrite option with a profile preflight, and it is not a certificate either.
 
 Raster and rewrite are also different jobs. Raster devices paint pixels. `pdfwrite` rebuilds a page description and compresses objects inside the new file. Spectre's first compression is Flate on those streams. DCT, CCITT, and downsampling wait until an image model exists.
 
@@ -127,7 +127,7 @@ A letter or a lawsuit can still arrive. An expired patent, or a royalty-free lic
 - Ghostscript fonts and the URW set shipped with Ghostscript.
 - Pasted pages from the Ghostscript manual. Paraphrase the behavior and cite the URL.
 - The names Ghostscript and PostScript as the name of this product.
-- PDF/A metadata that would look like a conformance claim.
+- PDF/A metadata beyond the named claim and its profile preflight.
 
 ## Sources
 

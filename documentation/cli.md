@@ -64,8 +64,11 @@ Any other `-colorspace` value exits 2. `rgb` keeps the 24-bit RGB bytes from ear
 | `-o` | Output PDF path | required |
 | `-compress` | Flate content streams at level 0 | true |
 | `-level` | Compression level, 0 through 5 | 0 |
+| `-pdfa` | PDF/A-4 claim: `4` or `4f` | omitted |
 
 `-level 0` re-emits the path subset and keeps `-compress` as the Flate switch. `-level 1` through `-level 5` use the pass-through writer, so text, fonts, and content Spectre cannot interpret are copied. A level above 0 Flates content streams and ignores `-compress`. The image policy per level is in `documentation/devices.md`. Any other value exits 2.
+
+`-pdfa 4` claims PDF/A-4 base and `-pdfa 4f` claims PDF/A-4f. A claim uses the pass-through writer at the selected level, appends the XMP metadata and the sRGB output intent, and changes the header to `%PDF-2.0` with a binary marker. The command runs the profile preflight first. A known violation exits 1 with one stderr line in the form `Error: /rule in PDFA`, and writes no output file. The rules are the table in `documentation/devices.md`. The claim is a profile preflight, not a certificate.
 
 `ps` options:
 

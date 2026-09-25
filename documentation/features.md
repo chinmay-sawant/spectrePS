@@ -36,6 +36,7 @@ The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster
 - `spectreps ps -o out.ps in.pdf` writes one date-free PostScript program from a path-only PDF. The marks are the same as `rewrite -level 0`, in 72 dpi points, with a fixed 612 by 792 box and one `showpage` per page. The program defines the short path names in a prolog, so it runs under `RunPostScript` and any PostScript interpreter. Two runs return equal bytes. Text and images wait for the font and image machines, so a page with `Tj` exits 1.
 - `spectreps pdfimage` wraps each painted page in a new PDF as one image XObject, 8 bits per component, `/Filter /FlateDecode`. `-colorspace rgb|gray|cmyk` picks `/DeviceRGB` at 24 bits, `/DeviceGray` at 8 bits, or `/DeviceCMYK` at 32 bits, and defaults to `rgb`. `/MediaBox` comes from the pixel size and the paint dpi. A `.pdf` input paints the selected pages with `RasterizePage`; any other input uses `RunPostScript`. Bytes are stable, and the trailer `/ID` is the SHA-256 of the image streams.
 - The bitmap PDF round-trips. `Do` decodes the image and `RasterizePage` of the reopened file matches the source page under `CompareRaster`, for RGB and gray.
+- `spectreps rewrite -pdfa 4|4f` writes a pass-through rewrite with a PDF/A-4 claim. The header becomes `%PDF-2.0` with a binary marker, the catalog gains `/Metadata` and `/OutputIntents`, and the XMP packet carries `pdfaid:part` 4, `pdfaid:rev` 2020, and the `F` letter for 4f. `-pdfa 4` is the base claim and `-pdfa 4f` is the embedded-file claim. The command runs the profile preflight first and refuses a known violation with exit 1 and `Error: /rule in PDFA`. The claim is a profile preflight, not a certificate.
 
 ## Compare and validate
 
@@ -61,7 +62,6 @@ The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster
 | Feature | Why it waits | Next gate |
 | --- | --- | --- |
 | Text extraction, `show`, `Tj` | Fonts are a separate machine from the path engine. | `plans/v0.0.3/9-text-and-fonts.md`. |
-| PDF/A-4 creation | Needs a named level, a refusal policy, and metadata. The file is not a conformance certificate. | `plans/v0.0.3/8-pdfa4.md`. |
 | PDF/UA-2 preservation and preflight | Tag generation needs the text and font machine, and the reader has no structure tree model. | `plans/v0.0.3/10-pdfua2.md`. |
 | Text extraction, `show`, `Tj` | Fonts are a separate machine from the path engine. | `plans/v0.0.3/9-text-and-fonts.md`. |
 | PCLm | A different image-PDF flavor. | A plan file. |

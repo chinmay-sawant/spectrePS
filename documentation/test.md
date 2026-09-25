@@ -92,6 +92,18 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - `spectreps rewrite` without `-o` exits 2. `-compress=false` selects the uncompressed level 0 option. `-level 1` through `-level 5` succeed on a text stream that level 0 rejects with `undefined`. A successful rewrite exits 0.
 - `sampledata/compress/whatisthis.pdf` and `sampledata/compress/path.pdf` rewrite at every level with the input page count. The JPEG image decodes, the caps hold, and level 5 is the smallest of the five. The test skips when `sampledata/` is absent.
 
+## PDF/A-4 profile preflight
+
+- The PDF/A writer emits `%PDF-2.0` followed by a binary marker whose four bytes are above byte 127. The trailer keeps `/ID` and writes no `/Encrypt`. Both `WriteWithOptions` and `WriteCopy` take the option.
+- `CopyOptions.AppendObjects` writes complete bodies after the highest source object number, and `CopyOptions.CatalogOverride` replaces the root body. The copied catalog keeps its other entries.
+- The XMP packet is static UTF-8 with `pdfaid:part` 4, `pdfaid:rev` 2020, and the `F` letter for 4f. It carries no dates, and two calls return equal bytes.
+- The generated ICC profile is a D50 sRGB matrix-shaper with the `desc`, `cprt`, `wtpt`, `rXYZ`, `gXYZ`, `bXYZ`, `rTRC`, `gTRC`, and `bTRC` tags. The output intent is `/S /GTS_PDFA1` with `/DestOutputProfile` and no `/DestOutputProfileRef`.
+- The preflight refuses a font with no embedded file, `LZWDecode`, a filter outside the ISO 32000-2 table, `DeviceCMYK`, `/Alternates`, `/OPI`, and a `/BM` other than `Normal`. Every refusal is a `JobError` with `Op` `PDFA` and the failed rule in `Msg`.
+- `PDFA4` is refused when the catalog carries `/Names /EmbeddedFiles`, and `PDFA4F` is refused when it does not.
+- `RewritePDF` with a PDF/A mode returns bytes that open with the same page count. Two calls on the same document return equal buffers, and the output carries no `CreationDate`, `ModDate`, or `xmp:MetadataDate`.
+- `spectreps rewrite -pdfa 4|4f` writes the file and exits 0, a refusal exits 1 with `Error: /rule in PDFA`, and any other `-pdfa` value exits 2. A refusal writes no output file.
+- `make pdfa-check` runs `verapdf --flavour 4` over `sampledata/pdfa/*.pdf` and prints a skip when the CLI is absent. veraPDF is a proof tool, not a dependency, and it stays out of `make test`.
+
 ## Bitmap PDF
 
 - `ImagePDF` and `WriteImages` emit one `/Subtype /Image` XObject per page with `/ColorSpace /DeviceRGB`, `/BitsPerComponent 8`, and `/Filter /FlateDecode`. The stored stream is the tightly packed RGB rows, so stride padding is dropped.

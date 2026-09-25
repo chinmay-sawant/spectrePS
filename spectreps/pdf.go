@@ -42,6 +42,9 @@ func (in *Instance) OpenPDF(ctx context.Context, src []byte) (*Document, error) 
 // RewritePDF writes a new PDF from the open document.
 // Level 0 re-emits the path subset. Levels 1 through 5 use the pass-through
 // writer. A level outside 0 through 5 is rangecheck.
+// A PDFA mode uses the pass-through writer, runs the profile preflight, and
+// appends the PDF/A-4 metadata and output intent. A refused preflight returns
+// a JobError with Op "PDFA" and the failed rule in Msg.
 func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOptions) ([]byte, error) {
 	if ctx == nil {
 		panic("spectreps: nil context")
@@ -51,15 +54,26 @@ func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOp
 	}
 	_ = in
 	if doc == nil || doc.file == nil {
-		return nil, JobError{Op: "RewritePDF", Msg: "rangecheck", Filename: "", Line: 0, Column: 0}
+		return nil, rewriteJobError("rangecheck")
 	}
-	if opt.Level < 0 || opt.Level > pdfout.MaxCompressionLevel {
-		return nil, JobError{Op: "RewritePDF", Msg: "rangecheck", Filename: "", Line: 0, Column: 0}
+	if !rewriteRangeOK(opt) {
+		return nil, rewriteJobError("rangecheck")
+	}
+	if opt.PDFA != PDFANone {
+		return rewritePDFA(ctx, doc.file, opt)
 	}
 	if opt.Level == 0 {
 		return rewriteEmitted(ctx, doc.file, opt.CompressStreams)
 	}
 	return rewriteLevel(ctx, doc.file, opt.Level)
+}
+
+// rewriteRangeOK reports whether the option values are in range.
+func rewriteRangeOK(opt RewriteOptions) bool {
+	if opt.Level < 0 || opt.Level > pdfout.MaxCompressionLevel {
+		return false
+	}
+	return opt.PDFA >= PDFANone && opt.PDFA <= PDFA4F
 }
 
 func rewriteEmitted(ctx context.Context, file *pdf.File, compress bool) ([]byte, error) {
@@ -84,7 +98,14 @@ func rewriteLevel(ctx context.Context, file *pdf.File, level int) ([]byte, error
 	if err != nil {
 		return nil, asPDFJobError(err)
 	}
-	out, err := pdfout.WriteCopy(ctx, file, pdfout.CopyOptions{Overrides: overrides, PackObjects: false})
+	opt := pdfout.CopyOptions{
+		Overrides:       overrides,
+		PackObjects:     false,
+		AppendObjects:   nil,
+		CatalogOverride: nil,
+		PDFA:            false,
+	}
+	out, err := pdfout.WriteCopy(ctx, file, opt)
 	if err != nil {
 		return nil, asPDFJobError(err)
 	}

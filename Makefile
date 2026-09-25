@@ -4,7 +4,7 @@ PKG := ./cmd/spectreps
 # nproc is the machine's CPU count. Fall back to 1 if the command is missing.
 NPROC := $(shell nproc 2>/dev/null || echo 1)
 
-.PHONY: help build test lint fmt tidy clean size-check
+.PHONY: help build test lint fmt tidy clean size-check pdfa-check
 
 help:
 	@printf '%s\n' \
@@ -12,6 +12,7 @@ help:
 		'test        go test -p $(NPROC) ./...' \
 		'lint        gofmt check, golangci-lint, and size-check' \
 		'size-check  Go files over 2000 lines must be allowlisted' \
+		'pdfa-check  run veraPDF over sampledata/pdfa when installed' \
 		'fmt         gofmt -w .' \
 		'tidy        go mod tidy' \
 		'clean       remove bin/'
@@ -35,6 +36,21 @@ lint:
 # The rule is AGENTS.md, Code structure. lint runs this target.
 size-check:
 	bash scripts/check-file-size.sh
+
+# pdfa-check runs veraPDF as a proof tool over the sampled PDF/A writes.
+# It is not a dependency and it skips when the CLI is absent. veraPDF is Java,
+# so it stays out of make test.
+pdfa-check:
+	@if ! command -v verapdf >/dev/null 2>&1; then \
+		printf '%s\n' 'pdfa-check: verapdf not installed, skipping'; \
+		exit 0; \
+	fi; \
+	files=$$(find sampledata/pdfa -name '*.pdf' 2>/dev/null); \
+	if [ -z "$$files" ]; then \
+		printf '%s\n' 'pdfa-check: no samples under sampledata/pdfa, skipping'; \
+		exit 0; \
+	fi; \
+	verapdf --flavour 4 $$files
 
 fmt:
 	gofmt -w .

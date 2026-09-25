@@ -82,7 +82,7 @@ spectreps pdfimage [-w points] [-h points] [-r dpi] [-colorspace rgb|gray|cmyk] 
 spectreps bbox [-w points] [-h points] [-r dpi] [-pages range] file
 spectreps inkcov [-w points] [-h points] [-r dpi] [-pages range] file
 spectreps ink_cov [-w points] [-h points] [-r dpi] [-pages range] file
-spectreps rewrite [-compress] [-level N] -o path file.pdf
+spectreps rewrite [-compress] [-level N] [-pdfa 4|4f] -o path file.pdf
 spectreps ps -o path file.pdf
 spectreps validate file
 spectreps compare bytes fileA fileB
@@ -315,6 +315,7 @@ func cmdRewrite(args []string, stderr io.Writer) int {
 	outPath := set.String("o", "", "output path")
 	compress := set.Bool("compress", true, "flate content streams at level 0")
 	level := set.Int("level", 0, "compression level, 0 through 5")
+	pdfaFlag := set.String("pdfa", "", "PDF/A profile, 4 or 4f")
 	rest, code := parseSet(set, args)
 	if code != 0 {
 		return code
@@ -323,20 +324,40 @@ func cmdRewrite(args []string, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "spectreps: -level wants 0 through 5, got %d\n", *level)
 		return exitUsage
 	}
+	mode, ok := parsePDFAMode(*pdfaFlag)
+	if !ok {
+		fmt.Fprintf(stderr, "spectreps: -pdfa wants 4 or 4f, got %q\n", *pdfaFlag)
+		return exitUsage
+	}
 	if len(rest) != 1 || *outPath == "" {
 		usage(stderr)
 		return exitUsage
 	}
-	return rewriteToFile(stderr, rest[0], *outPath, rewriteOptions(*level, *compress))
+	return rewriteToFile(stderr, rest[0], *outPath, rewriteOptions(*level, *compress, mode))
+}
+
+// parsePDFAMode maps the -pdfa flag. An empty value leaves the claim off.
+func parsePDFAMode(value string) (spectreps.PDFAMode, bool) {
+	switch value {
+	case "":
+		return spectreps.PDFANone, true
+	case "4":
+		return spectreps.PDFA4, true
+	case "4f":
+		return spectreps.PDFA4F, true
+	default:
+		return spectreps.PDFANone, false
+	}
 }
 
 // rewriteOptions maps the flags. An explicit level above 0 wins. Level 0 keeps
-// the -compress switch as the Flate option.
-func rewriteOptions(level int, compress bool) spectreps.RewriteOptions {
+// the -compress switch as the Flate option, and a PDF/A mode switches the
+// writer.
+func rewriteOptions(level int, compress bool, mode spectreps.PDFAMode) spectreps.RewriteOptions {
 	if level > 0 {
-		return spectreps.RewriteOptions{CompressStreams: true, Level: level}
+		return spectreps.RewriteOptions{CompressStreams: true, Level: level, PDFA: mode}
 	}
-	return spectreps.RewriteOptions{CompressStreams: compress, Level: 0}
+	return spectreps.RewriteOptions{CompressStreams: compress, Level: 0, PDFA: mode}
 }
 
 func rewriteToFile(stderr io.Writer, inPath, outPath string, opt spectreps.RewriteOptions) int {
