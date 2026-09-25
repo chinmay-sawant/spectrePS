@@ -14,6 +14,8 @@ PNG is a second encoding of the same pixels, selected by an output path that end
 
 JPEG is a third encoding of the same pixels, selected by an output path that ends in `.jpg` or `.jpeg`. `image/jpeg` from the standard library does the encoding, with quality from `-jpegq`, default 75. The format is lossy, so decoded pixels can differ from the source by a small amount. JPEG file bytes are not an equality oracle either. `CompareRaster` and `PageImage` stay the oracle.
 
+TIFF is a fourth encoding of the same pixels, selected by an output path that ends in `.tif` or `.tiff`. `golang.org/x/image/tiff` does the encoding with `tiff.Encode`. The pixel source is the same RGBA conversion the PNG and JPEG writers use, written as 8-bit RGBA with associated alpha, which is 24-bit RGB for opaque pages. `-tiffcompress none` writes uncompressed baseline TIFF, and `deflate` writes Deflate-compressed strips and is the default. The encoder has no write path for LZW, CCITT G3, or G4, so the flag accepts `none` and `deflate` only. TIFF file bytes are not an equality oracle either. `CompareRaster` and `PageImage` stay the oracle.
+
 Anti-aliasing is off in this ledger. There is no `TextAlphaBits` equivalent yet. Turning it on would change pixels and invalidate fixtures, so it stays deferred.
 
 ## Compare

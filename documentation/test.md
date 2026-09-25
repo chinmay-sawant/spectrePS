@@ -43,6 +43,8 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - `spectreps raster -o out.png in.ps` writes a PNG that decodes to the same pixels as the PPM from the same program. The test compares decoded pixels, not the PNG bytes.
 - `spectreps raster -o out.jpg in.ps` writes a JPEG that starts with the SOI bytes `FF D8` and decodes to the page geometry. `.jpeg` selects the same encoder; every other suffix falls back to PPM. The test decodes with `image/jpeg` and does not compare JPEG bytes.
 - `-jpegq` defaults to 75 and is clamped to 1 through 100. `-jpegq 0` and `-jpegq 500` still write a decodable JPEG. `run` and `compare raster` reject `-jpegq` with exit 2.
+- `spectreps raster -o out.tif in.ps` writes a TIFF that `tiff.Decode` reads back to the same pixels as the PPM from the same program. `.tiff` selects the same encoder, `.png`, `.jpg`, and `.jpeg` keep theirs, and every other suffix falls back to PPM. The test compares decoded pixels, not the TIFF bytes.
+- `-tiffcompress none` writes uncompressed TIFF and `-tiffcompress deflate` writes Deflate strips. The default is `deflate`, so two runs with the same input and the default return equal TIFF bytes. An unknown value exits 2 and writes no file. `run` and `compare raster` reject `-tiffcompress` with exit 2.
 - Two pages and an `-o` path with no `%d` exit 2. `%d` is the one-based page number.
 
 ## Box and ink coverage

@@ -70,7 +70,7 @@ func dispatch(args []string, stdout, stderr io.Writer) int {
 func usage(w io.Writer) {
 	fmt.Fprint(w, `spectreps version
 spectreps run [-w points] [-h points] [-r dpi] [-o path] file
-spectreps raster [-w points] [-h points] [-r dpi] [-jpegq quality] -o path file
+spectreps raster [-w points] [-h points] [-r dpi] [-jpegq quality] [-tiffcompress none|deflate] -o path file
 spectreps pdfimage [-w points] [-h points] [-r dpi] -o path file
 spectreps bbox [-w points] [-h points] [-r dpi] file
 spectreps inkcov [-w points] [-h points] [-r dpi] file
@@ -112,12 +112,18 @@ func cmdRaster(args []string, stderr io.Writer) int {
 	r := set.Int("r", 0, "pixels per inch")
 	outPath := set.String("o", "", "output path")
 	jpegq := set.Int("jpegq", jpegDefaultQuality, "jpeg quality, 1 to 100")
+	tiffcompress := set.String("tiffcompress", "deflate", "tiff compression, none or deflate")
 	rest, code := parseSet(set, args)
 	if code != 0 {
 		return code
 	}
 	if len(rest) != 1 || *outPath == "" {
 		usage(stderr)
+		return exitUsage
+	}
+	encoding, ok := tiffEncodingFromFlag(*tiffcompress)
+	if !ok {
+		fmt.Fprintf(stderr, "spectreps: -tiffcompress wants none or deflate, got %q\n", *tiffcompress)
 		return exitUsage
 	}
 	opt := spectreps.RunOptions{
@@ -151,7 +157,7 @@ func cmdRaster(args []string, stderr io.Writer) int {
 	if err != nil {
 		return finish(stderr, err)
 	}
-	return writePages(*outPath, pages, clampJPEGQuality(*jpegq), stderr)
+	return writePages(*outPath, pages, clampJPEGQuality(*jpegq), encoding, stderr)
 }
 
 func cmdPDFImage(args []string, stderr io.Writer) int {
@@ -517,7 +523,13 @@ func rasterPair(
 	return spectreps.CompareRaster(left[0], right[0]), nil
 }
 
-func writePages(outPath string, pages []spectreps.PageImage, jpegQuality int, stderr io.Writer) int {
+func writePages(
+	outPath string,
+	pages []spectreps.PageImage,
+	jpegQuality int,
+	tiffCompress tiffEncoding,
+	stderr io.Writer,
+) int {
 	if len(pages) > 1 && !strings.Contains(outPath, "%d") {
 		fmt.Fprintln(stderr, "spectreps: multiple pages need a page number in the output path")
 		return exitUsage
@@ -527,7 +539,7 @@ func writePages(outPath string, pages []spectreps.PageImage, jpegQuality int, st
 		if strings.Contains(path, "%d") {
 			path = strings.ReplaceAll(path, "%d", strconv.Itoa(i+1))
 		}
-		payload, err := encodePage(path, page, jpegQuality)
+		payload, err := encodePage(path, page, jpegQuality, tiffCompress)
 		if err != nil {
 			fmt.Fprintln(stderr, err.Error())
 			return exitIO
@@ -543,12 +555,14 @@ func writePages(outPath string, pages []spectreps.PageImage, jpegQuality int, st
 	return exitOK
 }
 
-func encodePage(path string, page spectreps.PageImage, jpegQuality int) ([]byte, error) {
+func encodePage(path string, page spectreps.PageImage, jpegQuality int, tiffCompress tiffEncoding) ([]byte, error) {
 	switch {
 	case strings.HasSuffix(path, ".png"):
 		return encodePNG(page)
 	case strings.HasSuffix(path, ".jpg"), strings.HasSuffix(path, ".jpeg"):
 		return encodeJPEG(page, jpegQuality)
+	case strings.HasSuffix(path, ".tif"), strings.HasSuffix(path, ".tiff"):
+		return encodeTIFF(page, tiffCompress)
 	default:
 		return encodePPM(page), nil
 	}

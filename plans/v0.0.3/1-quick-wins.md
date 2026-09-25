@@ -40,11 +40,11 @@ The `gs` argv item is a written switch map, not code.
 
 ### 2.1 Dependency row
 
-- [ ] `go.mod` requires `golang.org/x/image` at v0.46.0, and the reason (the TIFF encoder) is recorded next to the change. `go mod tidy` writes `go.sum`, and a second run leaves no diff. Proof: `make tidy` twice, then `git diff --exit-code -- go.mod go.sum`.
+- [x] `go.mod` requires `golang.org/x/image` at v0.46.0, and the reason (the TIFF encoder) is recorded next to the change. `go mod tidy` writes `go.sum`, and a second run leaves no diff. Proof: `make tidy` twice, then `git diff --exit-code -- go.mod go.sum`. 2026-09-25: both tidy runs exited 0, and the diff printed nothing and exited 0.
 
 ### 2.2 Encoder
 
-- [ ] `raster` encodes a path ending in `.tif` or `.tiff` with `tiff.Encode`, using Deflate compression by default and `-tiffcompress none|deflate` otherwise. The image is the same RGB pixmap the PPM and PNG writers use. TIFF bytes are not an equality oracle. Proof: `go test -count=1 ./internal/cli -run TestRasterTIFF` decodes the file with `tiff.Decode` and compares pixels.
+- [x] `raster` encodes a path ending in `.tif` or `.tiff` with `tiff.Encode`, using Deflate compression by default and `-tiffcompress none|deflate` otherwise. The image is the same RGB pixmap the PPM and PNG writers use. TIFF bytes are not an equality oracle. Proof: `go test -count=1 ./internal/cli -run TestRasterTIFF` exited 0 on 2026-09-25; the test decodes the file with `tiff.Decode` and compares pixels with the PPM output of the same program.
 
 ## Phase 3: Gray and CMYK image PDF
 

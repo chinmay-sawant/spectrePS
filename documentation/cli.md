@@ -30,13 +30,14 @@ Shared options for `run`, `raster`, `pdfimage`, `bbox`, `inkcov`, and `compare r
 | `-r` | Pixels per inch | 72 |
 | `-o` | Output path | required for `raster` and `pdfimage` |
 
-`raster` adds one flag:
+`raster` adds two flags:
 
 | Flag | Meaning | Default |
 | --- | --- | --- |
 | `-jpegq` | JPEG quality, clamped to 1 through 100 | 75 |
+| `-tiffcompress` | TIFF compression, `none` or `deflate` | `deflate` |
 
-`run` and `compare raster` do not accept `-jpegq`.
+`run` and `compare raster` do not accept `-jpegq` or `-tiffcompress`.
 
 `bbox` and `inkcov` write their report to stdout and do not write a file.
 
@@ -53,9 +54,11 @@ Shared options for `run`, `raster`, `pdfimage`, `bbox`, `inkcov`, and `compare r
 
 ## Output files
 
-`raster` writes a PPM raw file (P6) unless `-o` ends in `.png`, `.jpg`, or `.jpeg`.
+`raster` writes a PPM raw file (P6) unless `-o` ends in `.png`, `.jpg`, `.jpeg`, `.tif`, or `.tiff`.
 
 A `.png` output encodes the pixmap with `image/png`. A `.jpg` or `.jpeg` output encodes the same pixmap with `image/jpeg` at the `-jpegq` quality. Every other suffix falls back to PPM. JPEG is lossy, so decoded pixels can differ from the pixmap by a small amount. JPEG file bytes are not an equality oracle. `CompareRaster` and `PageImage` are.
+
+A `.tif` or `.tiff` output encodes the same pixmap with `golang.org/x/image/tiff` as baseline TIFF. `-tiffcompress` picks `none` for no compression or `deflate` for Deflate strips, and the default is `deflate`. That encoder writes those two only, so LZW and the CCITT schemes are not accepted. TIFF file bytes are not an equality oracle either.
 
 If the job produces one page and `-o` has no `%d`, the path is used as given. If the job produces more than one page and `-o` has no `%d`, the command exits 2. `%d` is the one-based page number, matching the `%d` token Ghostscript documents for `-sOutputFile`.
 

@@ -28,7 +28,7 @@ When a tag ships, append the `make lint` and `make test` transcript to `plans/v0
 
 ## Dependencies
 
-The module starts with no third-party requirements. Flate, PNG, and PDF parsing use the standard library. Adding a module requirement is a plan row of its own, with the reason written next to the `go.sum` change.
+The module started with no third-party requirements. `golang.org/x/image v0.46.0` is the first: it supplies `tiff.Encode` for raster `.tif` and `.tiff` output. Flate, PNG, JPEG, and PDF parsing use the standard library. Adding a module requirement is a plan row of its own, with the reason written next to the requirement in `go.mod`, and `go mod tidy` writes `go.sum`.
 
 ## Reference install
 
