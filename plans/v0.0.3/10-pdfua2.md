@@ -55,7 +55,7 @@ Interface changes:
 
 ### 3.1 Levels 1 to 5 preserve tags
 
-- [ ] A tagged PDF 2.0 fixture round-trips through levels 1 to 5 with tree shape, MCIDs, and `/Alt` intact. Proof: `go test -count=1 ./internal/pdfout -run TestLevelsPreserveTags`.
+- [x] A tagged PDF 2.0 fixture round-trips through levels 1 to 5 with tree shape, MCIDs, and `/Alt` intact. The fixture is built in the test: one page, a Document, a Figure with `/Alt`, one MCID, and a parent tree. Proof: `go test -count=1 ./internal/pdfout -run TestLevelsPreserveTags` exited 0 on 2026-09-25.
 
 ### 3.2 Generated writers refuse tagged input
 
