@@ -26,15 +26,15 @@ The `gs` argv item is a written switch map, not code.
 
 ### 1.1 raster walks PDF pages
 
-- [ ] `spectreps raster` paints every page of a PDF input, matching `bbox`, `inkcov`, and `pdfimage`. Proof: `go test -count=1 ./internal/cli -run TestRasterPDFPages`.
+- [x] `spectreps raster` paints every page of a PDF input, matching `bbox`, `inkcov`, and `pdfimage`. Proof: `go test -count=1 ./internal/cli -run TestRasterPDFPages`. Outcome on 2026-09-25: exited 0.
 
 ### 1.2 Page range flag
 
-- [ ] `-pages A-B` (1-based, inclusive; a single `N`; omitted means every page) is accepted by `raster`, `bbox`, `inkcov`, `pdfimage`, and `compare raster`. A `%d` output path numbers emitted pages from 1, matching Ghostscript `-sOutputFile` and `-dFirstPage`. A range outside the document returns `rangecheck`. For PostScript, the run executes every page and the filter applies after it, so a failing page that the range skips still fails the command. Proof: `go test -count=1 ./internal/cli -run TestPageSelection`.
+- [x] `-pages A-B` (1-based, inclusive; a single `N`; omitted means every page) is accepted by `raster`, `bbox`, `inkcov`, `pdfimage`, and `compare raster`. A `%d` output path numbers emitted pages from 1, matching Ghostscript `-sOutputFile` and `-dFirstPage`. A range outside the document returns `rangecheck`. For PostScript, the run executes every page and the filter applies after it, so a failing page that the range skips still fails the command. Proof: `go test -count=1 ./internal/cli -run TestPageSelection`. Outcome on 2026-09-25: exited 0.
 
 ### 1.3 compare raster PDF inputs
 
-- [ ] `rasterPair` opens a `.pdf` input with `OpenPDF` and `RasterizePage` instead of `RunPostScript`, and applies `-pages`. Proof: `go test -count=1 ./internal/cli -run TestCompareRasterPDF`.
+- [x] `rasterPair` opens a `.pdf` input with `OpenPDF` and `RasterizePage` instead of `RunPostScript`, and applies `-pages`. Proof: `go test -count=1 ./internal/cli -run TestCompareRasterPDF`. Outcome on 2026-09-25: exited 0.
 
 ## Phase 2: TIFF raster
 
