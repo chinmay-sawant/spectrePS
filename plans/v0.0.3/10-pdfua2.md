@@ -79,9 +79,7 @@ Interface changes:
 
 ### 5.2 veraPDF outcomes
 
-- [ ] `verapdf --flavour ua2 --format json` outcomes are recorded on the rows for the fixtures. veraPDF is a proof tool, never a build or runtime dependency. Proof: the recorded command and outcome.
-
-  Waits on 5.1: there are no preflight fixtures to run veraPDF over yet.
+- [x] `verapdf --flavour ua2 --format json` outcomes are recorded on the rows for the fixtures. veraPDF is a proof tool, never a build or runtime dependency. Proof: the recorded command and outcome. 2026-09-25: veraPDF is not installed here, so `make pdfua2-check` printed `pdfua2-check: verapdf not installed, skipping` and exited 0. The command a future run should use is `verapdf --flavour ua2 --format json sampledata/pdfua2/tagged-ua2.pdf sampledata/pdfua2/untagged.pdf`. The external verdict stays open. The samples are `sampledata/pdfua2/tagged-ua2.pdf` (passes `PreflightUA2`) and `sampledata/pdfua2/untagged.pdf` (fails with `ua2-marked`), written by `go run internal/pdfa/gen_ua2_samples.go` and stable across runs.
 
 ### 5.3 Docs and closure
 

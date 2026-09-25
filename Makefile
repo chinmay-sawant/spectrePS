@@ -4,7 +4,7 @@ PKG := ./cmd/spectreps
 # nproc is the machine's CPU count. Fall back to 1 if the command is missing.
 NPROC := $(shell nproc 2>/dev/null || echo 1)
 
-.PHONY: help build test lint fmt tidy clean size-check pdfa-check
+.PHONY: help build test lint fmt tidy clean size-check pdfa-check pdfua2-check
 
 help:
 	@printf '%s\n' \
@@ -13,6 +13,7 @@ help:
 		'lint        gofmt check, golangci-lint, and size-check' \
 		'size-check  Go files over 2000 lines must be allowlisted' \
 		'pdfa-check  run veraPDF over sampledata/pdfa when installed' \
+		'pdfua2-check run veraPDF over sampledata/pdfua2 when installed' \
 		'fmt         gofmt -w .' \
 		'tidy        go mod tidy' \
 		'clean       remove bin/'
@@ -51,6 +52,21 @@ pdfa-check:
 		exit 0; \
 	fi; \
 	verapdf --flavour 4 $$files
+
+# pdfua2-check runs veraPDF as a proof tool over the sampled PDF/UA-2 writes.
+# It is not a dependency and it skips when the CLI is absent. veraPDF is Java,
+# so it stays out of make test.
+pdfua2-check:
+	@if ! command -v verapdf >/dev/null 2>&1; then \
+		printf '%s\n' 'pdfua2-check: verapdf not installed, skipping'; \
+		exit 0; \
+	fi; \
+	files=$$(find sampledata/pdfua2 -name '*.pdf' 2>/dev/null); \
+	if [ -z "$$files" ]; then \
+		printf '%s\n' 'pdfua2-check: no samples under sampledata/pdfua2, skipping'; \
+		exit 0; \
+	fi; \
+	verapdf --flavour ua2 --format json $$files
 
 fmt:
 	gofmt -w .
