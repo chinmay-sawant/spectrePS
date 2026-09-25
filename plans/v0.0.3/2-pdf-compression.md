@@ -36,8 +36,8 @@ Levels are a Spectre policy, not a Ghostscript clone. Level 1 is lossless: Flate
 
 ### 1.3 Image XObjects
 
-- [ ] The reader opens `/Subtype /Image` XObjects with Flate and DCT streams. A DCT stream decodes through `image/jpeg` and re-encodes at the level's quality. Proof: `go test -count=1 ./internal/pdf -run TestImageXObject`.
-  - [x] Writer half. `ScaleImage`, `EncodeDCT`, and `EncodeFlateRGB` are in `internal/pdfout/scale.go`, with `golang.org/x/image` v0.46.0 for CatmullRom. Proof: `go test -count=1 ./internal/pdfout -run 'TestScale|TestEncode'` exited 0 on 2026-09-25. `make lint` and `make test` exited 0 the same day.
+- [x] The reader opens `/Subtype /Image` XObjects with Flate and DCT streams. A DCT stream decodes through `image/jpeg`. Proof: `go test -count=1 ./internal/pdf -run TestImageXObject` exited 0 on 2026-09-25.
+- [x] The writer half. `ScaleImage`, `EncodeDCT`, and `EncodeFlateRGB` are in `internal/pdfout/scale.go`, with `golang.org/x/image` v0.46.0 for CatmullRom. Proof: `go test -count=1 ./internal/pdfout -run 'TestScale|TestEncode'` exited 0 on 2026-09-25.
 
 ### 1.4 Levels
 

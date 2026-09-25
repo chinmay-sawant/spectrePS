@@ -34,6 +34,17 @@ The box is the union of marked pixels in points, origin at the lower left. A pix
 
 Ink output is RGB occupancy: the fraction of pixels marked in each of R, G, and B. The pixmap is RGB, not CMYK, so the CLI line ends in `RGB` and not `CMYK OK`. These numbers are occupancy fractions, not Ghostscript `ink_cov` weighted amounts.
 
+## Image XObjects
+
+The reader walks the xref for in-use objects whose dictionary has `/Subtype /Image`. `ImageObjectNums` returns their object numbers in ascending order. `DecodeImage` returns an `image.Image` or an error. It never returns a blank image for a failed decode.
+
+Two stream forms decode at 8 bits per component:
+
+- `/FlateDecode` with `/DeviceRGB` or `/DeviceGray`, through the same zlib path as content streams. A predictor above 1 is rejected.
+- `/DCTDecode` through `image/jpeg`.
+
+Any other filter, color space, or bit depth returns `undefined`, as does a Flate stream whose byte count does not match width by height by components. JPEG is lossy, so decoded pixels are not a byte oracle for the source.
+
 ## Rewrite
 
 `RewritePDF` builds a new PDF from drawing operations on a `Document`. Stream compression uses `compress/flate` when `CompressStreams` is true. The CLI default is true.
