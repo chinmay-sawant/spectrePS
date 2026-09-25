@@ -8,21 +8,22 @@
 
 ## Overview
 
-Rows here are `[~]` on purpose. They are not a second active checklist. When one starts, add a new file under `plans/` for that tag, move the detail there, and leave this row as `[~]` with the path of the new file.
+Rows here are `[~]` on purpose. They are not a second active checklist. When one starts, add a new file under `plans/` for that tag, move the detail there, and leave this row as `[~]` with the path of the new file. When that tag lands the work, the row becomes `[x]` with the path.
 
 ## Executive summary
 
-Ghostscript 9.55.0 exposes hundreds of printer devices, plus PCL and XPS in sister products. Spectre's v0.0.1 release is the PostScript subset, the path-only PDF, one pixmap, Flate rewrite, validate, and byte compare. The quick summaries and the JPEG raster moved to `plans/v0.0.2/`. Everything else waits.
+Ghostscript 9.55.0 exposes hundreds of printer devices, plus PCL and XPS in sister products. Spectre's v0.0.1 release is the PostScript subset, the path-only PDF, one pixmap, Flate rewrite, validate, and byte compare. The quick summaries, the JPEG raster, and the bitmap PDF landed in `plans/v0.0.2/`. Everything else waits.
 
 ## Phase 10: Deferred
 
 ### 10.1 Outputs that need an image or text model
 
 - [~] DCT encode, CCITT, and downsample on rewrite. Reason: phase 07 has no image samples to resample. Next gate: a PDF image phase that can paint `Do` for a Flate or DCT image XObject, then a new plan file for lossy rewrite.
-- [~] `pdfimage24` style output, a page raster wrapped in a PDF. Detail moved to `plans/v0.0.2/3-pdfimage.md`. The active rows are there. This row stays deferred here so the v0.0.1 ledger does not grow a second checklist.
-- [~] JPEG and TIFF encoders. JPEG detail moved to `plans/v0.0.2/2-jpeg-raster.md`. TIFF stays here. Reason: TIFF encode is `golang.org/x/image/tiff`, not the standard library, and a new module requirement is its own plan row. Next gate: that dependency row, then a new plan file. JPEG must not become an equality oracle.
+- [~] PDF compression levels 1 to 5 over any PDF the reader can open. Reason: the current `rewrite` re-emits path operators only, so it stops on `cm`, text, and image XObjects, and it has one Flate switch instead of a policy. Detail moved to `plans/v0.0.3/1-pdf-compression.md`. Next gate: the object pass-through writer, then the image model.
+- [x] `pdfimage24` style output, a page raster wrapped in a PDF. Landed in v0.0.2 (`plans/v0.0.2/3-pdfimage.md`).
+- [x] JPEG and TIFF encoders. JPEG landed in v0.0.2 (`plans/v0.0.2/2-jpeg-raster.md`). TIFF stays here. Reason: TIFF encode is `golang.org/x/image/tiff`, not the standard library, and a new module requirement is its own plan row. Next gate: that dependency row, then a new plan file. JPEG must not become an equality oracle.
 - [~] Text extraction in the style of `txtwrite`, `show`, and PDF `Tj`. Reason: fonts are a separate machine from the path engine. Next gate: phase 04 y-flip test checked, then a new plan file. Until then those operators return errors, not blank pages.
-- [~] `bbox` and `inkcov` devices. Detail moved to `plans/v0.0.2/1-bbox-inkcov.md`. The active rows are there. This row stays deferred here so the v0.0.1 ledger does not grow a second checklist.
+- [x] `bbox` and `inkcov` devices. Landed in v0.0.2 (`plans/v0.0.2/1-bbox-inkcov.md`).
 
 ### 10.2 PDF variants
 
@@ -36,4 +37,4 @@ Ghostscript 9.55.0 exposes hundreds of printer devices, plus PCL and XPS in sist
 
 ## Dependencies
 
-Each row names its next gate. A row that names a `plans/v0.0.2/` file has its checklist there. Do not add a second copy of those rows here.
+Each row names its next gate. A row that names a plan file has its checklist there. Do not add a second copy of those rows here.

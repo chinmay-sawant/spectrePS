@@ -10,9 +10,18 @@ import (
 const freeGen = 65535
 
 func contentDigest(streams []pageStream) string {
+	parts := make([][]byte, len(streams))
+	for i, stream := range streams {
+		parts[i] = stream.stored
+	}
+	return digest(parts...)
+}
+
+// digest is the SHA-256 hex of the parts in order.
+func digest(parts ...[]byte) string {
 	sum := sha256.New()
-	for _, stream := range streams {
-		_, _ = sum.Write(stream.stored)
+	for _, part := range parts {
+		_, _ = sum.Write(part)
 	}
 	return hex.EncodeToString(sum.Sum(nil))
 }

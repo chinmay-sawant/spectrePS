@@ -12,6 +12,8 @@ The file form used in tests is PPM raw, P6. The header is ASCII `P6\n{width} {he
 
 PNG is a second encoding of the same pixels, selected by an output path that ends in `.png`. `image/png` from the standard library does the encoding. PNG file bytes are not an equality oracle. Two encoders, or two library versions, may differ. The oracle is `PageImage`.
 
+JPEG is a third encoding of the same pixels, selected by an output path that ends in `.jpg` or `.jpeg`. `image/jpeg` from the standard library does the encoding, with quality from `-jpegq`, default 75. The format is lossy, so decoded pixels can differ from the source by a small amount. JPEG file bytes are not an equality oracle either. `CompareRaster` and `PageImage` stay the oracle.
+
 Anti-aliasing is off in this ledger. There is no `TextAlphaBits` equivalent yet. Turning it on would change pixels and invalidate fixtures, so it stays deferred.
 
 ## Compare
@@ -22,6 +24,14 @@ Anti-aliasing is off in this ledger. There is no `TextAlphaBits` equivalent yet.
 
 A mismatch is exit code 1. It is not an interpreter error.
 
+## Box and ink coverage
+
+`MeasureBox` and `MeasureInk` read a finished `PageImage`. They do not paint a second time and they add no operator.
+
+The box is the union of marked pixels in points, origin at the lower left. A pixel marks when any of R, G, or B is not 255. `dpi` of 0 selects 72.
+
+Ink output is RGB occupancy: the fraction of pixels marked in each of R, G, and B. The pixmap is RGB, not CMYK, so the CLI line ends in `RGB` and not `CMYK OK`. These numbers are occupancy fractions, not Ghostscript `ink_cov` weighted amounts.
+
 ## Rewrite
 
 `RewritePDF` builds a new PDF from drawing operations on a `Document`. Stream compression uses `compress/flate` when `CompressStreams` is true. The CLI default is true.
@@ -31,6 +41,14 @@ The writer omits a wall-clock creation date and uses a fixed trailer id derived 
 The output is not a copy of the input xref, and it is not expected to match `pdfwrite` from any Ghostscript version.
 
 This tag compresses content streams. It does not downsample images, and it does not DCT-encode them. Those are image-model features and they are deferred.
+
+## Bitmap PDF
+
+`ImagePDF` wraps each `PageImage` in one PDF page. The image is 24-bit RGB, 8 bits per component, `/ColorSpace /DeviceRGB`, `/Filter /FlateDecode`. The stored stream is the tightly packed RGB rows, so stride padding is dropped. `/MediaBox` is `[0 0 width*72/dpi height*72/dpi]` points, and a `dpi` of zero or less selects 72.
+
+Each page has one content stream and one image XObject. The content stream is `q W 0 0 H 0 0 cm /Im0 Do Q`, and `/Resources` carries the XObject. Spectre's PDF interpreter still returns `undefined` for `Do`, so rasterizing this output is not the proof. The test decodes the image stream and compares it with `PageImage`.
+
+The writer emits objects in a fixed order, adds no `/Info`, and sets both trailer `/ID` strings to the SHA-256 of the concatenated Flate image streams. Two calls on the same pages return equal buffers, and `CompareFiles` is the proof. The output is not `pdfwrite` and it is not a DCT encode.
 
 ## Validate
 

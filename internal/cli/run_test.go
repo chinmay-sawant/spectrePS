@@ -5,9 +5,11 @@ import (
 	"compress/zlib"
 	"fmt"
 	"image"
+	"image/jpeg"
 	"image/png"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -325,6 +327,85 @@ func matchPNGBody(t *testing.T, decoded image.Image, body []byte) {
 	}
 }
 
+func TestRasterJPEG(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "solid.ps")
+	prog := []byte("0 0.5 0 setrgbcolor 0 0 moveto 20 0 lineto 20 20 lineto 0 20 lineto closepath fill")
+	if err := os.WriteFile(src, prog, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ppm := filepath.Join(dir, "out.ppm")
+	want(t, []string{"raster", "-o", ppm, "-w", "20", "-h", "20", "-r", "72", src}, 0, "", "")
+	body := ppmBody(t, ppm)
+
+	for _, quality := range []int{0, 75, 500} {
+		out := filepath.Join(dir, fmt.Sprintf("q%d.jpg", quality))
+		args := []string{"raster", "-o", out, "-w", "20", "-h", "20", "-r", "72", "-jpegq", strconv.Itoa(quality), src}
+		want(t, args, 0, "", "")
+		checkJPEG(t, out, body, quality != 0)
+	}
+
+	jpegPath := filepath.Join(dir, "out.jpeg")
+	want(t, []string{"raster", "-o", jpegPath, "-w", "20", "-h", "20", "-r", "72", src}, 0, "", "")
+	checkJPEG(t, jpegPath, body, true)
+
+	wantCode(t, []string{"run", "-jpegq", "50", src}, 2)
+	wantCode(t, []string{"compare", "raster", "-jpegq", "50", src, src}, 2)
+}
+
+func ppmBody(t *testing.T, path string) []byte {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	header := []byte("P6\n20 20\n255\n")
+	if !bytes.HasPrefix(raw, header) {
+		t.Fatalf("ppm header %q", raw[:len(header)])
+	}
+	return raw[len(header):]
+}
+
+func checkJPEG(t *testing.T, path string, body []byte, exact bool) {
+	t.Helper()
+	pic := decodeJPEG(t, path)
+	if pic.Bounds().Dx() != 20 || pic.Bounds().Dy() != 20 {
+		t.Fatalf("%s bounds %v, want 20x20", path, pic.Bounds())
+	}
+	if exact {
+		matchJPEGBody(t, pic, body)
+	}
+}
+
+func decodeJPEG(t *testing.T, path string) image.Image {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(raw, []byte{0xff, 0xd8}) {
+		t.Fatalf("%s is not a JPEG", path)
+	}
+	pic, err := jpeg.Decode(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pic
+}
+
+func matchJPEGBody(t *testing.T, pic image.Image, body []byte) {
+	t.Helper()
+	for y := range 20 {
+		for x := range 20 {
+			red, green, blue, _ := pic.At(x, y).RGBA()
+			i := (y*20 + x) * 3
+			if byte(red>>8) != body[i] || byte(green>>8) != body[i+1] || byte(blue>>8) != body[i+2] {
+				t.Fatalf("jpeg pixel %d,%d", x, y)
+			}
+		}
+	}
+}
+
 func checkPagedRaster(t *testing.T, dir string) {
 	t.Helper()
 	two := filepath.Join(dir, "two.ps")
@@ -507,4 +588,162 @@ func writeString(t *testing.T, body *bytes.Buffer, text string) {
 	if _, err := body.WriteString(text); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestPDFImage(t *testing.T) {
+	t.Run("usage", checkPDFImageUsage)
+	t.Run("ps", checkPDFImagePS)
+	t.Run("pdf", checkPDFImagePDF)
+	t.Run("rewrite", checkPDFImageRewrite)
+}
+
+func checkPDFImageUsage(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out.pdf")
+	ps := writeTemp(t, "in.ps", []byte("1 2 add"))
+	missing := filepath.Join(t.TempDir(), "missing.ps")
+	wantCode(t, []string{"pdfimage", ps}, 2)
+	wantCode(t, []string{"pdfimage", "-o", out}, 2)
+	wantCode(t, []string{"pdfimage", "-o", out, ps, ps}, 2)
+	wantCode(t, []string{"pdfimage", "-o", out, missing}, 2)
+}
+
+func checkPDFImagePS(t *testing.T) {
+	dir := t.TempDir()
+	ps := filepath.Join(dir, "in.ps")
+	if err := os.WriteFile(ps, []byte("0 0 moveto 10 0 lineto stroke"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "out.pdf")
+	want(t, []string{"pdfimage", "-o", out, "-w", "20", "-h", "20", "-r", "72", ps}, 0, "", "")
+	checkPDFImageOutput(t, out, 1)
+	info, err := os.Stat(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode = %v, want 0600", info.Mode().Perm())
+	}
+}
+
+func checkPDFImagePDF(t *testing.T) {
+	objects := [][]byte{
+		[]byte("<< /Type /Catalog /Pages 2 0 R >>"),
+		[]byte("<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>"),
+		[]byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 20 20] /Contents 5 0 R /Resources << >> >>"),
+		[]byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 20 20] /Contents 6 0 R /Resources << >> >>"),
+		flateStream(t, "0 0 m 10 0 l S"),
+		flateStream(t, "1 0 0 rg 0 0 10 10 re f"),
+	}
+	src := writeTemp(t, "two.pdf", classicXref(t, objects))
+	out := filepath.Join(t.TempDir(), "out.pdf")
+	want(t, []string{"pdfimage", "-o", out, "-w", "20", "-h", "20", "-r", "72", src}, 0, "", "")
+	checkPDFImageOutput(t, out, 2)
+}
+
+func checkPDFImageRewrite(t *testing.T) {
+	src := writeTemp(t, "path.pdf", onePagePDF(t, "0 0 m 10 0 l S"))
+	out := filepath.Join(t.TempDir(), "rewrite.pdf")
+	want(t, []string{"rewrite", "-o", out, src}, 0, "", "")
+	checkPDFImageRaster(t, out, 1)
+}
+
+func checkPDFImageOutput(t *testing.T, path string, pages int) {
+	t.Helper()
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(payload, []byte("%PDF-")) {
+		t.Fatalf("%s prefix %q", path, pdfPrefix(payload))
+	}
+	doc := openPDFBytes(t, payload)
+	if doc.PageCount() != pages {
+		t.Fatalf("PageCount = %d, want %d", doc.PageCount(), pages)
+	}
+}
+
+func checkPDFImageRaster(t *testing.T, path string, pages int) {
+	t.Helper()
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in, err := spectreps.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = in.Close() })
+	doc, err := in.OpenPDF(t.Context(), payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.PageCount() != pages {
+		t.Fatalf("PageCount = %d, want %d", doc.PageCount(), pages)
+	}
+	opt := spectreps.RunOptions{PageWidthPt: 20, PageHeightPt: 20, ResolutionDPI: 72}
+	for page := range pages {
+		if _, err := in.RasterizePage(t.Context(), doc, page, opt); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func openPDFBytes(t *testing.T, payload []byte) *spectreps.Document {
+	t.Helper()
+	in, err := spectreps.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = in.Close() })
+	doc, err := in.OpenPDF(t.Context(), payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return doc
+}
+
+func TestBBox(t *testing.T) {
+	square := "0 0 moveto 10 0 lineto 10 10 lineto 0 10 lineto closepath fill"
+	white := "%%BoundingBox: 0 0 0 0\n%%HiResBoundingBox: 0 0 0 0\n"
+	marked := "%%BoundingBox: 0 0 10 10\n%%HiResBoundingBox: 0 0 10 10\n"
+
+	path := writeTemp(t, "square.ps", []byte(square))
+	want(t, []string{"bbox", "-w", "20", "-h", "20", "-r", "72", path}, 0, marked, "")
+	want(t, []string{"bbox", "-w", "20", "-h", "20", path}, 0, marked, "")
+
+	missing := filepath.Join(t.TempDir(), "missing.ps")
+	wantCode(t, []string{"bbox", "-w", "20", "-h", "20", "-r", "72", missing}, 2)
+
+	blank := writeTemp(t, "blank.ps", []byte(""))
+	want(t, []string{"bbox", "-w", "20", "-h", "20", "-r", "72", blank}, 0, white, "")
+
+	two := writeTemp(t, "two.ps", []byte("showpage "+square+" showpage"))
+	want(t, []string{"bbox", "-w", "20", "-h", "20", "-r", "72", two}, 0, white+marked, "")
+
+	pdf := writeTemp(t, "square.pdf", onePagePDF(t, "0 0 m 10 0 l 10 10 l 0 10 l h f"))
+	want(t, []string{"bbox", "-w", "20", "-h", "20", "-r", "72", pdf}, 0, marked, "")
+}
+
+func TestInkcov(t *testing.T) {
+	square := "0 0 moveto 10 0 lineto 10 10 lineto 0 10 lineto closepath fill"
+	white := "Page 1\n0.00000 0.00000 0.00000 RGB\n"
+	quarter := "Page 1\n0.25000 0.25000 0.25000 RGB\n"
+
+	path := writeTemp(t, "square.ps", []byte(square))
+	want(t, []string{"inkcov", "-w", "20", "-h", "20", "-r", "72", path}, 0, quarter, "")
+	want(t, []string{"inkcov", "-w", "20", "-h", "20", path}, 0, quarter, "")
+
+	missing := filepath.Join(t.TempDir(), "missing.ps")
+	wantCode(t, []string{"inkcov", "-w", "20", "-h", "20", "-r", "72", missing}, 2)
+
+	blank := writeTemp(t, "blank.ps", []byte(""))
+	want(t, []string{"inkcov", "-w", "20", "-h", "20", "-r", "72", blank}, 0, white, "")
+
+	two := writeTemp(t, "two.ps", []byte("showpage "+square+" showpage"))
+	want(t, []string{"inkcov", "-w", "20", "-h", "20", "-r", "72", two}, 0,
+		white+"Page 2\n0.25000 0.25000 0.25000 RGB\n", "")
+
+	red := "Page 1\n0.00000 1.00000 1.00000 RGB\n"
+	pdf := writeTemp(t, "red.pdf", onePagePDF(t, "1 0 0 rg 0 0 20 20 re f"))
+	want(t, []string{"inkcov", "-w", "20", "-h", "20", "-r", "72", pdf}, 0, red, "")
 }

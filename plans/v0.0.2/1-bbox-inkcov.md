@@ -1,7 +1,7 @@
 # v0.0.2 - Bounding box and ink coverage
 
 > **Parent:** `plans/v0.0.2/00-program.md` - quick-win ledger
-> **Status:** not started
+> **Status:** implemented. Lint and test passed on 2026-09-25.
 > **Estimated effort:** 2 days
 
 ---
@@ -22,19 +22,19 @@ Ghostscript `inkcov` prints CMYK occupancy: how many device pixels contain each 
 
 ### 1.1 Bounding box
 
-- [ ] `spectreps.MeasureBox(img PageImage, dpi float64) (Box, bool)` lives in `spectreps/`. `Box` holds `MinX`, `MinY`, `MaxX`, `MaxY` in points, origin at the lower left. `dpi` of 0 means 72. A pixel counts when any of R, G, or B is not 255. Row 0 is the top, so the bottom of pixel row `r` is `(height-r-1) * 72 / dpi` and the top is `(height-r) * 72 / dpi`. The left of column `c` is `c * 72 / dpi` and the right is `(c+1) * 72 / dpi`. The bool is false when no pixel counts. Proof: `go test -count=1 ./spectreps -run TestMeasureBox`.
+- [x] `spectreps.MeasureBox(img PageImage, dpi float64) (Box, bool)` lives in `spectreps/`. `Box` holds `MinX`, `MinY`, `MaxX`, `MaxY` in points, origin at the lower left. `dpi` of 0 means 72. A pixel counts when any of R, G, or B is not 255. Row 0 is the top, so the bottom of pixel row `r` is `(height-r-1) * 72 / dpi` and the top is `(height-r) * 72 / dpi`. The left of column `c` is `c * 72 / dpi` and the right is `(c+1) * 72 / dpi`. The bool is false when no pixel counts. Proof: `go test -count=1 ./spectreps -run TestMeasureBox` exited 0 on 2026-09-25.
 
 ### 1.2 Box text
 
-- [ ] `spectreps bbox` reads one PostScript or PDF file. It uses the same `-w`, `-h`, and `-r` as `raster`. For each page it writes two lines to stdout. `%%BoundingBox:` uses the floor of each minimum and the ceiling of each maximum, as integers. `%%HiResBoundingBox:` prints the float edges with `strconv.FormatFloat(v, 'f', -1, 64)`. Ghostscript prints this on stderr and does not honor `-sOutputFile=` yet. Spectre prints the successful report on stdout. A page with no marked pixels prints `%%BoundingBox: 0 0 0 0` and `%%HiResBoundingBox: 0 0 0 0`. The manual does not say what an empty page prints, so this zero box is Spectre's rule. Proof: `go test -count=1 ./internal/cli -run TestBBox`.
+- [x] `spectreps bbox` reads one PostScript or PDF file. It uses the same `-w`, `-h`, and `-r` as `raster`. For each page it writes two lines to stdout. `%%BoundingBox:` uses the floor of each minimum and the ceiling of each maximum, as integers. `%%HiResBoundingBox:` prints the float edges with `strconv.FormatFloat(v, 'f', -1, 64)`. Ghostscript prints this on stderr and does not honor `-sOutputFile=` yet. Spectre prints the successful report on stdout. A page with no marked pixels prints `%%BoundingBox: 0 0 0 0` and `%%HiResBoundingBox: 0 0 0 0`. The manual does not say what an empty page prints, so this zero box is Spectre's rule. Proof: `go test -count=1 ./internal/cli -run TestBBox` exited 0 on 2026-09-25.
 
 ### 1.3 RGB occupancy
 
-- [ ] `spectreps.MeasureInk(img PageImage) Ink` returns the fraction of pixels whose R is not 255, and the same for G and B. The denominator is `Width * Height`. A white page is `0 0 0`. A page of red pixels is `1 0 0`. This matches Ghostscript `inkcov` occupancy, not `ink_cov` amounts, and the channels are RGB because that is the pixmap. Proof: `go test -count=1 ./spectreps -run TestMeasureInk`.
+- [x] `spectreps.MeasureInk(img PageImage) Ink` returns the fraction of pixels whose R is not 255, and the same for G and B. The denominator is `Width * Height`. A white page is `0 0 0`. A page of cyan pixels is `1 0 0`. A page of red pixels is `0 1 1`. This matches Ghostscript `inkcov` occupancy, not `ink_cov` amounts, and the channels are RGB because that is the pixmap. Proof: `go test -count=1 ./spectreps -run TestMeasureInk` exited 0 on 2026-09-25.
 
 ### 1.4 Coverage text
 
-- [ ] `spectreps inkcov` uses the same inputs and page options as `bbox`. For each page it writes `Page N` and then three fractions with five digits after the point, then the word `RGB`. Page numbers start at 1. Example shape: `Page 1` then `1.00000 0.00000 0.00000 RGB`. Stdout, exit 0. Proof: `go test -count=1 ./internal/cli -run TestInkcov`.
+- [x] `spectreps inkcov` uses the same inputs and page options as `bbox`. For each page it writes `Page N` and then three fractions with five digits after the point, then the word `RGB`. Page numbers start at 1. Example shape: `Page 1` then `1.00000 0.00000 0.00000 RGB`. Stdout, exit 0. Proof: `go test -count=1 ./internal/cli -run TestInkcov` exited 0 on 2026-09-25.
 
 ## Dependencies
 

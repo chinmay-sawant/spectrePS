@@ -1,7 +1,7 @@
 # v0.0.2 - Quick wins
 
 > **Parent:** `plans/v0.0.1/10-deferred.md` - deferred rows whose next gate has landed
-> **Status:** plan open. Closure rows are checked. Phases 1 to 3 are not started.
+> **Status:** implemented. Phases 1 to 3 and the closure rows are checked. Lint and test passed on 2026-09-25.
 > **Estimated effort:** a few days for the three phases after the closure
 
 ---

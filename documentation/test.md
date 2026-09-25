@@ -15,7 +15,7 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - Unknown command, unknown flag, and a missing input file exit 2.
 - A missing input path that the program tries to read exits 3.
 - `raster` and `rewrite` without `-o` exit 2, including while the job itself is still `ErrNotImplemented`.
-- A cancelled context passed to `RunPostScript`, `OpenPDF`, `RasterizePage`, or `RewritePDF` returns `ctx.Err()` and no partial success.
+- A cancelled context passed to `RunPostScript`, `OpenPDF`, `RasterizePage`, `RewritePDF`, or `ImagePDF` returns `ctx.Err()` and no partial success.
 
 ## PostScript subset
 
@@ -41,7 +41,18 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - A page above 40000000 pixels, or a side above 20000 pixels, returns `limitcheck` and does not allocate that pixmap. A letter page at 600 dpi is over the cap. A letter page at 300 dpi is under it.
 - `spectreps raster -o out.ppm in.ps` writes a P6 file. The header is `P6\n{width} {height}\n255\n`. The body matches `PageImage.Pixels`.
 - `spectreps raster -o out.png in.ps` writes a PNG that decodes to the same pixels as the PPM from the same program. The test compares decoded pixels, not the PNG bytes.
+- `spectreps raster -o out.jpg in.ps` writes a JPEG that starts with the SOI bytes `FF D8` and decodes to the page geometry. `.jpeg` selects the same encoder; every other suffix falls back to PPM. The test decodes with `image/jpeg` and does not compare JPEG bytes.
+- `-jpegq` defaults to 75 and is clamped to 1 through 100. `-jpegq 0` and `-jpegq 500` still write a decodable JPEG. `run` and `compare raster` reject `-jpegq` with exit 2.
 - Two pages and an `-o` path with no `%d` exit 2. `%d` is the one-based page number.
+
+## Box and ink coverage
+
+- `MeasureBox` returns the union of marked pixel edges in points, origin at the lower left. A pixel marks when any of R, G, or B is not 255. Stride padding is ignored, and `dpi` of 0 or less selects 72.
+- `MeasureBox` on a blank pixmap returns the zero `Box` and false.
+- `MeasureInk` divides each marked channel count by `Width * Height`. A white page is `0 0 0`, a cyan page is `1 0 0`, and a red page is `0 1 1`. A zero-size image returns the zero `Ink`.
+- `spectreps bbox` prints `%%BoundingBox` with the floored minima and ceilinged maxima, then `%%HiResBoundingBox` with `strconv.FormatFloat(v, 'f', -1, 64)` edges. A page with no marked pixel prints `%%BoundingBox: 0 0 0 0` and `%%HiResBoundingBox: 0 0 0 0`. stdout, exit 0.
+- `spectreps inkcov` prints `Page N` and three five-decimal RGB occupancy fractions ending in `RGB`. The line is not `CMYK OK`.
+- Both commands rasterize every page of a PDF input, not only page 0. A missing input exits 2.
 
 ## Pixel compare
 
@@ -68,6 +79,15 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - Two `RewritePDF` calls on the same input return buffers `CompareFiles` reports equal. The output contains no wall-clock timestamp.
 - The rewritten bytes are not required to equal the input bytes, and they are not compared with Ghostscript `pdfwrite`.
 - `spectreps rewrite` without `-o` exits 2. `-compress=false` selects the uncompressed option. A successful rewrite exits 0.
+
+## Bitmap PDF
+
+- `ImagePDF` and `WriteImages` emit one `/Subtype /Image` XObject per page with `/ColorSpace /DeviceRGB`, `/BitsPerComponent 8`, and `/Filter /FlateDecode`. The stored stream is the tightly packed RGB rows, so stride padding is dropped.
+- `/MediaBox` is `[0 0 width*72/dpi height*72/dpi]` points. `dpi` of 0 or less selects 72.
+- The content stream paints `/Im0 Do` and the page resources carry the XObject. `Do` still returns `undefined` when Spectre opens the file, so the test decodes the image stream from the bytes instead of rasterizing the output.
+- Two `ImagePDF` calls on the same pages return buffers `CompareFiles` reports equal. The bytes contain no `CreationDate`, `ModDate`, or `/Info`. Both trailer `/ID` strings are the SHA-256 of the concatenated image streams.
+- `spectreps pdfimage` without `-o` exits 2. A `.pdf` input rasterizes every page with `RasterizePage`; any other input uses `RunPostScript`. The output file is mode `0o600`.
+- `pdfimage` is not `pdfwrite` and it does not DCT-encode.
 
 ## Validate
 

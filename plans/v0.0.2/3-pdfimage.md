@@ -1,7 +1,7 @@
 # v0.0.2 - Bitmap PDF
 
 > **Parent:** `plans/v0.0.2/00-program.md` - quick-win ledger
-> **Status:** not started
+> **Status:** implemented. Lint and test passed on 2026-09-25.
 > **Estimated effort:** 3 days
 
 ---
@@ -22,15 +22,15 @@ Opening that PDF and calling `RasterizePage` is not the proof. The content strea
 
 ### 3.1 Writer
 
-- [ ] `internal/pdfout` grows a writer that accepts `[]PageImage` plus the dpi used to paint them, and returns PDF bytes. Each page object has a `/MediaBox` in points, `width * 72 / dpi` by `height * 72 / dpi`. The image dictionary is `/Subtype /Image`, `/Width`, `/Height`, `/ColorSpace /DeviceRGB`, `/BitsPerComponent 8`, `/Filter /FlateDecode`. The stored stream is the tightly packed RGB bytes, zlib wrapped. The trailer `/ID` is the SHA-256 of those stored streams, both strings the same, with no `/Info` and no date. A cancelled context returns `ctx.Err()`. A nil context panics with `pdfout: nil context`. Proof: `go test -count=1 ./internal/pdfout -run TestImagePDF`.
+- [x] `internal/pdfout` grows a writer that accepts `[]PageImage` plus the dpi used to paint them, and returns PDF bytes. Each page object has a `/MediaBox` in points, `width * 72 / dpi` by `height * 72 / dpi`. The image dictionary is `/Subtype /Image`, `/Width`, `/Height`, `/ColorSpace /DeviceRGB`, `/BitsPerComponent 8`, `/Filter /FlateDecode`. The stored stream is the tightly packed RGB bytes, zlib wrapped. The trailer `/ID` is the SHA-256 of those stored streams, both strings the same, with no `/Info` and no date. A cancelled context returns `ctx.Err()`. A nil context panics with `pdfout: nil context`. Proof: `go test -count=1 ./internal/pdfout -run TestImagePDF` exited 0 on 2026-09-25.
 
 ### 3.2 Command
 
-- [ ] `spectreps pdfimage` requires `-o` and one input path. Missing `-o` exits 2. `-w`, `-h`, and `-r` match `raster`. A `.pdf` input uses `RasterizePage` for every page. Any other input uses `RunPostScript`. The command writes the PDF at mode `0o600` and exits 0. `RewritePDF` is unchanged and still emits path operators. Proof: `go test -count=1 ./internal/cli -run TestPDFImage`.
+- [x] `spectreps pdfimage` requires `-o` and one input path. Missing `-o` exits 2. `-w`, `-h`, and `-r` match `raster`. A `.pdf` input uses `RasterizePage` for every page. Any other input uses `RunPostScript`. The command writes the PDF at mode `0o600` and exits 0. `RewritePDF` is unchanged and still emits path operators. Proof: `go test -count=1 ./internal/cli -run TestPDFImage` exited 0 on 2026-09-25.
 
 ### 3.3 Stable bytes
 
-- [ ] Two `pdfimage` runs on the same input and the same options return buffers `CompareFiles` reports equal. The bytes contain neither `CreationDate` nor `ModDate`. The inflated image matches `PageImage` RGB with stride padding removed. Proof: `go test -count=1 ./spectreps -run TestImagePDFStable` and the `TestImagePDF` run from row 3.1.
+- [x] Two `pdfimage` runs on the same input and the same options return buffers `CompareFiles` reports equal. The bytes contain neither `CreationDate` nor `ModDate`. The inflated image matches `PageImage` RGB with stride padding removed. Proof: `go test -count=1 ./spectreps -run TestImagePDFStable` exited 0 on 2026-09-25, and the `TestImagePDF` run from row 3.1 passed.
 
 ## Dependencies
 
