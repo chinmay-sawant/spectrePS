@@ -147,7 +147,7 @@ A cancelled `ctx` returns `ctx.Err()` and no partial success. `nil` context is a
 
 `pageIndex` is zero-based. A negative index or an index past the last page returns `rangecheck`.
 
-`ImagePDF` writes a new PDF with one 24-bit RGB Flate image per `PageImage`. `dpi` is the resolution the pages were painted at, and zero or less selects 72. The content stream paints `/Im0 Do`, but the PDF interpreter still returns `undefined` for `Do`, so Spectre cannot rasterize its own image PDF yet. The output is not `pdfwrite`.
+`ImagePDF` writes a new PDF with one 24-bit RGB Flate image per `PageImage`. `dpi` is the resolution the pages were painted at, and zero or less selects 72. The content stream paints `/Im0 Do` and the page resources carry the XObject, so `RasterizePage` of the reopened file matches the source `PageImage` under `CompareRaster`. The output is not `pdfwrite`.
 
 `ImagePDF` calls `ImagePDFColor` with `ImageColorRGB`, so its bytes do not change. `ImageColorGray` writes one 8-bit sample per pixel with `/DeviceGray`. `ImageColorCMYK` writes four 8-bit samples per pixel with `/DeviceCMYK`. Both use `/Filter /FlateDecode`. The conversion formulas and the pure red example are in `documentation/devices.md`.
 

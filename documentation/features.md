@@ -8,8 +8,9 @@ The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster
 
 - PostScript source over the subset in `documentation/language.md`. Tokens, three stacks, procedures, dictionaries, arrays, strings, control flow, math, matrix operators, and the path and paint operators all run.
 - PDF path content. Classic xref tables and xref streams open. Object streams supply objects a type 2 xref row names. Content streams decode through Flate, and the page content operators `m l c h re S s f f* n q Q cm w RG rg g G` paint through the same graphics engine as PostScript. `cm` composes a six-number matrix into the CTM, path points transform through it before the device scale, and the stroke width scales by it. `q` and `Q` save and restore it.
+- PDF image XObjects paint through `Do`. The page's `/XObject` resources resolve, `/Resources` inherits from a `/Pages` ancestor, and an image decodes once per name per page. The image unit square maps through the CTM and the device scale, and the pixmap samples nearest neighbor with image row 0 at the top. An `/SMask` image is refused, not painted opaque. A missing name, a non-image subtype, and a decode error return `undefined` with the `Do` operator name.
 - A PostScript header such as `%!PS-Adobe-3.0` is optional. It scans as a comment.
-- An encrypted PDF returns `invalidaccess`. A PDF with an unknown stream filter returns `undefined`. A page that uses `Tj`, `TJ`, `'`, `"`, or `Do` fails with that operator name. The page is not a blank success.
+- An encrypted PDF returns `invalidaccess`. A PDF with an unknown stream filter returns `undefined`. A page that uses `Tj`, `TJ`, `'`, or `"` fails with that operator name. The page is not a blank success.
 - The page count is the number of page leaves in the tree, not the trailer `/Count`.
 
 ## Raster output
@@ -34,7 +35,7 @@ The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster
 - `spectreps rewrite -level 1` through `-level 5` use the pass-through writer, so text, fonts, and content Spectre cannot interpret are copied. Level 1 Flates uncompressed content streams. Level 2 also re-encodes Flate, raw, and CCITT image streams losslessly, with no resample. Levels 3 through 5 also decode Flate, DCT, CCITT, and JPEG2000 images and re-encode them as DCT with a longest-side cap and a quality. A CCITT stream decodes as Group 4 (`/K < 0`) or Group 3 (`/K == 0` with `/EndOfLine true`); `/K > 0` and any image Spectre cannot decode, and an image with an `/SMask`, is copied unchanged. The caps and qualities are the table in `documentation/devices.md`.
 - `spectreps ps -o out.ps in.pdf` writes one date-free PostScript program from a path-only PDF. The marks are the same as `rewrite -level 0`, in 72 dpi points, with a fixed 612 by 792 box and one `showpage` per page. The program defines the short path names in a prolog, so it runs under `RunPostScript` and any PostScript interpreter. Two runs return equal bytes. Text and images wait for the font and image machines, so a page with `Tj` exits 1.
 - `spectreps pdfimage` wraps each painted page in a new PDF as one image XObject, 8 bits per component, `/Filter /FlateDecode`. `-colorspace rgb|gray|cmyk` picks `/DeviceRGB` at 24 bits, `/DeviceGray` at 8 bits, or `/DeviceCMYK` at 32 bits, and defaults to `rgb`. `/MediaBox` comes from the pixel size and the paint dpi. A `.pdf` input paints the selected pages with `RasterizePage`; any other input uses `RunPostScript`. Bytes are stable, and the trailer `/ID` is the SHA-256 of the image streams.
-- The bitmap PDF says nothing about `Do` on the reading side. Spectre still returns `undefined` for `Do`, so it cannot rasterize its own image PDF yet.
+- The bitmap PDF round-trips. `Do` decodes the image and `RasterizePage` of the reopened file matches the source page under `CompareRaster`, for RGB and gray.
 
 ## Compare and validate
 
@@ -59,7 +60,6 @@ The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster
 
 | Feature | Why it waits | Next gate |
 | --- | --- | --- |
-| Painting `Do` and reading images into a raster | The reader decodes image XObjects, but the content interpreter still returns `undefined` for `Do`. | `plans/v0.0.3/5-paint-do.md`. |
 | Text extraction, `show`, `Tj` | Fonts are a separate machine from the path engine. | `plans/v0.0.3/9-text-and-fonts.md`. |
 | PDF/A-4 creation | Needs a named level, a refusal policy, and metadata. The file is not a conformance certificate. | `plans/v0.0.3/8-pdfa4.md`. |
 | PDF/UA-2 preservation and preflight | Tag generation needs the text and font machine, and the reader has no structure tree model. | `plans/v0.0.3/10-pdfua2.md`. |

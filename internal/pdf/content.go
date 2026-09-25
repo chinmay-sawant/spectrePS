@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"context"
+	"image"
 	"math"
 	"slices"
 	"strconv"
@@ -52,22 +53,24 @@ type (
 	}
 
 	runner struct {
-		marker  graphics.Marker
-		scale   float64
-		stack   []item
-		path    []point
-		hasPt   bool
-		curX    float64
-		curY    float64
-		subX    float64
-		subY    float64
-		subOpen bool
-		ctm     graphics.Matrix
-		width   float64
-		red     float64
-		green   float64
-		blue    float64
-		saves   []*snapshot
+		marker   graphics.Marker
+		scale    float64
+		xobjects map[string]Value
+		images   map[string]image.Image
+		stack    []item
+		path     []point
+		hasPt    bool
+		curX     float64
+		curY     float64
+		subX     float64
+		subY     float64
+		subOpen  bool
+		ctm      graphics.Matrix
+		width    float64
+		red      float64
+		green    float64
+		blue     float64
+		saves    []*snapshot
 	}
 )
 
@@ -97,6 +100,23 @@ const (
 // scale matches PostScript UsePixmap: a user unit becomes scale device pixels. 72 dpi uses 1.
 // Paint does not call ShowPage.
 func Paint(ctx context.Context, content []byte, marker graphics.Marker, scale float64) error {
+	return PaintWith(ctx, content, marker, scale, emptyOptions())
+}
+
+// emptyOptions returns options with no page resources.
+func emptyOptions() PaintOptions {
+	return PaintOptions{Resources: Resources{XObjects: nil}}
+}
+
+// PaintWith runs one PDF content stream with the page resources the
+// interpreter reads. Paint is PaintWith with empty options.
+func PaintWith(
+	ctx context.Context,
+	content []byte,
+	marker graphics.Marker,
+	scale float64,
+	opt PaintOptions,
+) error {
 	if ctx == nil {
 		panic(panicNilContext)
 	}
@@ -104,28 +124,31 @@ func Paint(ctx context.Context, content []byte, marker graphics.Marker, scale fl
 		return err
 	}
 	run := newRunner(marker, scale)
+	run.xobjects = opt.Resources.XObjects
 	lex := scanner{src: content, pos: 0}
 	return run.play(ctx, &lex)
 }
 
 func newRunner(marker graphics.Marker, scale float64) *runner {
 	return &runner{
-		marker:  marker,
-		scale:   scale,
-		stack:   nil,
-		path:    nil,
-		hasPt:   false,
-		curX:    0,
-		curY:    0,
-		subX:    0,
-		subY:    0,
-		subOpen: false,
-		ctm:     graphics.Identity(),
-		width:   defaultWidth,
-		red:     0,
-		green:   0,
-		blue:    0,
-		saves:   nil,
+		marker:   marker,
+		scale:    scale,
+		xobjects: nil,
+		images:   nil,
+		stack:    nil,
+		path:     nil,
+		hasPt:    false,
+		curX:     0,
+		curY:     0,
+		subX:     0,
+		subY:     0,
+		subOpen:  false,
+		ctm:      graphics.Identity(),
+		width:    defaultWidth,
+		red:      0,
+		green:    0,
+		blue:     0,
+		saves:    nil,
 	}
 }
 
@@ -161,6 +184,9 @@ func (run *runner) take(tok ctok) error {
 		return err
 	}
 	if handled, err := run.takePaint(tok.text); handled {
+		return err
+	}
+	if handled, err := run.takeDo(tok.text); handled {
 		return err
 	}
 	if handled, err := run.takeState(tok.text); handled {

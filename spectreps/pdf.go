@@ -66,11 +66,7 @@ func rewriteEmitted(ctx context.Context, file *pdf.File, compress bool) ([]byte,
 	count := file.PageCount()
 	pages := make([]pdfout.Page, 0, count)
 	for i := range count {
-		content, err := file.Content(i)
-		if err != nil {
-			return nil, asPDFJobError(err)
-		}
-		emitted, err := pdfout.Emit(ctx, content)
+		emitted, err := pdfout.EmitPage(ctx, file, i)
 		if err != nil {
 			return nil, asPDFJobError(err)
 		}

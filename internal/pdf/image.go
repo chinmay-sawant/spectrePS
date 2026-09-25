@@ -17,6 +17,7 @@ const (
 	keyHeight     = "Height"
 	keyBits       = "BitsPerComponent"
 	keyColorSpace = "ColorSpace"
+	keySMask      = "SMask"
 
 	colorRGB  = "DeviceRGB"
 	colorGray = "DeviceGray"
@@ -68,27 +69,37 @@ func (file *File) DecodeImage(num int) (image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	filter, err := imageFilterName(stream)
+	return DecodeImageValue(stream)
+}
+
+// DecodeImageValue decodes one resolved image XObject value. The value is the
+// stream form of DecodeImage, so a resolved object and its number return the
+// same pixels. Direct and indirect XObjects both work.
+func DecodeImageValue(val Value) (image.Image, error) {
+	if !hasImageSubtype(val) {
+		return nil, NewError(opImage, errUndefined)
+	}
+	filter, err := imageFilterName(val)
 	if err != nil {
 		return nil, err
 	}
 	if filter == nameJPX {
-		return decodeJPXImage(stream)
+		return decodeJPXImage(val)
 	}
 	if filter == nameCCITT {
-		return decodeCCITTImage(stream)
+		return decodeCCITTImage(val)
 	}
-	width, height, space, err := imageParams(stream)
+	width, height, space, err := imageParams(val)
 	if err != nil {
 		return nil, err
 	}
 	if filter == nameDCT {
-		return decodeDCTImage(stream)
+		return decodeDCTImage(val)
 	}
 	if filter != opFlate {
 		return nil, NewError(filter, errUndefined)
 	}
-	return decodeFlateImage(stream, width, height, space)
+	return decodeFlateImage(val, width, height, space)
 }
 
 func (file *File) imageStream(num int) (Value, error) {

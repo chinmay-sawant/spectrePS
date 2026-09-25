@@ -73,7 +73,8 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - A fixture with a `%PDF-` header, a classic xref, and a Flate content stream opens. The page count is the page tree length.
 - A fixture that uses an xref stream and a Flate object stream opens, and the page count is right.
 - Content operators `m l c h re S s f f* n q Q cm w RG rg g G` paint through the same device as the PostScript path operators. A one-page path PDF and the PostScript program of the same marks compare equal with `CompareRaster`.
-- `Tj`, `TJ`, `'`, `"`, and `Do` each return `JobError` with the operator name filled in. The page is not a blank success.
+- `Do` resolves a name in the page's `/XObject` resources, requires `/Subtype /Image`, decodes the image once per name, and stamps it into the unit square through the CTM and the paint scale. `/Resources` on a `/Pages` ancestor is inherited. A missing name, a non-image subtype, an image with an `/SMask`, and a decode error each return `JobError` with `Do` and `undefined`. The rejected page is not a blank success.
+- `Tj`, `TJ`, `'`, and `"` each return `JobError` with the operator name filled in.
 - An encrypted file returns `invalidaccess`. An unknown stream filter returns `undefined`. A truncated xref returns `JobError`.
 - `RasterizePage` with a negative index, or an index past the last page, returns `rangecheck`.
 - `spectreps raster -o out.ppm in.pdf` writes the P6 file for a path-only fixture.
@@ -98,7 +99,7 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - CMYK is `K = 1 - max(r, g, b)` with `C = (1 - r - K) / (1 - K)` and the same for M and Y, each rounded to a byte, and `C = M = Y = 0` when `K >= 1`. Pure red decodes to `0 255 255 0`.
 - `spectreps pdfimage -colorspace gray|cmyk` writes those streams, `-colorspace rgb` is the same as the default, and any other value exits 2.
 - `/MediaBox` is `[0 0 width*72/dpi height*72/dpi]` points. `dpi` of 0 or less selects 72.
-- The content stream paints `/Im0 Do` and the page resources carry the XObject. `Do` still returns `undefined` when Spectre opens the file, so the test decodes the image stream from the bytes instead of rasterizing the output.
+- The content stream paints `/Im0 Do` and the page resources carry the XObject. The output reopens and rasterizes: `RasterizePage` matches the source `PageImage` under `CompareRaster` for RGB and gray, and `spectreps raster` on the `pdfimage` output matches the PPM of the source program.
 - Two `ImagePDF` calls on the same pages return buffers `CompareFiles` reports equal. The bytes contain no `CreationDate`, `ModDate`, or `/Info`. Both trailer `/ID` strings are the SHA-256 of the concatenated image streams.
 - `spectreps pdfimage` without `-o` exits 2. A `.pdf` input rasterizes every selected page with `RasterizePage`; any other input uses `RunPostScript`. `-pages` picks the pages either way, and the output has one page per selected input page. The output file is mode `0o600`.
 - `pdfimage` is not `pdfwrite` and it does not DCT-encode.
