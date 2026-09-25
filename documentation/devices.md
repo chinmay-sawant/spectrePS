@@ -131,6 +131,8 @@ The font check is dictionary-level only. A font passes when it has `/ToUnicode`,
 
 `PreflightUA2` is the UA-2 request, separate from the PDF/A preflight. It returns `Error: /ua2-<rule> in PDFUA` for `ua2-marked`, `ua2-structtree`, `ua2-document`, `ua2-lang`, `ua2-displaydoctitle`, `ua2-pdfuaid`, `ua2-title`, `ua2-rolemap`, and `ua2-mcid`. A PDF/A-only problem such as an LZW stream or a non-embedded font does not fail the UA-2 request, and the UA-2 checks never run for a PDF/A request. The claim is preflight only, never certification.
 
+`make pdfua2-check` runs `verapdf --flavour ua2 --format json` over the PDFs under `sampledata/pdfua2/` and skips when the CLI is absent. A `negative/` subfolder holds deliberate failures and is excluded. On 2026-09-25, veraPDF 1.30.2 reported 1727 passed rules and 0 failed rules for `tagged-ua2.pdf` and `compliant-ua2.pdf`. The verdict is veraPDF's.
+
 ## PostScript output
 
 `WritePostScript` builds a date-free PostScript program from drawing operations on a `Document`. It borrows `pdf.Paint`, so each page carries the same path subset as `RewritePDF` level 0, re-emitted as `setrgbcolor` or `setgray`, `setlinewidth`, `m` and `l`, and `S`, `f`, or `f*`. Coordinates are 72 dpi points.
@@ -219,6 +221,8 @@ The preflight refuses the claim with a `JobError` whose `Op` is `PDFA` and whose
 | `4f-needs-embedded-files` | `PDFA4F` on an input with no `/Names /EmbeddedFiles`. |
 
 The scan walks every in-use object, not only the page tree, so an unused font or stream can still refuse the claim. The scan reads dictionaries and not content streams, so a `k` or `K` color operator in page content is not caught. The preflight does not embed fonts, convert color, or decode LZW.
+
+`make pdfa-check` runs `verapdf --flavour 4` over the PDFs under `sampledata/pdfa/` and skips when the CLI is absent. A `negative/` subfolder is excluded. On 2026-09-25, veraPDF 1.30.2 reported both `path-a4.pdf`, a Spectre write, and the copied `compliant-a4.pdf` valid for PDF/A-4 with 0 failed jobs. That is veraPDF's verdict for those files, not a Spectre certificate.
 
 Two rewrites of the same input and mode return equal bytes, because the packet, the profile, and the trailer `/ID` are fixed.
 

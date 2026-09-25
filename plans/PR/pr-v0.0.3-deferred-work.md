@@ -62,7 +62,7 @@ Implement the ten phases of `plans/v0.0.3`: weighted `ink_cov`, CCITT and JPEG20
 - `PDFA4` is refused when the catalog carries `/Names /EmbeddedFiles`, and `PDFA4F` is refused when it does not. PDF/A-4e, the earlier parts, and PDF/X stay out.
 - The writer moves the header to `%PDF-2.0` with a binary marker above byte 127, keeps `/ID`, writes no `/Encrypt`, and appends `/Metadata` and one `/S /GTS_PDFA1` output intent with `/DestOutputProfile` and no `/DestOutputProfileRef`. Other catalog entries are copied unchanged. Two runs return equal bytes with no dates.
 - The refusal policy mirrors Ghostscript `PDFACompatibilityPolicy` 2. A known violation returns `Error: /rule in PDFA`, exits 1, and writes no output file. The nine rules are `font-not-embedded`, `lzwdecode`, `filter-not-allowed`, `cmyk-without-profile`, `alternates-not-allowed`, `opi-not-allowed`, `blend-mode-not-allowed`, `embedded-files-need-4f`, and `4f-needs-embedded-files`.
-- `make pdfa-check` runs `verapdf --flavour 4` over `sampledata/pdfa/` and skips when veraPDF is absent, so the external verdict is still open.
+- `make pdfa-check` runs `verapdf --flavour 4` over the PDFs under `sampledata/pdfa/` and excludes a `negative/` folder. veraPDF 1.30.2 reports `path-a4.pdf`, a Spectre write, and the copied `compliant-a4.pdf` valid for PDF/A-4, so the external verdict is recorded.
 
 ### Text and fonts
 
@@ -80,7 +80,7 @@ Implement the ten phases of `plans/v0.0.3`: weighted `ink_cov`, CCITT and JPEG20
 - `File.HasStructTree`, `File.StructTree`, and the public `Document.Tagged` expose the model. `Document.Tagged` reports a structure tree or a true `/MarkInfo /Marked`.
 - Levels 1 to 5 preserve a tagged input: tree shape, MCIDs, `/Alt`, `/ActualText`, and `/Lang` survive, and a tagged PDF 2.0 source keeps its header block with the binary marker. Level 0 and the `pdfimage` command refuse a tagged input with `Error: /tagged in RewritePDF` or `/tagged in ImagePDF` instead of silently dropping the tree.
 - `internal/pdfa` adds `ReadUA2`, `UA2Write`, `UA2XMP`, `UA2ExtraObjects`, `UA2Catalog`, and `PreflightUA2`. The machine checks are `ua2-marked`, `ua2-structtree`, `ua2-document`, `ua2-lang`, `ua2-displaydoctitle`, `ua2-pdfuaid`, `ua2-title`, `ua2-rolemap`, and `ua2-mcid`, reported as `Error: /ua2-<rule> in PDFUA`. A `pdfuaid` claim is kept or added only after a passing preflight; it is never written from nothing.
-- Tag generation, reading order, and role assignment stay out, and the docs say preflight only. `validate` does not call `PreflightUA2` yet. `make pdfua2-check` runs veraPDF over `sampledata/pdfua2/` and skips when it is absent.
+- Tag generation, reading order, and role assignment stay out, and the docs say preflight only. `validate` does not call `PreflightUA2` yet. `make pdfua2-check` runs veraPDF over the PDFs under `sampledata/pdfua2/`, excludes `negative/`, and veraPDF 1.30.2 reports both samples valid.
 
 ### Public API
 
@@ -136,6 +136,8 @@ Implement the ten phases of `plans/v0.0.3`: weighted `ink_cov`, CCITT and JPEG20
 - [x] `make build`
 - [x] `go vet ./...`
 - [x] `CGO_ENABLED=0 go build ./...`
+- [x] `make pdfa-check` (veraPDF 1.30.2)
+- [x] `make pdfua2-check` (veraPDF 1.30.2)
 
 ### Commands
 
@@ -152,7 +154,7 @@ make pdfa-check
 make pdfua2-check
 ```
 
-Every command exited 0 on 2026-09-25 on `feature/003-deferred-work` at `4e6b2cc`. `make lint` ran `gofmt` with no output, `golangci-lint run ./...`, and `size-check`, which reported `clean (0 over-limit files)`. `make test` ran `go test -p 24 ./...`, and a fresh `go test -count=1 -p 24 ./...` passed with every package `ok`. `cmd/spectreps` and `internal/engine` have no test files. `make build` wrote `bin/spectreps`. `make pdfa-check` and `make pdfua2-check` print `verapdf not installed, skipping` and exit 0, so the external PDF/A-4 and PDF/UA-2 verdicts stay open.
+Every command exited 0 on 2026-09-25 on `feature/003-deferred-work` at `4e6b2cc`. `make lint` ran `gofmt` with no output, `golangci-lint run ./...`, and `size-check`, which reported `clean (0 over-limit files)`. `make test` ran `go test -p 24 ./...`, and a fresh `go test -count=1 -p 24 ./...` passed with every package `ok`. `cmd/spectreps` and `internal/engine` have no test files. `make build` wrote `bin/spectreps`. With veraPDF 1.30.2 on PATH, `make pdfa-check` exited 0 with `compliant="2" nonCompliant="0"` and `make pdfua2-check` exited 0 with 1727 passed rules and 0 failed rules per file; both checks exclude a `negative/` folder, and both still print a skip when veraPDF is absent.
 
 The phase rows carry dated outcomes, all 2026-09-25. Of the 72 rows with a literal `Proof:` field, 70 are checked and pass. Row 4-1.2 stays open by design with measured numbers: `TestRewriteSamples` passes, but levels 1 and 2 output 610,034 bytes against the 596,341-byte input, so the not-larger-than-input guard cannot be added. Row 3.6, Type 1 charstrings, is the deferred row and never ran. Phase 7 records its nine proof outcomes inline with the same date, written as `Proof (2026-09-25):` rather than `Proof:`.
 
@@ -204,9 +206,10 @@ $ go test -count=1 -v ./spectreps -run TestExtractTextGolden
 PASS
 ok  	github.com/chinmay-sawant/spectrePS/spectreps	0.006s
 $ make pdfa-check
-pdfa-check: verapdf not installed, skipping
+compliant="2" nonCompliant="0" failedJobs="0"
 $ make pdfua2-check
-pdfua2-check: verapdf not installed, skipping
+{"report":{"jobs":[{"itemDetails":{"name":".../compliant-ua2.pdf"...},"validationResult":[{"compliant":true,"passedRules":1727,"failedRules":0}...]},
+          {"itemDetails":{"name":".../tagged-ua2.pdf"...},"validationResult":[{"compliant":true,"passedRules":1727,"failedRules":0}...]}]}}
 ```
 
 `sampledata/compress/path.pdf` is a 200 by 200 point page whose content repeats one 0.5 pt red stroke at y=100 400 times. At `-w 20 -h 20` the mark falls outside the 20 by 20 point device, so `ink_cov` reports a blank page and exits 0. The nonzero witness is the image PDF written from `sampledata/fixtures/gs-argv-input.pdf`: `pdfimage` wrote 1,295 bytes, `raster` on that file exited 0, and `compare raster` against the source exited 0 with no output. The direct and round-trip PPMs are byte-equal for both pages (`cmp` exit 0); page 1 has 400 red pixels and page 2 has 400 green pixels on a 20 by 20 point page. This is the `Do` path against Spectre's own image PDF, which v0.0.2 could not rasterize.
@@ -237,7 +240,7 @@ pdfua2-check: verapdf not installed, skipping
 - Writer cleanup row 1.2 stays open. The guard that levels 1 and 2 are not larger than the input cannot pass: on `sampledata/compress/whatisthis.pdf` the input is 596,341 bytes, the classic output is 610,034 after the container skip (614,343 before it), and the optional packed writer reaches 596,491, still 150 bytes over. `plans/v0.0.3/4-writer-cleanup.md`.
 - Type 1 charstrings and `seac`. Phase 9 row 3.6 is dropped to `plans/v0.0.1/10-deferred.md` 10.1.
 - Tag generation for PDF/UA-2 waits on reading order and role assignment. `plans/v0.0.1/10-deferred.md` 10.2, `plans/v0.0.3/10-pdfua2.md`.
-- veraPDF is not installed here, so `make pdfa-check` and `make pdfua2-check` skip and the external PDF/A-4 and PDF/UA-2 verdicts stay open. `plans/v0.0.3/8-pdfa4.md` row 5.1, `plans/v0.0.3/10-pdfua2.md` row 5.2.
+- The external verdicts are recorded: veraPDF 1.30.2 reports the checked-in PDF/A-4 and PDF/UA-2 samples valid. The deliberate UA-2 negative fixture lives under `sampledata/pdfua2/negative/` and is excluded from the make run. `plans/v0.0.3/8-pdfa4.md` row 5.1, `plans/v0.0.3/10-pdfua2.md` row 5.2.
 - The content interpreter has no `W` clipping operator, so painting a PDF that uses clipping (for example `sampledata/compress/whatisthis.pdf`) returns `undefined in W` even though rewrite copies the content through. No v0.0.3 row covers it; noted for a later tag.
 - `spectreps version` and `spectreps.Version()` still print `0.0.2`, because no v0.0.3 row asked for a bump. `spectreps/instance.go:7`, `documentation/cli.md:28`.
 
@@ -258,19 +261,19 @@ pdfua2-check: verapdf not installed, skipping
 
 ## Diff stat by extension
 
-Generated with `bash scripts/pr-diff-stat.sh master` after the fixture move at `8fae858`, before this last table refresh, so the refresh's own `.md` lines are not in the table.
+Generated with `bash scripts/pr-diff-stat.sh master` after the veraPDF commit at `51d2286`, before this last table refresh, so the refresh's own `.md` lines are not in the table.
 
 | Extension | Files | Insertions | Deletions |
 | --- | ---: | ---: | ---: |
 | `.bin` | 2 | Binary | Binary |
-| `.go` | 102 | 18450 | 236 |
+| `.go` | 102 | 18459 | 236 |
 | `.j2k` | 1 | Binary | Binary |
 | `.jp2` | 1 | Binary | Binary |
-| `.md` | 29 | 1753 | 92 |
+| `.md` | 31 | 1785 | 92 |
 | `.mod` | 1 | 9 | 0 |
-| `.pdf` | 4 | Binary | Binary |
+| `.pdf` | 6 | Binary | Binary |
 | `.ppm` | 2 | Binary | Binary |
 | `.py` | 1 | 59 | 0 |
 | `.sum` | 1 | 6 | 0 |
 | No extension | 1 | 33 | 1 |
-| **Total** | **145** | **20310** | **329** |
+| **Total** | **149** | **20351** | **329** |

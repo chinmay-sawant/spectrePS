@@ -22,7 +22,9 @@ import (
 	"github.com/chinmay-sawant/spectrePS/internal/pdfa"
 )
 
-// sampleDir is the repo-relative output directory.
+// sampleDir is the repo-relative output directory. The untagged sample is a
+// deliberate negative fixture and goes under negative/, which the make check
+// excludes from the veraPDF run.
 const sampleDir = "sampledata/pdfua2"
 
 func main() {
@@ -30,9 +32,9 @@ func main() {
 	tagged := taggedSample()
 	untagged := untaggedSample()
 	writeSample(filepath.Join(root, sampleDir, "tagged-ua2.pdf"), tagged)
-	writeSample(filepath.Join(root, sampleDir, "untagged.pdf"), untagged)
+	writeSample(filepath.Join(root, sampleDir, "negative", "untagged.pdf"), untagged)
 	report("tagged-ua2.pdf", tagged)
-	report("untagged.pdf", untagged)
+	report("negative/untagged.pdf", untagged)
 }
 
 // rootDir is the module root, from this file's path.
@@ -63,7 +65,7 @@ func taggedSample() []byte {
 		"<< /Type /StructElem /S /Document /P 5 0 R /NS 10 0 R /K [7 0 R] >>",
 		"<< /Type /StructElem /S /Figure /Alt (A figure) /P 6 0 R /Pg 3 0 R /K 0 >>",
 		"<< /Nums [0 [7 0 R]] >>",
-		streamBody(string(packet)),
+		metadataBody(string(packet)),
 		"<< /Type /Namespace /NS (http://iso.org/pdf2/ssn) >>",
 	}
 	return classicPDF(objects)
@@ -98,6 +100,13 @@ func classicPDF(objects []string) []byte {
 	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n",
 		len(offsets), xrefAt)
 	return buf.Bytes()
+}
+
+// metadataBody wraps the XMP packet in the stream dictionary ISO 32000-2
+// requires: /Type /Metadata and /Subtype /XML. veraPDF UA-2 clause 8.11.1
+// fails when either entry is missing.
+func metadataBody(content string) string {
+	return fmt.Sprintf("<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream", len(content), content)
 }
 
 // streamBody wraps one uncompressed stream.

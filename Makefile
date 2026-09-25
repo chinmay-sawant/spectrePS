@@ -46,7 +46,7 @@ pdfa-check:
 		printf '%s\n' 'pdfa-check: verapdf not installed, skipping'; \
 		exit 0; \
 	fi; \
-	files=$$(find sampledata/pdfa -name '*.pdf' 2>/dev/null); \
+	files=$$(find sampledata/pdfa -name '*.pdf' ! -path '*/negative/*' 2>/dev/null); \
 	if [ -z "$$files" ]; then \
 		printf '%s\n' 'pdfa-check: no samples under sampledata/pdfa, skipping'; \
 		exit 0; \
@@ -61,7 +61,7 @@ pdfua2-check:
 		printf '%s\n' 'pdfua2-check: verapdf not installed, skipping'; \
 		exit 0; \
 	fi; \
-	files=$$(find sampledata/pdfua2 -name '*.pdf' 2>/dev/null); \
+	files=$$(find sampledata/pdfua2 -name '*.pdf' ! -path '*/negative/*' 2>/dev/null); \
 	if [ -z "$$files" ]; then \
 		printf '%s\n' 'pdfua2-check: no samples under sampledata/pdfua2, skipping'; \
 		exit 0; \
