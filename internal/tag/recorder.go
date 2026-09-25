@@ -23,53 +23,21 @@ const (
 	percentFull = 100
 )
 
-// MarkedContentSink receives marked-content boundaries. It is the local copy
-// of pdf.MarkedContentSink; both sides use pdf.Value, so the shapes already
-// match and the recorder satisfies either one.
-type MarkedContentSink interface {
-	BeginMarkedContent(tag string, properties pdf.Value, depth int)
-	EndMarkedContent(depth int)
-}
+// MarkedContentSink receives marked-content boundaries.
+type MarkedContentSink = pdf.MarkedContentSink
 
-// TextRun is one shown string with the text state at show time. It is the
-// local copy of pdf.TextRun the recorder is built against. At merge this
-// declaration becomes "type TextRun = pdf.TextRun" and the duplicate struct
-// goes away, so Recorder.TextRun satisfies pdf.TextRunSink. One run is one
-// shown string: a TJ array fires one run per string, and the captured
+// TextRun is one shown string with the text state at show time. It is an
+// alias, so Recorder.TextRun satisfies pdf.TextRunSink exactly. One run is
+// one shown string: a TJ array fires one run per string, and the captured
 // TextMatrix reproduces the placement.
-type TextRun struct {
-	// FontName is the /Font resource name, without the slash.
-	FontName string
-	// Size is the text font size in user units.
-	Size float64
-	// TextMatrix is the text matrix at show time, the value Tm writes.
-	TextMatrix graphics.Matrix
-	// LineMatrix is the text line matrix at show time.
-	LineMatrix graphics.Matrix
-	// Rise is the text rise Ts in user units.
-	Rise float64
-	// CharSpacing is Tc in unscaled text units.
-	CharSpacing float64
-	// WordSpacing is Tw in unscaled text units.
-	WordSpacing float64
-	// HScale is the horizontal scale ratio, so 1 is 100 percent.
-	HScale float64
-	// Bytes is the shown string in the font's encoding.
-	Bytes []byte
-}
+type TextRun = pdf.TextRun
 
-// TextRunSink receives one shown string. It is the local copy of
-// pdf.TextRunSink. A marker that implements it accepts text without a glyph
-// outline source.
-type TextRunSink interface {
-	TextRun(r TextRun)
-}
+// TextRunSink receives one shown string. A marker that implements it accepts
+// text without a glyph outline source.
+type TextRunSink = pdf.TextRunSink
 
-// ImageNameMarker receives one XObject name and dictionary before decode. It
-// is the local copy of pdf.ImageNameMarker.
-type ImageNameMarker interface {
-	ImageName(name string, dict pdf.Value)
-}
+// ImageNameMarker receives one XObject name and dictionary before decode.
+type ImageNameMarker = pdf.ImageNameMarker
 
 // EventKind names one recorded content event.
 type EventKind int
