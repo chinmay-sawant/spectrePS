@@ -94,6 +94,22 @@ An image paints into its unit square: `(0,0)` is the lower left and `(1,1)` is t
 
 A missing name, an entry whose `/Subtype` is not `/Image`, an image with an `/SMask`, and a decode error all return `undefined` with the `Do` operator name. Level 0 of `RewritePDF` cannot write image pixels, so a page that paints one returns `undefined in Do` instead of dropping or outlining the image. The pass-through writer at levels 1 through 5 copies the image unchanged.
 
+`Do` on a `/Subtype /Form` XObject runs the form content stream as content. `/Matrix` concatenates into the current matrix, `/BBox` becomes a clip on the form's marks, and a form `/Resources` subdictionary replaces the current resources. A form with no `/Resources` inherits the page resources. The form runs inside an implicit `q`/`Q`, so width, color, clip, resources, and text state return when it ends. Nested forms stop at depth 32 with `limitcheck` in `Do`. A form with no stream, no `/BBox`, a malformed `/Matrix` or `/BBox`, or a `/FormType` other than 1 returns `undefined` in `Do`. The level 0 recorder cannot express the box clip, so a page that runs a form returns `undefined in Do`.
+
+## Clip, ExtGState, and marked content
+
+`W` and `W*` intersect the current path into the clip applied to later marks, and `W*` uses the even-odd rule. `q` saves the clip and `Q` restores it. The runner keeps the clip as a list of device-space paths, and the pixmap applies it to fills, strokes, glyphs, and images by snapping back every pixel outside the region. A point survives the clip when its center is inside every path.
+
+`graphics.ClipMarker` is the optional seam. `graphics.Marker` keeps its three methods, so a marker that cannot write a clip refuses `W` and `W*` with `undefined`. The level 0 recorder and the PostScript recorder keep that refusal.
+
+`gs` resolves a name in `/Resources /ExtGState`. `/LW` sets the stroke width, and `q`/`Q` restore it. `/LC`, `/LJ`, `/ML`, and `/RI` are accepted as no-ops. Any other entry refuses with `undefined in gs` rather than skipping the state, and an unknown name is `undefined in gs`.
+
+`J`, `j`, `M`, `i`, and `ri` are accepted as no-ops. The stroke model is a capsule with round caps and joins, so a cap, join, miter limit, flatness, or rendering intent has nowhere to land. This is a deviation from ISO 32000-2, which lets those operators shape the stroke.
+
+`BMC`, `BDC`, `EMC`, `MP`, and `DP` parse. Nesting caps at 64 with `limitcheck`, an unmatched `EMC` is `syntaxerror in content`, and `BX` skips content through the matching `EX`. An unterminated compatibility section is `syntaxerror in content`, and an `EX` outside a section is ignored. A page with marked content rasterizes and extracts as if the markers were absent.
+
+The read seams are separate from the number. `PaintOptions.MarkedContent` receives `BeginMarkedContent` at `BMC` and `BDC` and `EndMarkedContent` at the matching `EMC`, both at the same depth, with 1 for the outermost sequence. The properties value is the resolved `/Properties` entry for a name operand, the dictionary for an inline operand, and null for `BMC`. `MP` and `DP` fire no event because they have no `EMC`. `TextOptions.Runs` receives one `TextRun` per `Tj`, `TJ`, `'`, or `"` with the shown bytes, the font resource name, the size, the text and line matrices, rise, spacing, and horizontal scale. For `TJ` the bytes are the string elements concatenated and the numbers are omitted. `ImageNameMarker` receives the resource name and the resolved XObject dictionary before an image decodes. A nil or typed-nil sink is ignored.
+
 ## Rewrite
 
 `RewritePDF` builds a new PDF from drawing operations on a `Document` at level 0. Stream compression uses `compress/flate` when `CompressStreams` is true. The CLI default is true.
@@ -251,11 +267,11 @@ Phase 06 reads:
 - A header starting with `%PDF-`.
 - Classic xref tables, then xref streams in a following row of the same phase.
 - Flate-decoded content streams via `compress/flate`.
-- Page content operators `m l c h re S s f f* n q Q cm w RG rg g G Do BT ET Tf Td TD Tm T* Tc Tw Tz TL Ts Tj TJ ' "`.
+- Page content operators `m l c h re S s f f* B B* b b* W W* n q Q cm w J j M i ri gs RG rg g G Do BT ET Tf Td TD Tm T* Tc Tw Tz TL Ts Tj TJ ' " BMC BDC EMC MP DP BX EX`.
 
 Those operators map to the same path and color operations as `moveto` `lineto` `curveto` `closepath` `stroke` `fill` `eofill` `gsave` `grestore` `concat` `setlinewidth` `setrgbcolor` `setgray`.
 
-`Do` paints an image XObject and returns `undefined` with the `Do` operator name when the name or image cannot decode. The text operators paint and extract through the font machine above. A font with no outline source paints as `invalidfont`, and a Type 1, bare CFF, or non-Identity Type0 font is out of this tag. A page that uses an unsupported operator does not rasterize as a blank success.
+`Do` paints an image XObject, runs a form XObject, and returns `undefined` with the `Do` operator name when the name, image, or form cannot run. The text operators paint and extract through the font machine above. A font with no outline source paints as `invalidfont`, and a Type 1, bare CFF, or non-Identity Type0 font is out of this tag. A page that uses an unsupported operator does not rasterize as a blank success.
 
 Encrypted files return `invalidaccess`. Unknown filters return `undefined`.
 
@@ -268,5 +284,21 @@ type Marker interface {
     Stroke(pts []Point, width, red, green, blue float64)
     Fill(pts []Point, red, green, blue float64, evenOdd bool)
     DrawImage(pic image.Image, ctm Matrix, scale float64)
+}
+```
+
+`ClipMarker` is optional and lives beside `Marker` in the same package. The pixmap implements it and the rewrite recorder does not, so a clip never reaches a device that cannot write one. It is four methods, each with the clip list first:
+
+```go
+type ClipMarker interface {
+    StrokeClipped(clips []Clip, pts []Point, width, red, green, blue float64)
+    FillClipped(clips []Clip, pts []Point, red, green, blue float64, evenOdd bool)
+    DrawGlyphClipped(clips []Clip, mask *image.Alpha, originX, originY int, red, green, blue float64)
+    DrawImageClipped(clips []Clip, pic image.Image, ctm Matrix, scale float64)
+}
+
+type Clip struct {
+    Pts     []Point
+    EvenOdd bool
 }
 ```

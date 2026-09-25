@@ -21,6 +21,7 @@ type (
 		text string
 		str  []byte
 		arr  []item
+		val  Value
 	}
 
 	scanner struct {
@@ -48,6 +49,7 @@ type (
 		green   float64
 		blue    float64
 		text    textState
+		clips   []graphics.Clip
 	}
 
 	item struct {
@@ -56,15 +58,24 @@ type (
 		name string
 		str  []byte
 		arr  []item
+		val  Value
 	}
 
 	runner struct {
 		marker     graphics.Marker
 		scale      float64
+		file       *File
 		xobjects   map[string]Value
 		images     map[string]image.Image
 		fonts      map[string]*Font
+		extgstates map[string]Value
+		properties map[string]Value
 		sink       GlyphSink
+		runs       TextRunSink
+		mcSink     MarkedContentSink
+		mcStack    []mcFrame
+		clips      []graphics.Clip
+		formDepth  int
 		stack      []item
 		path       []point
 		hasPt      bool
@@ -92,6 +103,7 @@ const (
 	ctokName
 	ctokString
 	ctokArray
+	ctokDict
 )
 
 const (
@@ -99,6 +111,7 @@ const (
 	itemName
 	itemString
 	itemArray
+	itemDict
 	itemOther
 )
 
@@ -127,8 +140,9 @@ func Paint(ctx context.Context, content []byte, marker graphics.Marker, scale fl
 // emptyOptions returns options with no page resources.
 func emptyOptions() PaintOptions {
 	return PaintOptions{
-		Resources: Resources{XObjects: nil, Fonts: nil},
-		Text:      TextOptions{Fonts: nil, Sink: nil},
+		Resources:     emptyResources(),
+		Text:          TextOptions{Fonts: nil, Sink: nil, Runs: nil},
+		MarkedContent: nil,
 	}
 }
 
@@ -148,38 +162,51 @@ func PaintWith(
 		return err
 	}
 	run := newRunner(marker, scale)
+	run.file = opt.Resources.file
 	run.xobjects = opt.Resources.XObjects
 	run.fonts = opt.Resources.Fonts
+	run.extgstates = opt.Resources.ExtGStates
+	run.properties = opt.Resources.Properties
 	if opt.Text.Fonts != nil {
 		run.fonts = opt.Text.Fonts
 	}
 	run.sink = opt.Text.Sink
+	run.runs = opt.Text.Runs
+	run.mcSink = opt.MarkedContent
 	lex := scanner{src: content, pos: 0}
 	return run.play(ctx, &lex)
 }
 
 func newRunner(marker graphics.Marker, scale float64) *runner {
 	return &runner{
-		marker:   marker,
-		scale:    scale,
-		xobjects: nil,
-		images:   nil,
-		fonts:    nil,
-		sink:     nil,
-		stack:    nil,
-		path:     nil,
-		hasPt:    false,
-		curX:     0,
-		curY:     0,
-		subX:     0,
-		subY:     0,
-		subOpen:  false,
-		ctm:      graphics.Identity(),
-		width:    defaultWidth,
-		red:      0,
-		green:    0,
-		blue:     0,
-		saves:    nil,
+		marker:     marker,
+		scale:      scale,
+		file:       nil,
+		xobjects:   nil,
+		images:     nil,
+		fonts:      nil,
+		extgstates: nil,
+		properties: nil,
+		sink:       nil,
+		runs:       nil,
+		mcSink:     nil,
+		mcStack:    nil,
+		clips:      nil,
+		formDepth:  0,
+		stack:      nil,
+		path:       nil,
+		hasPt:      false,
+		curX:       0,
+		curY:       0,
+		subX:       0,
+		subY:       0,
+		subOpen:    false,
+		ctm:        graphics.Identity(),
+		width:      defaultWidth,
+		red:        0,
+		green:      0,
+		blue:       0,
+		saves:      nil,
 		text: textState{
 			font: nil, fontName: "", size: 0, hscale: 1,
 			leading: 0, charSpacing: 0, wordSpacing: 0, rise: 0,
@@ -201,13 +228,36 @@ func (run *runner) play(ctx context.Context, lex *scanner) error {
 		if !ok {
 			return nil
 		}
-		if err := run.take(tok); err != nil {
+		if tok.kind == tokOperator && tok.text == "BX" {
+			if err := lex.skipCompat(); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := run.take(ctx, tok); err != nil {
 			return err
 		}
 	}
 }
 
-func (run *runner) take(tok ctok) error {
+// skipCompat skips one BX compatibility section through the matching EX.
+// End of stream inside the section is syntaxerror.
+func (lex *scanner) skipCompat() error {
+	for {
+		tok, ok, err := lex.next()
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return contentSyntax()
+		}
+		if tok.kind == tokOperator && tok.text == "EX" {
+			return nil
+		}
+	}
+}
+
+func (run *runner) take(ctx context.Context, tok ctok) error {
 	if tok.kind != tokOperator {
 		run.stack = append(run.stack, itemOf(tok))
 		return nil
@@ -218,14 +268,20 @@ func (run *runner) take(tok ctok) error {
 	if handled, err := run.takePaint(tok.text); handled {
 		return err
 	}
-	if handled, err := run.takeDo(tok.text); handled {
+	if handled, err := run.takeDo(ctx, tok.text); handled {
 		return err
 	}
 	if handled, err := run.takeState(tok.text); handled {
 		return err
 	}
+	if handled, err := run.takeMarked(tok.text); handled {
+		return err
+	}
 	if handled, err := run.takeText(tok.text); handled {
 		return err
+	}
+	if tok.text == "EX" {
+		return nil
 	}
 	return NewError(tok.text, errUndefined)
 }
@@ -247,32 +303,69 @@ func (run *runner) takePath(opName string) (bool, error) {
 	}
 }
 
+// takePaint dispatches the painting and clipping operators.
 func (run *runner) takePaint(opName string) (bool, error) {
+	if handled, err := run.takePaintPath(opName); handled {
+		return true, err
+	}
+	return run.takePaintClip(opName)
+}
+
+// takePaintPath dispatches the path painting operators.
+func (run *runner) takePaintPath(opName string) (bool, error) {
 	switch opName {
 	case "S":
 		run.stroke()
-		return true, nil
 	case "s":
 		if err := run.closepath("s"); err != nil {
 			return true, err
 		}
 		run.stroke()
-		return true, nil
 	case "f":
 		run.fill(false)
-		return true, nil
 	case "f*":
 		run.fill(true)
-		return true, nil
 	case "n":
 		run.clearPath()
-		return true, nil
+	default:
+		return false, nil
+	}
+	return true, nil
+}
+
+// takePaintClip dispatches the fill-and-stroke and clip operators.
+func (run *runner) takePaintClip(opName string) (bool, error) {
+	switch opName {
+	case "B":
+		return true, run.fillStroke(false, false, "B")
+	case "B*":
+		return true, run.fillStroke(true, false, "B*")
+	case "b":
+		return true, run.fillStroke(false, true, "b")
+	case "b*":
+		return true, run.fillStroke(true, true, "b*")
+	case "W":
+		return true, run.clip(false)
+	case "W*":
+		return true, run.clip(true)
 	default:
 		return false, nil
 	}
 }
 
+// takeState dispatches the graphics state operators.
 func (run *runner) takeState(opName string) (bool, error) {
+	if handled, err := run.takeStateCore(opName); handled {
+		return true, err
+	}
+	if handled, err := run.takeStateLine(opName); handled {
+		return true, err
+	}
+	return run.takeStateColor(opName)
+}
+
+// takeStateCore dispatches the save, matrix, width, and gs operators.
+func (run *runner) takeStateCore(opName string) (bool, error) {
 	switch opName {
 	case "q":
 		return true, run.save()
@@ -282,6 +375,28 @@ func (run *runner) takeState(opName string) (bool, error) {
 		return true, run.ctmConcat()
 	case "w":
 		return true, run.setWidth()
+	case "gs":
+		return true, run.setExtGState()
+	default:
+		return false, nil
+	}
+}
+
+// takeStateLine dispatches the accepted line parameter no-ops.
+func (run *runner) takeStateLine(opName string) (bool, error) {
+	switch opName {
+	case "J", "j", "M", "i":
+		return true, run.discardNum(opName)
+	case "ri":
+		return true, run.discardName(opName)
+	default:
+		return false, nil
+	}
+}
+
+// takeStateColor dispatches the color operators.
+func (run *runner) takeStateColor(opName string) (bool, error) {
+	switch opName {
 	case "RG", "rg":
 		return true, run.setRGB(opName)
 	case "G", "g":
@@ -490,16 +605,31 @@ func (lex *scanner) skipString() error {
 
 func (lex *scanner) angleToken() (ctok, error) {
 	if lex.startsPair('<') {
-		if err := lex.skipDict(); err != nil {
+		val, err := lex.dictValue()
+		if err != nil {
 			return zeroToken(), err
 		}
-		return operandToken(), nil
+		return dictToken(val), nil
 	}
 	raw, err := lex.hex()
 	if err != nil {
 		return zeroToken(), err
 	}
 	return stringToken(raw), nil
+}
+
+// dictValue parses one << ... >> operand into a PDF dictionary. The content
+// skip finds the close, then the object lexer parses the same bytes.
+func (lex *scanner) dictValue() (Value, error) {
+	start := lex.pos
+	if err := lex.skipDict(); err != nil {
+		return NullVal(), err
+	}
+	val, _, err := ParseValue(lex.src[start:lex.pos], 0)
+	if err != nil || val.Kind != KindDict {
+		return NullVal(), contentSyntax()
+	}
+	return val, nil
 }
 
 // hex scans one hex string. An odd final nibble is stored as if a 0 followed it.
@@ -603,10 +733,11 @@ func (lex *scanner) arrayLiteral() (item, error) {
 
 func (lex *scanner) arrayAngle() (item, error) {
 	if lex.startsPair('<') {
-		if err := lex.skipDict(); err != nil {
+		val, err := lex.dictValue()
+		if err != nil {
 			return otherItem(), err
 		}
-		return otherItem(), nil
+		return dictItem(val), nil
 	}
 	raw, err := lex.hex()
 	if err != nil {
@@ -858,16 +989,78 @@ func (run *runner) clearPath() {
 
 func (run *runner) stroke() {
 	if run.marker != nil {
-		run.marker.Stroke(run.devicePoints(), run.deviceWidth(), run.red, run.green, run.blue)
+		run.markerStroke()
 	}
 	run.clearPath()
 }
 
 func (run *runner) fill(evenOdd bool) {
 	if run.marker != nil {
-		run.marker.Fill(run.devicePoints(), run.red, run.green, run.blue, evenOdd)
+		run.markerFill(evenOdd)
 	}
 	run.clearPath()
+}
+
+// fillStroke paints B, B*, b, and b*: fill then stroke on one path. The close
+// flag closes the subpath first, as s does.
+func (run *runner) fillStroke(evenOdd, closed bool, opName string) error {
+	if closed {
+		if err := run.closepath(opName); err != nil {
+			return err
+		}
+	}
+	if run.marker != nil {
+		run.markerFill(evenOdd)
+		run.markerStroke()
+	}
+	run.clearPath()
+	return nil
+}
+
+// clip intersects the current path into the clip region. A marker that cannot
+// apply a clip refuses W with undefined, which is how the rewrite recorder
+// keeps its refusal.
+func (run *runner) clip(evenOdd bool) error {
+	opName := "W"
+	if evenOdd {
+		opName = "W*"
+	}
+	if run.marker != nil {
+		if _, ok := run.marker.(graphics.ClipMarker); !ok {
+			return NewError(opName, errUndefined)
+		}
+	}
+	run.clips = append(run.clips, graphics.Clip{Pts: run.devicePoints(), EvenOdd: evenOdd})
+	return nil
+}
+
+// markerFill paints the current path through every active clip. A marker that
+// applied a W or a form /BBox implements graphics.ClipMarker by construction.
+func (run *runner) markerFill(evenOdd bool) {
+	pts := run.devicePoints()
+	if len(run.clips) == 0 {
+		run.marker.Fill(pts, run.red, run.green, run.blue, evenOdd)
+		return
+	}
+	target, ok := run.marker.(graphics.ClipMarker)
+	if !ok {
+		return
+	}
+	target.FillClipped(run.clips, pts, run.red, run.green, run.blue, evenOdd)
+}
+
+// markerStroke strokes the current path through every active clip.
+func (run *runner) markerStroke() {
+	pts := run.devicePoints()
+	if len(run.clips) == 0 {
+		run.marker.Stroke(pts, run.deviceWidth(), run.red, run.green, run.blue)
+		return
+	}
+	target, ok := run.marker.(graphics.ClipMarker)
+	if !ok {
+		return
+	}
+	target.StrokeClipped(run.clips, pts, run.deviceWidth(), run.red, run.green, run.blue)
 }
 
 // deviceWidth is the stroke width in device pixels. The CTM scale matches
@@ -876,9 +1069,15 @@ func (run *runner) deviceWidth() float64 {
 	return run.width * run.scale * ctmScale(run.ctm)
 }
 
+// devicePoints returns the current path in device pixels.
 func (run *runner) devicePoints() []graphics.Point {
-	pts := make([]graphics.Point, len(run.path))
-	for idx, step := range run.path {
+	return run.devicePath(run.path)
+}
+
+// devicePath maps one user-space path through the CTM and the paint scale.
+func (run *runner) devicePath(path []point) []graphics.Point {
+	pts := make([]graphics.Point, len(path))
+	for idx, step := range path {
 		posX, posY := run.ctm.Apply(step.posX, step.posY)
 		pts[idx] = graphics.Point{
 			X:    posX * run.scale,
@@ -929,6 +1128,7 @@ func (run *runner) snap() *snapshot {
 		green:   run.green,
 		blue:    run.blue,
 		text:    run.text,
+		clips:   slices.Clone(run.clips),
 	}
 }
 
@@ -946,6 +1146,7 @@ func (run *runner) apply(saved *snapshot) {
 	run.green = saved.green
 	run.blue = saved.blue
 	run.text = saved.text
+	run.clips = slices.Clone(saved.clips)
 }
 
 func (run *runner) setWidth() error {
@@ -1009,6 +1210,75 @@ func (run *runner) setGray(opName string) error {
 	run.green = gray
 	run.blue = gray
 	return nil
+}
+
+// setExtGState resolves one /ExtGState name and applies the parameters this
+// subset can honor. An unknown name is undefined in gs.
+func (run *runner) setExtGState() error {
+	const opName = "gs"
+	name, err := run.popName(opName)
+	if err != nil {
+		return err
+	}
+	entry, ok := run.extgstates[name]
+	if !ok {
+		return NewError(opName, errUndefined)
+	}
+	resolved, err := run.derefValue(entry, opName)
+	if err != nil {
+		return err
+	}
+	if resolved.Kind != KindDict {
+		return NewError(opName, errUndefined)
+	}
+	return run.applyExtGState(resolved, opName)
+}
+
+// applyExtGState validates every entry before it changes the state, so a
+// refusal leaves the previous state intact. /LW applies. /LC, /LJ, /ML, and
+// /RI are no-ops under the capsule stroke. Any other entry refuses with
+// undefined in gs instead of skipping the state.
+func (run *runner) applyExtGState(entry Value, opName string) error {
+	width := run.width
+	for key, item := range entry.Dict {
+		switch key {
+		case "Type", "LC", "LJ", "ML", "RI":
+		case "LW":
+			number, ok := valueNum(item)
+			if !ok {
+				return NewError(opName, errType)
+			}
+			width = number
+		default:
+			return NewError(opName, errUndefined)
+		}
+	}
+	run.width = width
+	return nil
+}
+
+// discardNum pops and ignores one numeric operand. J, j, M, and i are line
+// parameters the capsule stroke cannot honor, so they are accepted as no-ops.
+func (run *runner) discardNum(opName string) error {
+	_, err := run.popNum(opName)
+	return err
+}
+
+// discardName pops and ignores one name operand. ri is a no-op.
+func (run *runner) discardName(opName string) error {
+	_, err := run.popName(opName)
+	return err
+}
+
+// valueNum returns the number in one KindInt or KindReal value.
+func valueNum(val Value) (float64, bool) {
+	if val.Kind == KindInt {
+		return float64(val.Int), true
+	}
+	if val.Kind == KindReal {
+		return val.Real, true
+	}
+	return 0, false
 }
 
 func (run *runner) popXY(opName string) (float64, float64, error) {
@@ -1089,6 +1359,8 @@ func itemOf(tok ctok) item {
 		return stringItem(tok.str)
 	case ctokArray:
 		return arrayItem(tok.arr)
+	case ctokDict:
+		return dictItem(tok.val)
 	case tokOperand, tokOperator:
 		return otherItem()
 	default:
@@ -1097,53 +1369,62 @@ func itemOf(tok ctok) item {
 }
 
 func numberItem(value float64) item {
-	return item{kind: itemNumber, num: value, name: "", str: nil, arr: nil}
+	return item{kind: itemNumber, num: value, name: "", str: nil, arr: nil, val: NullVal()}
 }
 
 func nameItem(name string) item {
-	return item{kind: itemName, num: 0, name: name, str: nil, arr: nil}
+	return item{kind: itemName, num: 0, name: name, str: nil, arr: nil, val: NullVal()}
 }
 
 func stringItem(raw []byte) item {
-	return item{kind: itemString, num: 0, name: "", str: raw, arr: nil}
+	return item{kind: itemString, num: 0, name: "", str: raw, arr: nil, val: NullVal()}
 }
 
 func arrayItem(items []item) item {
-	return item{kind: itemArray, num: 0, name: "", str: nil, arr: items}
+	return item{kind: itemArray, num: 0, name: "", str: nil, arr: items, val: NullVal()}
+}
+
+func dictItem(val Value) item {
+	return item{kind: itemDict, num: 0, name: "", str: nil, arr: nil, val: val}
 }
 
 func otherItem() item {
-	return item{kind: itemOther, num: 0, name: "", str: nil, arr: nil}
+	return item{kind: itemOther, num: 0, name: "", str: nil, arr: nil, val: NullVal()}
 }
 
 func zeroToken() ctok {
-	return ctok{kind: tokNumber, num: 0, text: "", str: nil, arr: nil}
+	return ctok{kind: tokNumber, num: 0, text: "", str: nil, arr: nil, val: NullVal()}
 }
 
 func numberToken(num float64) ctok {
-	return ctok{kind: tokNumber, num: num, text: "", str: nil, arr: nil}
+	return ctok{kind: tokNumber, num: num, text: "", str: nil, arr: nil, val: NullVal()}
 }
 
 func operandToken() ctok {
-	return ctok{kind: tokOperand, num: 0, text: "", str: nil, arr: nil}
+	return ctok{kind: tokOperand, num: 0, text: "", str: nil, arr: nil, val: NullVal()}
 }
 
 func operatorToken(text string) ctok {
-	return ctok{kind: tokOperator, num: 0, text: text, str: nil, arr: nil}
+	return ctok{kind: tokOperator, num: 0, text: text, str: nil, arr: nil, val: NullVal()}
 }
 
 func nameToken(text string) ctok {
-	return ctok{kind: ctokName, num: 0, text: text, str: nil, arr: nil}
+	return ctok{kind: ctokName, num: 0, text: text, str: nil, arr: nil, val: NullVal()}
 }
 
 // stringToken returns one string operand. The bytes are decoded.
 func stringToken(raw []byte) ctok {
-	return ctok{kind: ctokString, num: 0, text: "", str: raw, arr: nil}
+	return ctok{kind: ctokString, num: 0, text: "", str: raw, arr: nil, val: NullVal()}
 }
 
 // arrayOfToken returns one array operand.
 func arrayOfToken(items []item) ctok {
-	return ctok{kind: ctokArray, num: 0, text: "", str: nil, arr: items}
+	return ctok{kind: ctokArray, num: 0, text: "", str: nil, arr: items, val: NullVal()}
+}
+
+// dictToken returns one dictionary operand.
+func dictToken(val Value) ctok {
+	return ctok{kind: ctokDict, num: 0, text: "", str: nil, arr: nil, val: val}
 }
 
 func contentSyntax() error {

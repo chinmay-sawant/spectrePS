@@ -54,8 +54,9 @@ func EmitPage(ctx context.Context, file *pdf.File, index int) ([]byte, error) {
 	}
 	rec := newRecorder()
 	if err := pdf.PaintWith(ctx, content, rec, 1, pdf.PaintOptions{
-		Resources: res,
-		Text:      pdf.TextOptions{Fonts: nil, Sink: nil},
+		Resources:     res,
+		Text:          pdf.TextOptions{Fonts: nil, Sink: nil, Runs: nil},
+		MarkedContent: nil,
 	}); err != nil {
 		return nil, err
 	}
