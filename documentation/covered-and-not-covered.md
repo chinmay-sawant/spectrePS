@@ -17,6 +17,7 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 - Rewrite a PDF as a new file, compress streams, and re-encode images. Spectre Flates content, re-encodes Flate, raw, and CCITT image streams losslessly at level 2, and DCT-encodes images with a longest-side cap at levels 3 through 5. Levels 3 through 5 also decode JPEG2000 streams and re-encode them as DCT.
 - Rewrite a path-only PDF as PostScript, in the style of `pdf2ps` and `ps2write`. Spectre writes the points operators, not glyphs or image data, so text, fonts, and images wait.
 - Write a PDF/A-4 claim, in the style of `-dPDFA` policy 2. `-pdfa 4` claims the base profile and `-pdfa 4f` claims the embedded-file profile. Spectre appends a static XMP packet and an sRGB output intent, and the profile preflight refuses a known violation instead of keeping the claim. The result is a claim, not a certificate.
+- Preserve an existing PDF/UA-2 structure tree through a pass-through rewrite, and refuse to strip tags in a generated file. Levels 1 through 5 keep `/StructTreeRoot`, MCIDs, `/Alt`, `/ActualText`, and `/Lang`; level 0 and `pdfimage` return `/tagged` instead.
 - Stop on the first broken-file error, the same idea as `-dPDFSTOPONERROR`.
 - A library call and a CLI over that call, the same split as `gsapi` and the `gs` binary.
 - Block file write, rename, and delete by default, which is the rough idea of SAFER.
@@ -29,6 +30,7 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 - Images inside a PDF on the reading side beyond `Do` on `/Subtype /Image`. `Do` paints RGB and gray image XObjects. `/SMask`, `/Mask`, `/ImageMask`, and `/Decode` arrays are refused, not approximated. Rewrite decodes CCITT G4 and G3 and JPEG2000 image streams: level 2 re-encodes CCITT losslessly as Flate, and levels 3 through 5 re-encode both as DCT.
 - Font embedding and subsetting.
 - PDF/A-1, PDF/A-2, PDF/A-3, and PDF/A-4e creation. Spectre writes a PDF/A-4 or 4f claim only. It does not embed missing fonts or convert color, and it produces no certificate.
+- PDF/UA-2 conformance checking, certification, tag generation, reading order, and role assignment. Spectre preserves an existing tree and preflights a machine-checkable subset; it says preflight only.
 - PDF/X creation.
 - EPS rewrite (`eps2write`, `ps2epsi`) and PostScript output for text, fonts, or images.
 - XPS output (`xpswrite`), DOCX output (`docxwrite`), and PCL-XL output (`pxlmono`, `pxlcolor`).

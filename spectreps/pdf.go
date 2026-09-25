@@ -9,6 +9,10 @@ import (
 	"github.com/chinmay-sawant/spectrePS/internal/psout"
 )
 
+// taggedMsg is the JobError message for a tagged input a generated writer
+// cannot keep. It reads "Error: /tagged in <op>".
+const taggedMsg = "tagged"
+
 // Document is an open PDF. file holds the parsed objects.
 type Document struct {
 	file *pdf.File
@@ -21,6 +25,15 @@ func (doc *Document) PageCount() int {
 		return 0
 	}
 	return doc.file.PageCount()
+}
+
+// Tagged reports whether the document carries a structure tree or a
+// /MarkInfo /Marked true claim. A nil document reports false.
+func (doc *Document) Tagged() bool {
+	if doc == nil || doc.file == nil {
+		return false
+	}
+	return doc.file.HasStructTree()
 }
 
 // OpenPDF opens a PDF and returns its document.
@@ -61,6 +74,9 @@ func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOp
 	}
 	if opt.PDFA != PDFANone {
 		return rewritePDFA(ctx, doc.file, opt)
+	}
+	if opt.Level == 0 && doc.Tagged() {
+		return nil, JobError{Op: "RewritePDF", Msg: taggedMsg, Filename: "", Line: 0, Column: 0}
 	}
 	if opt.Level == 0 {
 		return rewriteEmitted(ctx, doc.file, opt.CompressStreams)

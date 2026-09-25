@@ -104,6 +104,8 @@ The pass-through writer (`WriteCopy`) serves levels 1 through 5. It copies every
 
 `CopyOptions.PackObjects` selects the optional packed output: `%PDF-1.5`, every non-stream body in one Flate `/Type /ObjStm`, and a Flate `/Type /XRef` stream with `W [1 4 2]` in place of the classic xref. The `/ID` digest is computed over the unpacked bodies before packing, so it does not change with the mode. The levels 1 through 5 path does not select the packed output.
 
+A tagged source is a separate case. Levels 1 through 5 copy the structure tree, the parent tree, MCIDs, `/Alt`, `/ActualText`, and `/Lang`, and the writer keeps the source header block, binary marker included, so a PDF 2.0 file with tags does not leave as a 1.4 shell. Level 0 returns `/tagged` instead of building a path-only file that dropped the tree. `ImagePDF` and `WriteImages` take page and image values and never see a source document, so the `pdfimage` command refuses a tagged PDF before it rasterizes.
+
 The level table:
 
 | Level | Name | Content streams | Images |
@@ -118,6 +120,12 @@ The level table:
 An image at or below its cap keeps its size. An image Spectre cannot decode, and an image with an `/SMask`, is copied unchanged. Level 2 re-encodes Flate and raw streams only, so DCT and JPEG2000 streams copy through. Levels 3 through 5 decode JPEG2000 streams and re-encode them as DCT, exactly as for DCT streams. A level above 0 ignores `CompressStreams`. Every page reaches the output with the same page count and boxes, because the writer copies the page tree.
 
 The image helpers are three functions in `internal/pdfout`. `ScaleImage` takes any `image.Image` and returns RGBA resampled with the CatmullRom kernel from `golang.org/x/image/draw`; width and height below 1 clamp to 1. `EncodeDCT` wraps `image/jpeg` with the quality clamped to 1 through 100, and `EncodeFlateRGB` writes tightly packed RGB rows, top row first, inside zlib. All three are deterministic, so the same input returns the same bytes. Levels 3 through 5 call `ScaleImage` and `EncodeDCT`, and level 2 calls `EncodeFlateRGB`.
+
+## Tagged preflight
+
+The structure model is `internal/pdf/structtree.go`. It parses `/MarkInfo`, `/StructTreeRoot`, `/K`, `/S`, `/P`, `/Pg`, `/MCID`, `/Alt`, `/ActualText`, `/Lang`, `/Namespaces`, `/RoleMap`, `/RoleMapNS`, and `/ParentTree` into typed values. The tree walk caps depth at 64 and reports a cycle as `limitcheck`. The parent tree resolves an MCID to its structure element and back; a claim with no agreeing entry is `undefined in ParentTree`. A role map resolves a custom type to a standard type; a cycle or a chain past 32 hops is `limitcheck`, a mapping into its own namespace or to itself is `syntaxerror`, and an unmapped custom type is `undefined`.
+
+The font check is dictionary-level only. A font passes when it has `/ToUnicode`, or when it is a simple font with a standard `/Encoding`. Otherwise an `/ActualText` on the structure element or an ancestor covers the run. Spectre does not decode glyphs. The claim is preflight only, never certification.
 
 ## PostScript output
 

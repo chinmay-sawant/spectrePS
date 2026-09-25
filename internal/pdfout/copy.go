@@ -8,6 +8,9 @@ import (
 	"github.com/chinmay-sawant/spectrePS/internal/pdf"
 )
 
+// pdfHeaderPrefix is the start of every PDF header block.
+const pdfHeaderPrefix = "%PDF-"
+
 // CopySource is the reader view the copy writer needs.
 // *pdf.File implements it.
 type CopySource interface {
@@ -37,6 +40,32 @@ type CopyOptions struct {
 	PDFA bool
 }
 
+// headerSource is a CopySource that knows its PDF header block and whether the
+// source carries tags. A tagged source keeps its header version, so a PDF 2.0
+// file with tags does not leave as a 1.4 shell.
+type headerSource interface {
+	Header() []byte
+	HasStructTree() bool
+}
+
+// copyHeader returns the source header block. An untagged source, and a source
+// that does not expose a header, writes the classic PDF 1.4 header. A tagged
+// source keeps its own header, including a PDF 2.0 binary marker.
+func copyHeader(src CopySource) []byte {
+	tagged, ok := src.(headerSource)
+	if !ok || !tagged.HasStructTree() {
+		return []byte(headerLine)
+	}
+	header := tagged.Header()
+	if !bytes.HasPrefix(header, []byte(pdfHeaderPrefix)) {
+		return []byte(headerLine)
+	}
+	if len(header) == 0 || header[len(header)-1] != '\n' {
+		header = append(header, '\n')
+	}
+	return header
+}
+
 // The dead container objects of a source file. A classic copy writes neither,
 // so their object numbers become free xref rows.
 const (
@@ -60,7 +89,9 @@ func isContainer(val pdf.Value) bool {
 // /XRef or /Type /ObjStm container is not copied, so its number stays free.
 // AppendObjects are written after the source numbers, and CatalogOverride
 // replaces the root body when it is set.
-// The header is PDF 1.4, or PDF 2.0 with a binary marker when PDFA is set.
+// An untagged source writes the classic PDF 1.4 header. A tagged source keeps
+// its own header block, so a PDF 2.0 file with tags does not leave as a 1.4
+// shell. When PDFA is set, the PDF/A-4 header wins over both.
 // The trailer uses /Root from src and /ID as the SHA-256 of the written bodies.
 // Two calls on the same source return equal bytes, and the file carries no
 // /Info and no dates.
@@ -81,7 +112,11 @@ func WriteCopy(ctx context.Context, src CopySource, opt CopyOptions) ([]byte, er
 	if opt.PackObjects {
 		return buildPackedCopyFile(src.RootNum(), objects)
 	}
-	return buildCopyFile(src.RootNum(), objects, headerFor(opt.PDFA)), nil
+	header := copyHeader(src)
+	if opt.PDFA {
+		header = []byte(headerFor(true))
+	}
+	return buildCopyFile(src.RootNum(), objects, header), nil
 }
 
 // applyCopyExtras returns objects with the catalog override applied and the
@@ -132,9 +167,9 @@ func copyBody(src CopySource, opt CopyOptions, num int) ([]byte, error) {
 	return pdf.SerializeValue(val), nil
 }
 
-func buildCopyFile(root int, objects [][]byte, header string) []byte {
+func buildCopyFile(root int, objects [][]byte, header []byte) []byte {
 	var buf bytes.Buffer
-	buf.WriteString(header)
+	buf.Write(header)
 	offsets := make([]int, len(objects))
 	written := make([][]byte, 0, len(objects))
 	for num := 1; num < len(objects); num++ {
