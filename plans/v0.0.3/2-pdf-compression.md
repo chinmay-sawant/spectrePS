@@ -32,7 +32,8 @@ Levels are a Spectre policy, not a Ghostscript clone. Level 1 is lossless: Flate
 
 ### 1.2 Content operators
 
-- [ ] The reader accepts `cm` and the text operators `BT` `ET` `Tf` `Tj` `TJ`, or the writer copies a content stream it cannot interpret and edits only the parts it can. Proof: `go test -count=1 ./internal/pdf -run TestCompressContent`.
+- [x] The reader accepts `cm`. A six-number matrix composes into the CTM, `q` and `Q` save and restore it, path points transform through it before the device scale, and the stroke width scales by the same matrix scale. Proof: `go test -count=1 ./internal/pdf -run TestCTM` and `go test -count=1 ./spectreps -run TestCTM` exited 0 on 2026-09-25.
+- [ ] The reader accepts the text operators `BT` `ET` `Tf` `Tj` `TJ`, or the writer copies a content stream it cannot interpret and edits only the parts it can. Proof: `go test -count=1 ./internal/pdf -run TestCompressContent`.
 
 ### 1.3 Image XObjects
 

@@ -80,9 +80,9 @@ Phase 06 reads:
 - A header starting with `%PDF-`.
 - Classic xref tables, then xref streams in a following row of the same phase.
 - Flate-decoded content streams via `compress/flate`.
-- Page content operators `m l c h re S s f f* n q Q w RG rg g G`.
+- Page content operators `m l c h re S s f f* n q Q cm w RG rg g G`.
 
-Those operators map to the same path and color operations as `moveto` `lineto` `curveto` `closepath` `stroke` `fill` `eofill` `gsave` `grestore` `setlinewidth` `setrgbcolor` `setgray`.
+Those operators map to the same path and color operations as `moveto` `lineto` `curveto` `closepath` `stroke` `fill` `eofill` `gsave` `grestore` `concat` `setlinewidth` `setrgbcolor` `setgray`.
 
 `Tj`, `TJ`, `'`, `"`, and `Do` return `undefined` with the operator name filled in, unless a later phase defines them. A page that uses them does not rasterize as a blank success.
 
