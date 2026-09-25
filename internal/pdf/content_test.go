@@ -48,6 +48,30 @@ func TestPaintRedRect(t *testing.T) {
 	wantPixel(t, img, 15, 15, whiteByte, whiteByte, whiteByte)
 }
 
+// TestContentScannerNameText locks the seam that carries name text to the
+// operand stack, so Do and Tf can read name operands.
+func TestContentScannerNameText(t *testing.T) {
+	lex := scanner{src: []byte("/Im Do"), pos: 0}
+	tok, ok, err := lex.next()
+	if err != nil || !ok {
+		t.Fatalf("next: ok=%v err=%v", ok, err)
+	}
+	if tok.kind != ctokName || tok.text != "Im" {
+		t.Fatalf("name token = %+v", tok)
+	}
+	run := newRunner(nil, 1)
+	if err := run.take(tok); err != nil {
+		t.Fatal(err)
+	}
+	name, err := run.popName("Do")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name != "Im" {
+		t.Fatalf("popName = %q", name)
+	}
+}
+
 func TestPaintUndefined(t *testing.T) {
 	pixmap := graphics.NewPixmap(4, 4)
 	cases := []struct {

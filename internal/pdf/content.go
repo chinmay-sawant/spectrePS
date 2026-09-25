@@ -45,8 +45,10 @@ type (
 	}
 
 	item struct {
-		num   float64
-		isNum bool
+		num    float64
+		isNum  bool
+		name   string
+		isName bool
 	}
 
 	runner struct {
@@ -73,6 +75,7 @@ const (
 	tokNumber tokenKind = iota
 	tokOperand
 	tokOperator
+	ctokName
 )
 
 const (
@@ -146,7 +149,12 @@ func (run *runner) play(ctx context.Context, lex *scanner) error {
 
 func (run *runner) take(tok ctok) error {
 	if tok.kind != tokOperator {
-		run.stack = append(run.stack, item{num: tok.num, isNum: tok.kind == tokNumber})
+		run.stack = append(run.stack, item{
+			num:    tok.num,
+			isNum:  tok.kind == tokNumber,
+			name:   tok.text,
+			isName: tok.kind == ctokName,
+		})
 		return nil
 	}
 	if handled, err := run.takePath(tok.text); handled {
@@ -237,8 +245,7 @@ func (lex *scanner) next() (ctok, bool, error) {
 func (lex *scanner) one() (ctok, error) {
 	switch lex.src[lex.pos] {
 	case '/':
-		lex.skipName()
-		return operandToken(), nil
+		return lex.name()
 	case '(':
 		return lex.skipped(lex.skipString)
 	case '<':
@@ -302,6 +309,15 @@ func (lex *scanner) skipComment() {
 		}
 		lex.pos++
 	}
+}
+
+// name scans one PDF name and returns its text, without the slash.
+// Names nested inside arrays and dictionaries are skipped by the caller and
+// never reach the operand stack.
+func (lex *scanner) name() (ctok, error) {
+	start := lex.pos + 1
+	lex.skipName()
+	return nameToken(string(lex.src[start:lex.pos])), nil
 }
 
 func (lex *scanner) skipName() {
@@ -787,6 +803,20 @@ func (run *runner) popNum(opName string) (float64, error) {
 	return last.num, nil
 }
 
+// popName pops one name operand. A missing or non-name operand is an error.
+func (run *runner) popName(opName string) (string, error) {
+	count := len(run.stack)
+	if count == 0 {
+		return "", NewError(opName, errUnderflow)
+	}
+	last := run.stack[count-1]
+	run.stack = run.stack[:count-1]
+	if !last.isName {
+		return "", NewError(opName, errType)
+	}
+	return last.name, nil
+}
+
 func zeroToken() ctok {
 	return ctok{kind: tokNumber, num: 0, text: ""}
 }
@@ -801,6 +831,10 @@ func operandToken() ctok {
 
 func operatorToken(text string) ctok {
 	return ctok{kind: tokOperator, num: 0, text: text}
+}
+
+func nameToken(text string) ctok {
+	return ctok{kind: ctokName, num: 0, text: text}
 }
 
 func contentSyntax() error {
