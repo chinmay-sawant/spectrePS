@@ -18,19 +18,19 @@ The mode is an allowlist, not a Ghostscript clone. A switch is accepted when it 
 
 ### 1.1 Entry shape and policy
 
-- [ ] A new `documentation/gs-argv-grammar.md` states the entry shape (`spectreps gs ...`), the allowlist policy, the accept-and-ignore list, and the exit codes. Proof: the file exists and states the policy.
+- [x] A new `documentation/gs-argv-grammar.md` states the entry shape (`spectreps gs ...`), the allowlist policy, the accept-and-ignore list, and the exit codes. Proof (2026-09-25): `test -f documentation/gs-argv-grammar.md` exited 0, and the file carries the entry shape, the allowlist policy, the accept-and-ignore table, and the exit-code table in its own sections.
 
 ### 1.2 Device and output
 
-- [ ] The device section maps `-sDEVICE` names onto subcommands, including `tiff24nc`, and defines `raster -format ppm|png|jpeg|tiff` so the device wins over the `-o` suffix. The output section maps `-sOutputFile` and defines the rejected forms (`-`, `%stdout`, `%pipe%`, printf widths). Proof: the sections exist.
+- [x] The device section maps `-sDEVICE` names onto subcommands, including `tiff24nc`, and defines `raster -format ppm|png|jpeg|tiff` so the device wins over the `-o` suffix. The output section maps `-sOutputFile` and defines the rejected forms (`-`, `%stdout`, `%pipe%`, printf widths). Proof (2026-09-25): `grep -c '^## Devices$\|^## Output$' documentation/gs-argv-grammar.md` printed 2; the device table names `tiff24nc` and the output section lists the four rejected forms.
 
 ### 1.3 Page range and geometry
 
-- [ ] The page section maps `-dFirstPage` and `-dLastPage` onto `-pages`, including `-dFirstPage=N` to `-pages N-`, and names the rejected `-sPageList` forms. The geometry section maps `-r`, `-dDEVICEWIDTHPOINTS`, `-dDEVICEHEIGHTPOINTS`, and `-g` at 72 dpi. Proof: the sections exist.
+- [x] The page section maps `-dFirstPage` and `-dLastPage` onto `-pages`, including `-dFirstPage=N` to `-pages N-`, and names the rejected `-sPageList` forms. The geometry section maps `-r`, `-dDEVICEWIDTHPOINTS`, `-dDEVICEHEIGHTPOINTS`, and `-g` at 72 dpi. Proof (2026-09-25): `grep -c '^## Page range$\|^## Geometry$' documentation/gs-argv-grammar.md` printed 2; the page table carries `-dFirstPage=N` to `-pages N-` and the rejected `-sPageList` forms, and the geometry section states the 72 dpi rule for `-g`.
 
 ### 1.4 Batch, safety, input, and values
 
-- [ ] Sections cover the accept-and-ignore switches (`-dBATCH`, `-dNOPAUSE`, `-q`, `-dSAFER`, `-dFIXEDMEDIA`), the rejected safety switches, one input file or `-f`, the rejected `-c`, and the `-s`/`-d` value allowlist. Proof: the sections exist.
+- [x] Sections cover the accept-and-ignore switches (`-dBATCH`, `-dNOPAUSE`, `-q`, `-dSAFER`, `-dFIXEDMEDIA`), the rejected safety switches, one input file or `-f`, the rejected `-c`, and the `-s`/`-d` value allowlist. Proof (2026-09-25): `grep -c '^## Accept and ignore$\|^## Input$\|^## The -s and -d value allowlist$' documentation/gs-argv-grammar.md` printed 3; the sections name the five ignored switches, `-dNOSAFER` and `-dDELAYSAFER`, `-f`, `-c`, and the value allowlist table.
 
 ## Phase 2: Parser
 
