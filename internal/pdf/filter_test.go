@@ -40,17 +40,22 @@ func TestDecodeEmpty(t *testing.T) {
 	}
 }
 
-func TestDecodeLZW(t *testing.T) {
+func TestDecodeUnknownFilter(t *testing.T) {
 	t.Parallel()
-	_, err := Decode("LZWDecode", NullVal(), nil)
-	wantErr(t, err, "LZWDecode", errUndefined)
+	_, err := Decode("BogusDecode", NullVal(), nil)
+	wantErr(t, err, "BogusDecode", errUndefined)
 }
 
-func TestDecodePredictor(t *testing.T) {
+// TestDecodeUnsupportedPredictor keeps the old refusal for a predictor the
+// decoder does not implement. Predictors 2 and 10 through 15 now apply.
+func TestDecodeUnsupportedPredictor(t *testing.T) {
 	t.Parallel()
-	params := DictVal(map[string]Value{"Predictor": IntVal(2)})
+	params := DictVal(map[string]Value{"Predictor": IntVal(3)})
 	_, err := Decode(opFlate, params, []byte{1, 2, 3})
 	wantErr(t, err, opPredictor, errUndefined)
+	bad := DictVal(map[string]Value{"Predictor": NameVal("yes")})
+	_, err = Decode(opFlate, bad, []byte{1})
+	wantErr(t, err, opPredictor, errSyntax)
 }
 
 func wantErr(t *testing.T, err error, opName, errName string) {

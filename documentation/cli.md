@@ -17,6 +17,7 @@ spectreps ink_cov [options] file.ps|file.pdf
 spectreps rewrite [options] file.pdf
 spectreps ps -o path file.pdf
 spectreps text [-pages range] file.pdf
+spectreps info file.pdf
 spectreps validate [options] file.ps|file.pdf
 spectreps compare bytes fileA fileB
 spectreps compare raster [options] fileA fileB
@@ -83,6 +84,21 @@ Any other `-colorspace` value exits 2. `rgb` keeps the 24-bit RGB bytes from ear
 `ps` opens a PDF and re-emits each page's path subset as one date-free PostScript program. The header is `%!PS-Adobe-3.0` with a fixed 612 by 792 box. Marks are `setrgbcolor` or `setgray`, `setlinewidth`, `m`/`l`, and `S`/`f`/`f*` in 72 dpi points, and a prolog defines the short names. Text and images are not emitted: a page with `Tj` exits 1 with `Error: /undefined in Tj`. The file is written at mode `0o600`, and bytes are stable across two runs. `documentation/devices.md` has the shape.
 
 `text` opens a PDF and prints the extracted text of the selected pages to stdout. Lines run top to bottom and left to right, each line ends with CRLF, and a font with neither `/ToUnicode` nor a named encoding falls back to the code point. The command accepts `-pages` and no other option. Extraction is compared as text and geometry, not as raster bytes: text pixels never byte-match Ghostscript, because hinting and antialiasing differ. `documentation/devices.md` has the layout.
+
+`info` opens a PDF and prints a read-only summary to stdout. It writes no file and takes no option. The lines are:
+
+```
+PDF version: 1.4
+Pages: 2
+Page 1: 612 x 792
+Page 2: 100 x 50
+Tagged: false
+Fonts:
+  Helvetica embedded=false
+Images: 1
+```
+
+`PDF version` is the header version. `Pages` is the page tree leaf count, and each `Page` line is the resolved `/MediaBox` width and height in points, inherited from the nearest `/Pages` ancestor and defaulting to 612 by 792 when the tree has none. `Tagged` is the reader tagged flag. The `Fonts:` block lists every in-use `/Type /Font` dictionary except CIDFont descendants, sorted by name, and `embedded=true` means a `/FontFile`, `/FontFile2`, or `/FontFile3` program is in the file. A file with no fonts prints `Fonts: none`. `Images` counts the in-use image XObjects. An encrypted trailer exits 1 with `Error: /invalidaccess in Encrypt`, because the reader refuses it. A missing input or a bad flag exits 2, an unreadable path exits 3, and a malformed document exits 1.
 
 `validate` takes one input and writes errors to stderr. It has no output file. `validate` does not run the PDF/UA-2 preflight yet. That preflight is `internal/pdfa.PreflightUA2`, it runs only for a UA-2 request, and its rules are in `documentation/devices.md`. The scope is preserve and preflight, and the claim is preflight only.
 

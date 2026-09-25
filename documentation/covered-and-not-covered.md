@@ -9,12 +9,12 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 ## Covered
 
 - Interpret PostScript. Spectre's slice is a small operator set, not LanguageLevel 3. See `documentation/language.md`.
-- Open a PDF and rasterize pages. Spectre's slice is path and clip operators, text operators, Flate streams, image XObjects and Form XObjects through `Do`, and marked-content reading, not PDF 1.7 or PDF 2.0.
+- Open a PDF and rasterize pages. Spectre's slice is path and clip operators, text operators, the Flate, LZW, ASCII85, ASCIIHex, and RunLength stream filters with predictors 2 and 10 through 15, image XObjects and Form XObjects through `Do`, and marked-content reading, not PDF 1.7 or PDF 2.0.
 - Rasterize to an image. Spectre writes PPM, PNG, JPEG, and TIFF (none or Deflate). Ghostscript also writes BMP, PCX, fax, and PSD.
 - Select pages with `-pages`, in the style of `-dFirstPage` and `-dLastPage`. `raster`, `bbox`, `inkcov`, `pdfimage`, and `compare raster` take the flag.
 - Report the painted box in points, the RGB mark coverage of a page in the style of `bbox` and `inkcov`, and the weighted RGB ink amount in the style of `ink_cov`. Spectre's channels are RGB because the pixmap is RGB, so neither ink report is a CMYK report.
 - Wrap each painted page in a new PDF as one image, in the style of `pdfimage24`, `pdfimage8`, and `pdfimage32`. Spectre uses Flate image streams and the RGB, gray, and CMYK spaces.
-- Rewrite a PDF as a new file, compress streams, and re-encode images. Spectre Flates content, re-encodes Flate, raw, and CCITT image streams losslessly at level 2, and DCT-encodes images with a longest-side cap at levels 3 through 5. Levels 3 through 5 also decode JPEG2000 streams and re-encode them as DCT.
+- Rewrite a PDF as a new file, compress streams, and re-encode images. Spectre Flates content, re-encodes Flate, raw, LZW, and CCITT image streams losslessly at level 2, and DCT-encodes images with a longest-side cap at levels 3 through 5. Levels 3 through 5 also decode JPEG2000 streams and re-encode them as DCT.
 - Rewrite a path-only PDF as PostScript, in the style of `pdf2ps` and `ps2write`. Spectre writes the points operators, not glyphs or image data, so text, fonts, and images are not written.
 - Paint and extract PDF text, in the style of `txtwrite` and `ps2ascii`. Spectre paints embedded TrueType and OpenType outlines and the standard 14 advances, and `spectreps text` writes UTF-8 with one CRLF per line and a code-point fallback. Type 1, bare CFF, Type 3, vertical writing, color fonts, and variable fonts are out of this tag, and OCR is out.
 - Write a PDF/A-4 claim, in the style of `-dPDFA` policy 2. `-pdfa 4` claims the base profile and `-pdfa 4f` claims the embedded-file profile. Spectre appends a static XMP packet and an sRGB output intent, and the profile preflight refuses a known violation instead of keeping the claim. The result is a claim, not a certificate.
@@ -25,10 +25,10 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 
 ## Not covered
 
-- Full PostScript LanguageLevel 3, including filters other than Flate, `%pipe%`, and `%disk`.
+- Full PostScript LanguageLevel 3, including PostScript filters other than Flate, `%pipe%`, and `%disk`.
 - Full PDF 1.7 and PDF 2.0, including transparency, optional content, encryption, and passwords.
 - OCR (`pdfocr`, Tesseract). Font programs beyond the subset in `documentation/fonts.md`: Type 1 `/FontFile`, bare CFF, Type 3, vertical writing, color fonts, and variable fonts.
-- Images inside a PDF on the reading side beyond `Do` on `/Subtype /Image`. `Do` paints RGB and gray image XObjects. `/SMask`, `/Mask`, `/ImageMask`, and `/Decode` arrays are refused, not approximated. Rewrite decodes CCITT G4 and G3 and JPEG2000 image streams: level 2 re-encodes CCITT losslessly as Flate, and levels 3 through 5 re-encode both as DCT.
+- Images inside a PDF on the reading side beyond `Do` on `/Subtype /Image`. `Do` paints RGB and gray image XObjects. `/SMask`, `/Mask`, `/ImageMask`, and `/Decode` arrays are refused, not approximated. Rewrite decodes CCITT G4 and G3, LZW, and JPEG2000 image streams: level 2 re-encodes CCITT and LZW losslessly as Flate, and levels 3 through 5 re-encode them as DCT.
 - Font embedding and subsetting.
 - PDF/A-1, PDF/A-2, PDF/A-3, and PDF/A-4e creation. Spectre writes a PDF/A-4 or 4f claim only. It does not embed missing fonts or convert color, and it produces no certificate.
 - PDF/UA-2 conformance checking, certification, tag generation, reading order, and role assignment. Spectre preserves an existing tree and preflights a machine-checkable subset; it says preflight only.

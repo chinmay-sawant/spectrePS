@@ -83,8 +83,22 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - `BMC`, `BDC`, `EMC`, `MP`, and `DP` parse and track nesting. A `BDC` or `DP` dictionary operand and a `/Properties` name operand both resolve, the cap is 64 with `limitcheck`, and an unmatched `EMC` is `syntaxerror in content`. A marked page rasterizes as if the markers were absent, and `sampledata/pdfua2/tagged-ua2.pdf` rasterizes and extracts with no error.
 - `PaintOptions.MarkedContent` pairs `BeginMarkedContent` and `EndMarkedContent` in stream order at the same depth and carries the resolved properties, and `MP` and `DP` fire no event. `TextOptions.Runs` fires one `TextRun` per `Tj`, `TJ`, `'`, and `"`, with the TJ string elements concatenated and the numbers omitted. `ImageNameMarker` fires with the resource name and the XObject dictionary before decode. A nil or typed-nil sink changes nothing.
 - An encrypted file returns `invalidaccess`. An unknown stream filter returns `undefined`. A truncated xref returns `JobError`.
+- `LZWDecode` decodes a TIFF LZW strip, which pins the early change width switch, and round trips `/EarlyChange` 0 and 1 against a test encoder. Malformed data returns `syntaxerror` with the `LZWDecode` op and a stream past 32 MiB returns `limitcheck`.
+- `ASCII85Decode` decodes a standard-library ASCII85 body, including the `z` shortcut, partial final groups, a leading `<~`, and ignored whitespace. A character outside `!` through `u`, a one-character final group, and a group above 2^32 - 1 return `syntaxerror`.
+- `ASCIIHexDecode` decodes uppercase, lowercase, whitespace, the `>` end marker, and an odd final digit. A non-hex character returns `syntaxerror`.
+- `RunLengthDecode` decodes literal runs, repeat runs, and the 128 end marker. A truncated run returns `syntaxerror`, and output past 32 MiB returns `limitcheck`.
+- Predictors 2 and 10 through 15 apply on Flate for xref streams, object streams, content streams, and image streams. `/Predictor 12` and `/Predictor 15` both read the per-row tag byte. A predictor outside 1, 2, and 10 through 15 returns `undefined` with the `Predictor` op; a short row, a bad tag, and a bad `/BitsPerComponent` return `syntaxerror`.
+- A `/Filter` chain decodes each stage in order with its own `/DecodeParms` entry. An unknown stage returns `undefined` with that filter name.
+- Level 2 re-encodes an LZW image as Flate RGB, levels 3 through 5 as DCT, and an undecodable LZW stream copies through at every level. An LZW image decodes through `DecodeLZWImageValue`, because `DecodeImage` keeps its four-form table.
 - `RasterizePage` with a negative index, or an index past the last page, returns `rangecheck`.
 - `spectreps raster -o out.ppm in.pdf` writes the P6 file for a path-only fixture.
+
+## PDF info
+
+- `spectreps info file.pdf` prints `PDF version`, `Pages`, one `Page N: width x height` line per page, `Tagged`, a `Fonts:` block or `Fonts: none`, and `Images`. Page sizes resolve `/MediaBox` through the page tree and default to 612 by 792 points.
+- The font block lists every in-use `/Type /Font` dictionary except CIDFont descendants, sorted by name, with `embedded=true` when `/FontDescriptor` carries `/FontFile`, `/FontFile2`, or `/FontFile3`. A Type 3 font counts as embedded, and a Type0 font needs every descendant to carry a program.
+- A trailer with `/Encrypt` is refused at open time with `Error: /invalidaccess in Encrypt`. A malformed `/MediaBox` fails with `Error: /syntaxerror in Info`.
+- `spectreps info` exits 0 on a clean read, 1 on a job error, 2 on a missing input or a bad flag, and 3 on an unreadable path. The command writes no file.
 
 ## Text and extraction
 
