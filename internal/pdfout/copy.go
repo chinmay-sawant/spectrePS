@@ -38,6 +38,11 @@ type CopyOptions struct {
 	// PDFA selects the %PDF-2.0 header with a binary marker above byte 127.
 	// The trailer keeps /ID and writes no /Encrypt.
 	PDFA bool
+	// Tag selects the %PDF-2.0 header with a binary marker above byte 127 for
+	// a generated tagged file, so a PDF 1.x source does not leave as a 1.4
+	// shell. PDFA wins when both are set. It is optional, so existing keyed
+	// literals keep compiling.
+	Tag bool `exhaustruct:"optional"`
 }
 
 // headerSource is a CopySource that knows its PDF header block and whether the
@@ -91,7 +96,8 @@ func isContainer(val pdf.Value) bool {
 // replaces the root body when it is set.
 // An untagged source writes the classic PDF 1.4 header. A tagged source keeps
 // its own header block, so a PDF 2.0 file with tags does not leave as a 1.4
-// shell. When PDFA is set, the PDF/A-4 header wins over both.
+// shell. When PDFA or Tag is set, the PDF 2.0 header with its binary marker
+// wins over both, and PDFA wins over Tag.
 // The trailer uses /Root from src and /ID as the SHA-256 of the written bodies.
 // Two calls on the same source return equal bytes, and the file carries no
 // /Info and no dates.
@@ -113,7 +119,7 @@ func WriteCopy(ctx context.Context, src CopySource, opt CopyOptions) ([]byte, er
 		return buildPackedCopyFile(src.RootNum(), objects)
 	}
 	header := copyHeader(src)
-	if opt.PDFA {
+	if opt.PDFA || opt.Tag {
 		header = []byte(headerFor(true))
 	}
 	return buildCopyFile(src.RootNum(), objects, header), nil

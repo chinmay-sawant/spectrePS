@@ -67,13 +67,19 @@ func defaultStandardType(name string) bool {
 }
 
 // pdf20StandardType reports whether one structure type is standard in the
-// PDF 2.0 namespace, ISO 32000-2 Table 368 and the PDF Association cheat
-// sheet. It is the default set with the PDF 2.0 additions.
+// PDF 2.0 namespace, ISO 32000-2 Table 365 through Table 375. It is the
+// default set plus the PDF 2.0 additions, minus the eleven PDF 1.7 types
+// Annex M removes: Art, BlockQuote, TOC, TOCI, Index, Private, Quote, Note,
+// Reference, BibEntry, and Code. TOC and TOCI keep their PDF 1.7 spelling;
+// the mixed-case Toc and Toci are standard in neither namespace.
 func pdf20StandardType(name string) bool {
 	switch name {
-	case "DocumentFragment", "Aside", "Title", "Toc", "Toci",
-		"FENote", "Sub", "Em", "Strong", "Artifact":
+	case "DocumentFragment", "Aside", "Title", "FENote", "Sub", "Em", "Strong", "Artifact":
 		return true
+	case "Art", "BlockQuote", "TOC", "TOCI", "Index", "Private",
+		"Quote", "Note", "Reference", "BibEntry", "Code",
+		"Toc", "Toci":
+		return false
 	default:
 		return defaultStandardType(name)
 	}
