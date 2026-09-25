@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chinmay-sawant/spectrePS/spectreps"
 	"golang.org/x/image/tiff"
 )
 
@@ -648,4 +649,50 @@ func gsListCombination(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "list-%d.ppm")
 	args := append(gsListArgs(out, "1", src), "-dFirstPage=1")
 	want(t, args, exitUsage, "", "spectreps: -sPageList cannot be combined with -dFirstPage or -dLastPage\n")
+}
+
+// TestGSEndToEnd runs a ps2pdf shaped job against the checked-in fixture and
+// opens and rasterizes the PDF it writes.
+func TestGSEndToEnd(t *testing.T) {
+	fixture := filepath.Join("..", "..", "testdata", "gs-argv-input.pdf")
+	out := filepath.Join(t.TempDir(), "out.pdf")
+	args := []string{
+		"gs", "-q", "-dBATCH", "-dNOPAUSE",
+		"-sDEVICE=pdfwrite", "-sOutputFile=" + out, fixture,
+	}
+	want(t, args, 0, "", "")
+	payload := readPayload(t, out)
+	if !bytes.HasPrefix(payload, []byte("%PDF-")) {
+		t.Fatalf("output prefix %.8q", payload)
+	}
+	doc := openPDFBytes(t, payload)
+	if doc.PageCount() != 2 {
+		t.Fatalf("PageCount = %d, want 2", doc.PageCount())
+	}
+	in, err := spectreps.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = in.Close() })
+	opt := spectreps.RunOptions{PageWidthPt: 20, PageHeightPt: 20, ResolutionDPI: 72}
+	colors := [][3]byte{{255, 0, 0}, {0, 255, 0}}
+	for page := range doc.PageCount() {
+		img, err := in.RasterizePage(t.Context(), doc, page, opt)
+		if err != nil {
+			t.Fatalf("page %d: %v", page, err)
+		}
+		gsCheckFirstPixel(t, img, colors[page])
+	}
+}
+
+// gsCheckFirstPixel fails unless the first pixel is the wanted RGB triple.
+func gsCheckFirstPixel(t *testing.T, img spectreps.PageImage, want [3]byte) {
+	t.Helper()
+	if len(img.Pixels) < 3 {
+		t.Fatal("page image is empty")
+	}
+	if img.Pixels[0] != want[0] || img.Pixels[1] != want[1] || img.Pixels[2] != want[2] {
+		t.Fatalf("first pixel = %d,%d,%d, want %d,%d,%d",
+			img.Pixels[0], img.Pixels[1], img.Pixels[2], want[0], want[1], want[2])
+	}
 }

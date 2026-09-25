@@ -2,7 +2,7 @@
 
 Binary name `spectreps`, built at `bin/spectreps` by `make build`.
 
-The CLI is a caller of package `spectreps`. Flags exist to fill `RunOptions`, `RewriteOptions`, and file paths. Ghostscript's full switch grammar is not a goal of the current tags. A compatibility mode that accepts a `gs` argv can be proposed later in `plans/v0.0.1/10-deferred.md`. The switches the current subcommands can already express are mapped in `documentation/gs-argv-mapping.md`; Spectre does not accept a `gs` argv.
+The CLI is a caller of package `spectreps`. Flags exist to fill `RunOptions`, `RewriteOptions`, and file paths. Ghostscript's full switch grammar is not a goal. The bounded mode under `spectreps gs` accepts the allowlisted switches in `documentation/gs-argv-grammar.md`; `documentation/gs-argv-mapping.md` maps a rewritten `gs` job onto a plain Spectre command line.
 
 ## Commands
 
@@ -17,7 +17,10 @@ spectreps rewrite [options] file.pdf
 spectreps validate [options] file.ps|file.pdf
 spectreps compare bytes fileA fileB
 spectreps compare raster [options] fileA fileB
+spectreps gs [switches] file.ps|file.pdf
 ```
+
+`gs` is the bounded compatibility mode. It accepts only the switches in `documentation/gs-argv-grammar.md` and routes the job to the commands above. Any other switch exits 2 with a message that names it.
 
 `version` prints `0.0.2`. Exit 0.
 

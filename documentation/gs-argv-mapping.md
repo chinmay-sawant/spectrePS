@@ -1,8 +1,8 @@
 # gs argv mapping
 
-Spectre PS does not accept a `gs` argv. This file maps the `gs` switches that the current subcommands can already express onto Spectre commands and flags, and names the switches that stay rejected.
+Spectre PS takes a rewritten command line. This file maps the `gs` switches that the current subcommands can already express onto Spectre commands and flags, and names the switches that stay rejected. `spectreps gs` accepts the bounded allowlist of these switches; its grammar is in `documentation/gs-argv-grammar.md`.
 
-The commands and flags below are the current CLI. The only planned addition is `-pages`, marked where it appears. The full PostScript argv grammar stays out, per `plans/v0.0.1/10-deferred.md` row 10.2.
+The commands and flags below are the current CLI. `-pages` landed in v0.0.2, and the gs mode maps `-dFirstPage` and `-dLastPage` onto it. The full PostScript argv grammar stays out.
 
 ## Devices and output suffixes
 
@@ -22,7 +22,7 @@ Ghostscript picks a device with `-sDEVICE=name`. Spectre has no device flag. `sp
 
 Every other device name is rejected. That includes the grayscale and mono raster devices (`pnggray`, `pngmono`, `jpeggray`, `pgmraw`), alpha and color-space variants (`pngalpha`, `pam`, `pamcmyk32`), the TIFF family (`tiff24nc` and the rest), the bit devices (`bit`, `bitrgb`, `bitcmyk`), text devices (`txtwrite`), PostScript writers (`ps2write`, `eps2write`), and the printer devices. Spectre selects an encoder from the output path, so a device name has no place to go.
 
-> TIFF landed in phase 2 of `plans/v0.0.2/4-quick-wins.md` as `.tif` and `.tiff` output on `raster`. It does not add a `-sDEVICE` flag.
+> TIFF landed in phase 2 of `plans/v0.0.2/4-quick-wins.md` as `.tif` and `.tiff` output on `raster`. The gs mode maps `-sDEVICE=tiff24nc` onto it.
 
 ## Output file
 
@@ -79,7 +79,7 @@ These do not map and are not planned to map:
 | `-dNOPAUSE` beyond batch | There is no interactive mode, so the pause behavior has no equivalent. |
 | The rest of the grammar | `-d`, `-s`, `-I`, `-P`, `-Z`, `--`, and every other `gs` token. A second flag grammar would fork the CLI, so it stays out. |
 
-None of these switches are accepted by the binary. A `gs` command line fails at the first unknown command or flag with exit 2. The mapping in this file describes how to rewrite a `gs` job as a Spectre command. It is not a compatibility mode.
+The binary accepts only the allowlisted switches, through `spectreps gs`, and rejects everything else at the first unknown or rejected switch with exit 2. A switch outside the grammar keeps the exit 2 it has in the mapping table. The rewrite in this file stays the readable form for scripts that do not need a `gs` command line.
 
 ## Sources
 
