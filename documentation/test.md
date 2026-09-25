@@ -43,9 +43,12 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - `spectreps raster -o out.png in.ps` writes a PNG that decodes to the same pixels as the PPM from the same program. The test compares decoded pixels, not the PNG bytes.
 - `spectreps raster -o out.jpg in.ps` writes a JPEG that starts with the SOI bytes `FF D8` and decodes to the page geometry. `.jpeg` selects the same encoder; every other suffix falls back to PPM. The test decodes with `image/jpeg` and does not compare JPEG bytes.
 - `-jpegq` defaults to 75 and is clamped to 1 through 100. `-jpegq 0` and `-jpegq 500` still write a decodable JPEG. `run` and `compare raster` reject `-jpegq` with exit 2.
+- `spectreps raster` paints every page of a PDF input. A two-page fixture and an `-o` path with `%d` write two PPM files whose bodies match each page's marks.
+- `-pages` takes `N` or `A-B`, 1-based inclusive. `A-` runs to the last page and `-B` starts at page 1, and an omitted flag selects every page. `raster`, `pdfimage`, `bbox`, `inkcov`, and `compare raster` accept it, and `run` accepts and ignores it. A malformed value exits 2. A start below 1 or past the last page exits 1 with `Error: /rangecheck in pages`. An end past the last page clamps to the last page.
+- For PostScript, `-pages` filters after `RunPostScript`, so a failing page outside the range still fails the command.
 - `spectreps raster -o out.tif in.ps` writes a TIFF that `tiff.Decode` reads back to the same pixels as the PPM from the same program. `.tiff` selects the same encoder, `.png`, `.jpg`, and `.jpeg` keep theirs, and every other suffix falls back to PPM. The test compares decoded pixels, not the TIFF bytes.
 - `-tiffcompress none` writes uncompressed TIFF and `-tiffcompress deflate` writes Deflate strips. The default is `deflate`, so two runs with the same input and the default return equal TIFF bytes. An unknown value exits 2 and writes no file. `run` and `compare raster` reject `-tiffcompress` with exit 2.
-- Two pages and an `-o` path with no `%d` exit 2. `%d` is the one-based page number.
+- Two pages and an `-o` path with no `%d` exit 2. `%d` is the one-based number of the emitted page. A range that selects input pages 2 and 3 writes `page-1` and `page-2`.
 
 ## Box and ink coverage
 
@@ -55,13 +58,14 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - `spectreps bbox` prints `%%BoundingBox` with the floored minima and ceilinged maxima, then `%%HiResBoundingBox` with `strconv.FormatFloat(v, 'f', -1, 64)` edges. A page with no marked pixel prints `%%BoundingBox: 0 0 0 0` and `%%HiResBoundingBox: 0 0 0 0`. stdout, exit 0.
 - `spectreps inkcov` prints `Page N` and three five-decimal RGB occupancy fractions ending in `RGB`. The line is not `CMYK OK`.
 - Both commands rasterize every page of a PDF input, not only page 0. A missing input exits 2.
+- Both commands apply `-pages` before printing. `inkcov` numbers emitted pages from 1, so selecting input page 2 prints `Page 1`.
 
 ## Pixel compare
 
 - `CompareRaster` on two equal images sets `Equal` true, `Offset` -1, and an empty `Reason`.
 - Different `Width` sets `Reason` `width` and `Offset` -1. Different `Height` with equal width sets `Reason` `height`.
 - The first differing RGB byte sets `Reason` `pixel` and `Offset` to that byte index in row-major order. Bytes in the stride padding are ignored.
-- `spectreps compare raster` uses one `RunOptions` value for both files. Equal pixels exit 0. A mismatch exits 1 and prints `mismatch pixel N` or `mismatch width` on stdout. stderr is empty.
+- `spectreps compare raster` uses one `RunOptions` value and one `-pages` selection for both files. A `.pdf` input opens with `OpenPDF` and paints each selected page with `RasterizePage`; any other input uses `RunPostScript`. Equal pixels exit 0. A mismatch exits 1 and prints `mismatch pixel N` or `mismatch width` on stdout. Different selected page counts print `mismatch length` and exit 1. stderr is empty.
 - The compare command does not start `gs`.
 
 ## PDF open and rasterize
@@ -92,7 +96,7 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - `/MediaBox` is `[0 0 width*72/dpi height*72/dpi]` points. `dpi` of 0 or less selects 72.
 - The content stream paints `/Im0 Do` and the page resources carry the XObject. `Do` still returns `undefined` when Spectre opens the file, so the test decodes the image stream from the bytes instead of rasterizing the output.
 - Two `ImagePDF` calls on the same pages return buffers `CompareFiles` reports equal. The bytes contain no `CreationDate`, `ModDate`, or `/Info`. Both trailer `/ID` strings are the SHA-256 of the concatenated image streams.
-- `spectreps pdfimage` without `-o` exits 2. A `.pdf` input rasterizes every page with `RasterizePage`; any other input uses `RunPostScript`. The output file is mode `0o600`.
+- `spectreps pdfimage` without `-o` exits 2. A `.pdf` input rasterizes every selected page with `RasterizePage`; any other input uses `RunPostScript`. `-pages` picks the pages either way, and the output has one page per selected input page. The output file is mode `0o600`.
 - `pdfimage` is not `pdfwrite` and it does not DCT-encode.
 
 ## Validate

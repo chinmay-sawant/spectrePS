@@ -29,6 +29,9 @@ Shared options for `run`, `raster`, `pdfimage`, `bbox`, `inkcov`, and `compare r
 | `-h` | Page height in points | 792 |
 | `-r` | Pixels per inch | 72 |
 | `-o` | Output path | required for `raster` and `pdfimage` |
+| `-pages` | Page range, `N` or `A-B`, 1-based inclusive | every page |
+
+`-pages` accepts `A-` to run to the last page and `-B` to start at page 1. A start below 1 or past the last page exits 1 with `Error: /rangecheck in pages`. An end past the last page clamps to the last page. A malformed value exits 2. `run` accepts `-pages` and ignores it, the same way it accepts and ignores `-o`. For PostScript the interpreter runs every page first and the range filters the result, so a failing page outside the range still fails the command. For a PDF only the selected pages are painted.
 
 `raster` adds two flags:
 
@@ -58,17 +61,17 @@ Any other `-colorspace` value exits 2. `rgb` keeps the 24-bit RGB bytes from ear
 
 `validate` takes one input and writes errors to stderr. It has no output file.
 
-`compare bytes` takes two paths and no device flags. `compare raster` rasterizes both inputs with the same options, then calls `CompareRaster` on the pixmaps. It does not hash the encoded files.
+`compare bytes` takes two paths and no device flags. `compare raster` rasterizes the selected pages of both inputs with the same options and calls `CompareRaster` on each page pair. A `.pdf` input opens with `OpenPDF` and paints each selected page with `RasterizePage`; any other input uses `RunPostScript`. Different selected page counts print `mismatch length` and exit 1. It does not hash the encoded files.
 
 ## Output files
 
-`raster` writes a PPM raw file (P6) unless `-o` ends in `.png`, `.jpg`, `.jpeg`, `.tif`, or `.tiff`.
+`raster` writes a PPM raw file (P6) unless `-o` ends in `.png`, `.jpg`, `.jpeg`, `.tif`, or `.tiff`. A PDF input paints every selected page with `RasterizePage`; any other input uses `RunPostScript`.
 
 A `.png` output encodes the pixmap with `image/png`. A `.jpg` or `.jpeg` output encodes the same pixmap with `image/jpeg` at the `-jpegq` quality. Every other suffix falls back to PPM. JPEG is lossy, so decoded pixels can differ from the pixmap by a small amount. JPEG file bytes are not an equality oracle. `CompareRaster` and `PageImage` are.
 
 A `.tif` or `.tiff` output encodes the same pixmap with `golang.org/x/image/tiff` as baseline TIFF. `-tiffcompress` picks `none` for no compression or `deflate` for Deflate strips, and the default is `deflate`. That encoder writes those two only, so LZW and the CCITT schemes are not accepted. TIFF file bytes are not an equality oracle either.
 
-If the job produces one page and `-o` has no `%d`, the path is used as given. If the job produces more than one page and `-o` has no `%d`, the command exits 2. `%d` is the one-based page number, matching the `%d` token Ghostscript documents for `-sOutputFile`.
+If the job produces one page and `-o` has no `%d`, the path is used as given. If the job produces more than one page and `-o` has no `%d`, the command exits 2. `%d` is the one-based number of the emitted page, not the input page, matching the `%d` token Ghostscript documents for `-sOutputFile` and `-dFirstPage`. A range that selects input pages 3 through 5 writes page-1, page-2, and page-3.
 
 `bbox` writes two lines per page to stdout:
 
