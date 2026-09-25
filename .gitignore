@@ -4,4 +4,6 @@ bin/
 *.out
 coverage.out
 /vendor/
+# veraPDF is a local proof tool, not a dependency.
+/verapdf/
 .DS_Store

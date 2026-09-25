@@ -42,7 +42,8 @@ size-check:
 # It is not a dependency and it skips when the CLI is absent. veraPDF is Java,
 # so it stays out of make test.
 pdfa-check:
-	@if ! command -v verapdf >/dev/null 2>&1; then \
+	@verapdf=$$(if [ -x ./verapdf/verapdf ]; then printf '%s' ./verapdf/verapdf; elif command -v verapdf >/dev/null 2>&1; then command -v verapdf; fi); \
+	if [ -z "$$verapdf" ]; then \
 		printf '%s\n' 'pdfa-check: verapdf not installed, skipping'; \
 		exit 0; \
 	fi; \
@@ -51,13 +52,14 @@ pdfa-check:
 		printf '%s\n' 'pdfa-check: no samples under sampledata/pdfa, skipping'; \
 		exit 0; \
 	fi; \
-	verapdf --flavour 4 $$files
+	"$$verapdf" --flavour 4 $$files
 
 # pdfua2-check runs veraPDF as a proof tool over the sampled PDF/UA-2 writes.
 # It is not a dependency and it skips when the CLI is absent. veraPDF is Java,
 # so it stays out of make test.
 pdfua2-check:
-	@if ! command -v verapdf >/dev/null 2>&1; then \
+	@verapdf=$$(if [ -x ./verapdf/verapdf ]; then printf '%s' ./verapdf/verapdf; elif command -v verapdf >/dev/null 2>&1; then command -v verapdf; fi); \
+	if [ -z "$$verapdf" ]; then \
 		printf '%s\n' 'pdfua2-check: verapdf not installed, skipping'; \
 		exit 0; \
 	fi; \
@@ -66,7 +68,7 @@ pdfua2-check:
 		printf '%s\n' 'pdfua2-check: no samples under sampledata/pdfua2, skipping'; \
 		exit 0; \
 	fi; \
-	verapdf --flavour ua2 --format json $$files
+	"$$verapdf" --flavour ua2 --format json $$files
 
 fmt:
 	gofmt -w .

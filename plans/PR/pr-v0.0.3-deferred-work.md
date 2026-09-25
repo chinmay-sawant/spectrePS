@@ -154,7 +154,7 @@ make pdfa-check
 make pdfua2-check
 ```
 
-Every command exited 0 on 2026-09-25 on `feature/003-deferred-work` at `4e6b2cc`. `make lint` ran `gofmt` with no output, `golangci-lint run ./...`, and `size-check`, which reported `clean (0 over-limit files)`. `make test` ran `go test -p 24 ./...`, and a fresh `go test -count=1 -p 24 ./...` passed with every package `ok`. `cmd/spectreps` and `internal/engine` have no test files. `make build` wrote `bin/spectreps`. With veraPDF 1.30.2 on PATH, `make pdfa-check` exited 0 with `compliant="2" nonCompliant="0"` and `make pdfua2-check` exited 0 with 1727 passed rules and 0 failed rules per file; both checks exclude a `negative/` folder, and both still print a skip when veraPDF is absent.
+Every command exited 0 on 2026-09-25 on `feature/003-deferred-work` at `4e6b2cc`. `make lint` ran `gofmt` with no output, `golangci-lint run ./...`, and `size-check`, which reported `clean (0 over-limit files)`. `make test` ran `go test -p 24 ./...`, and a fresh `go test -count=1 -p 24 ./...` passed with every package `ok`. `cmd/spectreps` and `internal/engine` have no test files. `make build` wrote `bin/spectreps`. With the local gitignored `verapdf/` copy (veraPDF 1.30.2, used by the make targets before PATH), `make pdfa-check` exited 0 with `compliant="2" nonCompliant="0"` and `make pdfua2-check` exited 0 with 1727 passed rules and 0 failed rules per file; both checks exclude a `negative/` folder, and both still print a skip when no veraPDF is found.
 
 The phase rows carry dated outcomes, all 2026-09-25. Of the 72 rows with a literal `Proof:` field, 70 are checked and pass. Row 4-1.2 stays open by design with measured numbers: `TestRewriteSamples` passes, but levels 1 and 2 output 610,034 bytes against the 596,341-byte input, so the not-larger-than-input guard cannot be added. Row 3.6, Type 1 charstrings, is the deferred row and never ran. Phase 7 records its nine proof outcomes inline with the same date, written as `Proof (2026-09-25):` rather than `Proof:`.
 
@@ -261,7 +261,7 @@ $ make pdfua2-check
 
 ## Diff stat by extension
 
-Generated with `bash scripts/pr-diff-stat.sh master` after the veraPDF commit at `51d2286`, before this last table refresh, so the refresh's own `.md` lines are not in the table.
+Generated with `bash scripts/pr-diff-stat.sh master` after the local-copy commit at `6ecc7ab`, before this last table refresh, so the refresh's own `.md` lines are not in the table.
 
 | Extension | Files | Insertions | Deletions |
 | --- | ---: | ---: | ---: |
@@ -275,5 +275,5 @@ Generated with `bash scripts/pr-diff-stat.sh master` after the veraPDF commit at
 | `.ppm` | 2 | Binary | Binary |
 | `.py` | 1 | 59 | 0 |
 | `.sum` | 1 | 6 | 0 |
-| No extension | 1 | 33 | 1 |
-| **Total** | **149** | **20351** | **329** |
+| No extension | 2 | 37 | 1 |
+| **Total** | **150** | **20355** | **329** |
