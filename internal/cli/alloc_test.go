@@ -16,9 +16,10 @@ const allocCLIRuns = 20
 
 // allocCLILevel2 is the accepted allocation ceiling for one level 2 rewrite of
 // the small image fixture below. The isolated perf branch measured 701; the
-// merged tree adds one allocation in the image decode path, so the budget is
-// recorded against the integrated tree.
-const allocCLILevel2 = 702
+// merged tree adds one allocation in the image decode path, and the
+// -subset-fonts flag adds one bool value and its flag entry, so the budget is
+// recorded against this tree.
+const allocCLILevel2 = 704
 
 // TestPerformanceAllocs locks the level 2 copy allocation count. Timing never
 // gates make test; this deterministic count does.

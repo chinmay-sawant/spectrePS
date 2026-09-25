@@ -81,7 +81,7 @@ func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOp
 	if opt.Level == 0 {
 		return rewriteEmitted(ctx, doc.file, opt.CompressStreams)
 	}
-	return rewriteLevel(ctx, doc.file, opt.Level)
+	return rewriteLevel(ctx, doc.file, opt)
 }
 
 // rewriteRangeOK reports whether the option values are in range.
@@ -109,19 +109,26 @@ func rewriteEmitted(ctx context.Context, file *pdf.File, compress bool) ([]byte,
 	return out, nil
 }
 
-func rewriteLevel(ctx context.Context, file *pdf.File, level int) ([]byte, error) {
-	overrides, err := pdfout.LevelOverrides(ctx, file, level)
+// rewriteLevel maps a level above 0 to its stream and image overrides, then
+// adds the subset font objects when the caller opted in.
+func rewriteLevel(ctx context.Context, file *pdf.File, opt RewriteOptions) ([]byte, error) {
+	overrides, err := pdfout.LevelOverrides(ctx, file, opt.Level)
 	if err != nil {
 		return nil, asPDFJobError(err)
 	}
-	opt := pdfout.CopyOptions{
+	extra, appended, err := subsetObjects(ctx, file, opt.SubsetFonts, file.ObjectCount()+1)
+	if err != nil {
+		return nil, err
+	}
+	mergeOverrides(overrides, extra)
+	copyOpt := pdfout.CopyOptions{
 		Overrides:       overrides,
 		PackObjects:     false,
-		AppendObjects:   nil,
+		AppendObjects:   appended,
 		CatalogOverride: nil,
 		PDFA:            false,
 	}
-	out, err := pdfout.WriteCopy(ctx, file, opt)
+	out, err := pdfout.WriteCopy(ctx, file, copyOpt)
 	if err != nil {
 		return nil, asPDFJobError(err)
 	}

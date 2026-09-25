@@ -64,7 +64,7 @@ A symbolic Type 1 font with no PDF `/Encoding` starts from the program's built-i
 
 Widths follow this order: `/Widths`, then standard 14 metrics, then the charstring `hsbw` or `sbw` width, then `/MissingWidth`, then 0. `/MMType1` keeps its PDF widths and paints `invalidfont`; no instance program is read in this tag.
 
-Out of Type 1 scope: hinting and hint replacement applied to the outline, font writing and subsetting, `Type1C` under `/FontFile3`, and `CIDFontType0C`.
+Out of Type 1 scope: hinting and hint replacement applied to the outline, Type 1 program writing and subsetting, `Type1C` under `/FontFile3`, and `CIDFontType0C`.
 
 ## Extraction
 
@@ -84,10 +84,30 @@ Identity-H only. The target is a `/Type0` font with `/Encoding /Identity-H`, two
 
 Out of scope: predefined CMaps other than Identity-H, embedded CMap streams, Identity-V, vertical metrics with `/W2`, and CIDFontType0 CFF CID fonts.
 
+## Embedding and subsetting
+
+`RewriteOptions.SubsetFonts` turns subsetting on for a level 1 through 5 rewrite, and `spectreps rewrite -subset-fonts` sets the same option. It is off by default, so default output bytes do not change. Level 0 ignores it and still refuses text with `undefined in Tj`. A PDF/A claim applies it as well, after the claim's own appended objects.
+
+The subset keeps every glyph index. The used glyphs are copied into a new `glyf` table and the unused glyphs become zero-length entries, so `cmap`, `hmtx`, `maxp`, and `/CIDToGIDMap` stay valid and a content stream, a `/Differences` array, and an `/Encoding` need no re-encode. A kept composite glyph pulls in its component glyphs, transitively. Glyph 0 stays. `loca` is rebuilt, `head` gets a new `indexToLocFormat` when the rebuilt offsets need the long form, and the table directory is sorted with fresh table checksums and a fresh `head` `checkSumAdjustment`.
+
+The subset tag is six uppercase letters from the SHA-256 digest of the subset program. It is stable across runs and carries no date. The tagged `/BaseFont` is `<tag>+<name>`.
+
+A used code also gets a synthesized `/ToUnicode` CMap when no source map covers it. Consecutive codes whose text advances by one UTF-16 unit become a `bfrange`; every other code becomes a `bfchar`, and one section carries at most 100 entries. A simple font writes `/FirstChar`, `/LastChar`, and `/Widths` for the used code span. A Type0 font writes `/DW` and a `/W` array trimmed to the used CIDs.
+
+The first pass covers:
+
+- A `/FontFile2` TrueType program with `glyf` outlines is subsetted.
+- A `/FontFile3 /OpenType` program is copied whole, and its dictionary still gets the widths and the `/ToUnicode` map. CFF subsetting waits.
+- A `/FontFile` Type 1 program is copied whole. Type 1 program writing waits.
+- A font with no embedded program, a font the reader cannot resolve, a font whose used codes reach the collector cap of 4096, a font no page shows, and an inline font dictionary are copied unchanged. The PDF/A `font-not-embedded` rule therefore still refuses a font with no program whether or not the option ran.
+- Text inside a reachable Form XObject counts toward the page font under the same resource name, which over-keeps and never drops a glyph.
+
+The reader-side collector is `File.FontUsedCodes`. It returns the sorted unique codes per page and per font resource name, follows Form XObjects to depth 8, and stops a malformed stream or an exhausted scan budget without failing the rewrite. The writer is `File.SubsetFontObjects`, which returns the replacement bodies and the appended bodies the copy writer takes.
+
 ## Out of scope
 
 - Hinting and hint replacement. Outlines are rasterized as drawn and hint tables are ignored.
-- Subsetting and writing fonts.
+- CFF subsetting, Type 1 program writing and subsetting, and hint stripping. A `/FontFile2` TrueType program is subsetted with stable glyph indices; a CFF or Type 1 program is copied whole.
 - Type 3 fonts, vertical writing, color fonts with COLR or CPAL, SVG glyphs, and variable font axes.
 - OCR. Extraction reads the codes and ToUnicode that the document carries.
 - Pixel parity with Ghostscript on text pages. Hinting and antialiasing differ, so text tests compare shapes and advances.
