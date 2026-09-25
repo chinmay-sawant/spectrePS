@@ -7,7 +7,7 @@ import (
 )
 
 // Emit interprets content with the phase 06 path subset and returns canonical operators.
-// Coordinates stay in user space. The result is not a copy of content.
+// Coordinates are transformed by the content matrix, then scaled. The result is not a copy of content.
 // A cancelled context returns ctx.Err() and a nil slice.
 // A nil context panics with "pdfout: nil context".
 // An unsupported operator is returned unchanged from pdf.Paint (*pdf.Error).

@@ -104,13 +104,13 @@ func checkNotImplemented(
 	}
 
 	img, err := in.RasterizePage(t.Context(), nil, 0, opt)
-	if errors.Is(err, spectreps.ErrNotImplemented) || !errors.As(err, &job) || job.Msg != "rangecheck" {
+	if errors.Is(err, spectreps.ErrNotImplemented) || !errors.As(err, &job) || job.Msg != rangecheckMsg {
 		t.Fatalf("RasterizePage() error = %v, want rangecheck", err)
 	}
 	requireZeroPageImage(t, img)
 
 	out, err := in.RewritePDF(t.Context(), nil, rewrite)
-	want := spectreps.JobError{Op: "RewritePDF", Msg: "rangecheck", Filename: "", Line: 0, Column: 0}
+	want := spectreps.JobError{Op: "RewritePDF", Msg: rangecheckMsg, Filename: "", Line: 0, Column: 0}
 	if !errors.As(err, &job) || job != want {
 		t.Fatalf("RewritePDF() error = %v, want rangecheck", err)
 	}

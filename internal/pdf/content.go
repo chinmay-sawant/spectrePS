@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"context"
+	"math"
 	"slices"
 	"strconv"
 
@@ -36,6 +37,7 @@ type (
 		subX    float64
 		subY    float64
 		subOpen bool
+		ctm     graphics.Matrix
 		width   float64
 		red     float64
 		green   float64
@@ -58,6 +60,7 @@ type (
 		subX    float64
 		subY    float64
 		subOpen bool
+		ctm     graphics.Matrix
 		width   float64
 		red     float64
 		green   float64
@@ -78,6 +81,7 @@ const (
 	curveCount   = 3
 	octalExtra   = 2
 	pairLen      = 2
+	matrixLen    = 6
 
 	errUnderflow = "stackunderflow"
 	errNoPoint   = "nocurrentpoint"
@@ -113,6 +117,7 @@ func newRunner(marker graphics.Marker, scale float64) *runner {
 		subX:    0,
 		subY:    0,
 		subOpen: false,
+		ctm:     graphics.Identity(),
 		width:   defaultWidth,
 		red:     0,
 		green:   0,
@@ -204,6 +209,8 @@ func (run *runner) takeState(opName string) (bool, error) {
 		return true, run.save()
 	case "Q":
 		return true, run.restore()
+	case "cm":
+		return true, run.ctmConcat()
 	case "w":
 		return true, run.setWidth()
 	case "RG", "rg":
@@ -604,7 +611,7 @@ func (run *runner) clearPath() {
 
 func (run *runner) stroke() {
 	if run.marker != nil {
-		run.marker.Stroke(run.devicePoints(), run.width*run.scale, run.red, run.green, run.blue)
+		run.marker.Stroke(run.devicePoints(), run.deviceWidth(), run.red, run.green, run.blue)
 	}
 	run.clearPath()
 }
@@ -616,16 +623,29 @@ func (run *runner) fill(evenOdd bool) {
 	run.clearPath()
 }
 
+// deviceWidth is the stroke width in device pixels. The CTM scale matches
+// the PostScript device, which uses the length of the transformed x axis.
+func (run *runner) deviceWidth() float64 {
+	return run.width * run.scale * ctmScale(run.ctm)
+}
+
 func (run *runner) devicePoints() []graphics.Point {
 	pts := make([]graphics.Point, len(run.path))
 	for idx, step := range run.path {
+		posX, posY := run.ctm.Apply(step.posX, step.posY)
 		pts[idx] = graphics.Point{
-			X:    step.posX * run.scale,
-			Y:    step.posY * run.scale,
+			X:    posX * run.scale,
+			Y:    posY * run.scale,
 			Move: step.move,
 		}
 	}
 	return pts
+}
+
+// ctmScale is the effective scale of one user unit on the transformed x axis.
+// The PostScript device uses the same measure at stroke time.
+func ctmScale(ctm graphics.Matrix) float64 {
+	return math.Hypot(ctm.A, ctm.B)
 }
 
 func (run *runner) save() error {
@@ -656,6 +676,7 @@ func (run *runner) snap() *snapshot {
 		subX:    run.subX,
 		subY:    run.subY,
 		subOpen: run.subOpen,
+		ctm:     run.ctm,
 		width:   run.width,
 		red:     run.red,
 		green:   run.green,
@@ -671,6 +692,7 @@ func (run *runner) apply(saved *snapshot) {
 	run.subX = saved.subX
 	run.subY = saved.subY
 	run.subOpen = saved.subOpen
+	run.ctm = saved.ctm
 	run.width = saved.width
 	run.red = saved.red
 	run.green = saved.green
@@ -683,6 +705,30 @@ func (run *runner) setWidth() error {
 		return err
 	}
 	run.width = width
+	return nil
+}
+
+// ctmConcat pops a b c d e f and concatenates the matrix with the CTM, so the
+// user point is mapped by the new matrix first and the saved CTM second.
+func (run *runner) ctmConcat() error {
+	const opName = "cm"
+	vals := make([]float64, matrixLen)
+	for idx := len(vals) - 1; idx >= 0; idx-- {
+		val, err := run.popNum(opName)
+		if err != nil {
+			return err
+		}
+		vals[idx] = val
+	}
+	mat := graphics.Matrix{
+		A: vals[0],
+		B: vals[1],
+		C: vals[2],
+		D: vals[3],
+		E: vals[4],
+		F: vals[5],
+	}
+	run.ctm = graphics.Concat(mat, run.ctm)
 	return nil
 }
 

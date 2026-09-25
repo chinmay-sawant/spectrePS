@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -136,6 +137,241 @@ func pdfPrefix(got []byte) []byte {
 		return got[:16]
 	}
 	return got
+}
+
+func TestRewriteLevels(t *testing.T) {
+	checkRewriteLevelPages(t)
+	checkRewriteLevelContent(t)
+	checkRewriteLevelUsage(t)
+}
+
+// checkRewriteLevelPages runs every level on a two-page path fixture and checks
+// the output page count. Level 0 keeps the default rewrite bytes.
+func checkRewriteLevelPages(t *testing.T) {
+	t.Helper()
+	src := writeTemp(t, "levels.pdf", twoPagePlainPDF(t))
+	dir := t.TempDir()
+	for level := 0; level <= maxRewriteLevel; level++ {
+		out := filepath.Join(dir, fmt.Sprintf("level%d.pdf", level))
+		want(t, []string{"rewrite", "-level", strconv.Itoa(level), "-o", out, src}, 0, "", "")
+		if got := openPDFBytes(t, readPayload(t, out)).PageCount(); got != 2 {
+			t.Fatalf("level %d: PageCount = %d, want 2", level, got)
+		}
+	}
+	defaultOut := filepath.Join(dir, "default.pdf")
+	want(t, []string{"rewrite", "-o", defaultOut, src}, 0, "", "")
+	levelZero := filepath.Join(dir, "zero.pdf")
+	want(t, []string{"rewrite", "-level", "0", "-o", levelZero, src}, 0, "", "")
+	if !bytes.Equal(readPayload(t, defaultOut), readPayload(t, levelZero)) {
+		t.Fatal("-level 0 changed the default rewrite bytes")
+	}
+}
+
+// checkRewriteLevelContent checks that the pass-through levels keep a text
+// stream that the level 0 emitter rejects.
+func checkRewriteLevelContent(t *testing.T) {
+	t.Helper()
+	src := writeTemp(t, "text.pdf", textPagePDF(t))
+	dir := t.TempDir()
+	levelZero := filepath.Join(dir, "zero.pdf")
+	wantCode(t, []string{"rewrite", "-o", levelZero, src}, 1)
+	if _, err := os.Stat(levelZero); err == nil {
+		t.Fatal("level 0 wrote a file for text content")
+	}
+	for level := 1; level <= maxRewriteLevel; level++ {
+		out := filepath.Join(dir, fmt.Sprintf("level%d.pdf", level))
+		want(t, []string{"rewrite", "-level", strconv.Itoa(level), "-o", out, src}, 0, "", "")
+		if got := openPDFBytes(t, readPayload(t, out)).PageCount(); got != 1 {
+			t.Fatalf("level %d: PageCount = %d, want 1", level, got)
+		}
+	}
+}
+
+func checkRewriteLevelUsage(t *testing.T) {
+	t.Helper()
+	src := writeTemp(t, "usage.pdf", onePagePDF(t, "0 0 m 10 0 l S"))
+	out := filepath.Join(t.TempDir(), "out.pdf")
+	for _, level := range []string{"6", "-1"} {
+		code, _, stderr := callRun(t, "rewrite", "-level", level, "-o", out, src)
+		if code != exitUsage {
+			t.Fatalf("-level %s: code = %d, want %d", level, code, exitUsage)
+		}
+		wantMsg := fmt.Sprintf("spectreps: -level wants 0 through 5, got %s\n", level)
+		if stderr != wantMsg {
+			t.Fatalf("-level %s: stderr = %q, want %q", level, stderr, wantMsg)
+		}
+	}
+}
+
+func TestRewriteSamples(t *testing.T) {
+	dir := filepath.Join("..", "..", "sampledata", "compress")
+	if _, err := os.Stat(dir); err != nil {
+		t.Skipf("sample directory absent: %v", err)
+	}
+	for _, name := range []string{"whatisthis.pdf", "path.pdf"} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(dir, name)
+			if _, err := os.Stat(path); err != nil {
+				t.Skipf("sample absent: %v", err)
+			}
+			checkRewriteSample(t, path, name == "whatisthis.pdf")
+		})
+	}
+}
+
+// checkRewriteSample rewrites one sample at every level. The page count must
+// match, a JPEG image must decode, and level 5 must be the smallest.
+func checkRewriteSample(t *testing.T, path string, hasImage bool) {
+	t.Helper()
+	src := readPayload(t, path)
+	in, err := spectreps.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = in.Close() })
+	doc, err := in.OpenPDF(t.Context(), src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sizes, bounds := rewriteSampleLevels(t, in, doc, doc.PageCount(), hasImage)
+	checkSampleSizes(t, sizes, hasImage)
+	if hasImage {
+		checkSampleCaps(t, bounds)
+	}
+}
+
+func rewriteSampleLevels(
+	t *testing.T,
+	in *spectreps.Instance,
+	doc *spectreps.Document,
+	wantPages int,
+	hasImage bool,
+) ([]int, []image.Rectangle) {
+	t.Helper()
+	sizes := make([]int, maxRewriteLevel+1)
+	bounds := make([]image.Rectangle, maxRewriteLevel+1)
+	for level := 1; level <= maxRewriteLevel; level++ {
+		out, err := in.RewritePDF(t.Context(), doc, spectreps.RewriteOptions{Level: level})
+		if err != nil {
+			t.Fatalf("level %d: %v", level, err)
+		}
+		sizes[level] = len(out)
+		outDoc, err := in.OpenPDF(t.Context(), out)
+		if err != nil {
+			t.Fatalf("level %d: %v", level, err)
+		}
+		if outDoc.PageCount() != wantPages {
+			t.Fatalf("level %d: PageCount = %d, want %d", level, outDoc.PageCount(), wantPages)
+		}
+		images := decodedJPEGImages(t, level, out)
+		if hasImage && len(images) != 1 {
+			t.Fatalf("level %d: decoded %d JPEG images, want 1", level, len(images))
+		}
+		if len(images) > 0 {
+			bounds[level] = images[0]
+		}
+	}
+	return sizes, bounds
+}
+
+func checkSampleSizes(t *testing.T, sizes []int, hasImage bool) {
+	t.Helper()
+	for level := 1; level < maxRewriteLevel; level++ {
+		if sizes[maxRewriteLevel] > sizes[level] {
+			t.Fatalf("level 5 wrote %d bytes, level %d wrote %d", sizes[maxRewriteLevel], level, sizes[level])
+		}
+	}
+	if hasImage && sizes[maxRewriteLevel] >= sizes[1] {
+		t.Fatalf("level 5 wrote %d bytes, level 1 wrote %d", sizes[maxRewriteLevel], sizes[1])
+	}
+}
+
+// decodedJPEGImages decodes every image stream that reads as a JPEG. A stream
+// that does not decode is skipped, and the caller checks the count it needs.
+func decodedJPEGImages(t *testing.T, level int, payload []byte) []image.Rectangle {
+	t.Helper()
+	var out []image.Rectangle
+	marker := []byte("/Subtype /Image")
+	rest := payload
+	for {
+		idx := bytes.Index(rest, marker)
+		if idx < 0 {
+			return out
+		}
+		rest = rest[idx:]
+		streamAt := bytes.Index(rest, []byte("stream\n"))
+		if streamAt < 0 {
+			t.Fatalf("level %d: image stream start missing", level)
+		}
+		body := rest[streamAt+len("stream\n"):]
+		end := bytes.Index(body, []byte("\nendstream"))
+		if end < 0 {
+			t.Fatalf("level %d: image stream end missing", level)
+		}
+		if pic, err := jpeg.Decode(bytes.NewReader(body[:end])); err == nil {
+			out = append(out, pic.Bounds())
+		}
+		rest = body[end:]
+	}
+}
+
+// checkSampleCaps checks the longest-side caps at levels 3 through 5.
+func checkSampleCaps(t *testing.T, bounds []image.Rectangle) {
+	t.Helper()
+	source := bounds[1]
+	if source.Dx() == 0 {
+		t.Fatal("level 1 image missing")
+	}
+	for _, testCase := range []struct{ level, sideCap int }{
+		{level: 3, sideCap: 1754},
+		{level: 4, sideCap: 1123},
+		{level: 5, sideCap: 842},
+	} {
+		got := bounds[testCase.level]
+		if got.Dx() == 0 {
+			t.Fatalf("level %d image missing", testCase.level)
+		}
+		if source.Dx() <= testCase.sideCap && source.Dy() <= testCase.sideCap {
+			if got != source {
+				t.Fatalf("level %d resampled an image under the cap", testCase.level)
+			}
+			continue
+		}
+		if longest := max(got.Dx(), got.Dy()); longest != testCase.sideCap {
+			t.Fatalf("level %d longest side = %d, want %d", testCase.level, longest, testCase.sideCap)
+		}
+	}
+}
+
+func twoPagePlainPDF(t *testing.T) []byte {
+	t.Helper()
+	objects := [][]byte{
+		[]byte("<< /Type /Catalog /Pages 2 0 R >>"),
+		[]byte("<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>"),
+		[]byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 20 20] /Contents 4 0 R /Resources << >> >>"),
+		plainStream(t, "0 0 m 10 0 l S"),
+		[]byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 20 20] /Contents 6 0 R /Resources << >> >>"),
+		plainStream(t, "0 0 m 5 5 l S"),
+	}
+	return classicXref(t, objects)
+}
+
+func textPagePDF(t *testing.T) []byte {
+	t.Helper()
+	objects := [][]byte{
+		[]byte("<< /Type /Catalog /Pages 2 0 R >>"),
+		[]byte("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+		[]byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 20 20] /Contents 4 0 R " +
+			"/Resources << /Font << /F1 5 0 R >> >> >>"),
+		plainStream(t, "BT /F1 12 Tf 5 5 Td (Hi) Tj ET"),
+		[]byte("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
+	}
+	return classicXref(t, objects)
+}
+
+func plainStream(t *testing.T, content string) []byte {
+	t.Helper()
+	return []byte(fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content))
 }
 
 func TestRasterPDF(t *testing.T) {
@@ -645,6 +881,126 @@ func checkPDFImageRewrite(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "rewrite.pdf")
 	want(t, []string{"rewrite", "-o", out, src}, 0, "", "")
 	checkPDFImageRaster(t, out, 1)
+}
+
+func TestPDFImageColor(t *testing.T) {
+	t.Run("rgb", checkPDFImageColorRGB)
+	t.Run("gray", checkPDFImageColorGray)
+	t.Run("cmyk", checkPDFImageColorCMYK)
+	t.Run("usage", checkPDFImageColorUsage)
+}
+
+func checkPDFImageColorRGB(t *testing.T) {
+	src := writeTemp(t, "red.pdf", onePagePDF(t, "1 0 0 rg 0 0 20 20 re f"))
+	dir := t.TempDir()
+	plain := filepath.Join(dir, "plain.pdf")
+	named := filepath.Join(dir, "rgb.pdf")
+	args := []string{"pdfimage", "-o", plain, "-w", "20", "-h", "20", "-r", "72", src}
+	want(t, args, 0, "", "")
+	args = []string{"pdfimage", "-colorspace", "rgb", "-o", named, "-w", "20", "-h", "20", "-r", "72", src}
+	want(t, args, 0, "", "")
+	plainBytes := readPayload(t, plain)
+	namedBytes := readPayload(t, named)
+	if !bytes.Equal(plainBytes, namedBytes) {
+		t.Fatal("-colorspace rgb changed the bytes")
+	}
+	if !bytes.Contains(plainBytes, []byte("/ColorSpace /DeviceRGB")) {
+		t.Fatal("missing /DeviceRGB")
+	}
+}
+
+func checkPDFImageColorGray(t *testing.T) {
+	src := writeTemp(t, "red.pdf", onePagePDF(t, "1 0 0 rg 0 0 20 20 re f"))
+	out := filepath.Join(t.TempDir(), "gray.pdf")
+	args := []string{"pdfimage", "-colorspace", "gray", "-o", out, "-w", "20", "-h", "20", "-r", "72", src}
+	want(t, args, 0, "", "")
+	payload := readPayload(t, out)
+	if !bytes.Contains(payload, []byte("/ColorSpace /DeviceGray")) {
+		t.Fatal("missing /DeviceGray")
+	}
+	streams := imageStreamBodies(t, payload)
+	if len(streams) != 1 {
+		t.Fatalf("image streams = %d, want 1", len(streams))
+	}
+	wantBytes := bytes.Repeat([]byte{76}, 400)
+	if !bytes.Equal(streams[0], wantBytes) {
+		t.Fatalf("gray stream = %d bytes, want %d", len(streams[0]), len(wantBytes))
+	}
+}
+
+func checkPDFImageColorCMYK(t *testing.T) {
+	src := writeTemp(t, "red.pdf", onePagePDF(t, "1 0 0 rg 0 0 20 20 re f"))
+	out := filepath.Join(t.TempDir(), "cmyk.pdf")
+	args := []string{"pdfimage", "-colorspace", "cmyk", "-o", out, "-w", "20", "-h", "20", "-r", "72", src}
+	want(t, args, 0, "", "")
+	payload := readPayload(t, out)
+	if !bytes.Contains(payload, []byte("/ColorSpace /DeviceCMYK")) {
+		t.Fatal("missing /DeviceCMYK")
+	}
+	streams := imageStreamBodies(t, payload)
+	if len(streams) != 1 {
+		t.Fatalf("image streams = %d, want 1", len(streams))
+	}
+	wantBytes := bytes.Repeat([]byte{0, 255, 255, 0}, 400)
+	if !bytes.Equal(streams[0], wantBytes) {
+		t.Fatalf("cmyk stream = %d bytes, want %d", len(streams[0]), len(wantBytes))
+	}
+}
+
+func checkPDFImageColorUsage(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out.pdf")
+	ps := writeTemp(t, "in.ps", []byte("1 2 add"))
+	wantCode(t, []string{"pdfimage", "-colorspace", "srgb", "-o", out, ps}, 2)
+}
+
+func readPayload(t *testing.T, path string) []byte {
+	t.Helper()
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return payload
+}
+
+func imageStreamBodies(t *testing.T, payload []byte) [][]byte {
+	t.Helper()
+	marker := []byte("/Subtype /Image")
+	var out [][]byte
+	rest := payload
+	for {
+		found := bytes.Index(rest, marker)
+		if found < 0 {
+			return out
+		}
+		rest = rest[found:]
+		start := bytes.Index(rest, []byte("stream\n"))
+		if start < 0 {
+			t.Fatal("image stream start missing")
+		}
+		body := rest[start+len("stream\n"):]
+		end := bytes.Index(body, []byte("\nendstream"))
+		if end < 0 {
+			t.Fatal("image stream end missing")
+		}
+		out = append(out, inflateStreamBytes(t, body[:end]))
+		rest = body[end:]
+	}
+}
+
+func inflateStreamBytes(t *testing.T, src []byte) []byte {
+	t.Helper()
+	reader, err := zlib.NewReader(bytes.NewReader(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reader.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return plain
 }
 
 func checkPDFImageOutput(t *testing.T, path string, pages int) {

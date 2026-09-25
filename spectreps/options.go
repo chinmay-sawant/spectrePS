@@ -18,14 +18,18 @@ type PageImage struct {
 }
 
 // RewriteOptions controls a later PDF rewrite.
-// The zero value leaves stream compression off. DefaultRewriteOptions turns it on.
+// The zero value leaves stream compression off. DefaultRewriteOptions turns it
+// on. Level 0 re-emits the path subset with CompressStreams as the Flate
+// switch. Levels 1 through 5 use the pass-through writer, which copies content
+// Spectre cannot interpret. A level above 0 ignores CompressStreams.
 type RewriteOptions struct {
 	CompressStreams bool
+	Level           int
 }
 
-// DefaultRewriteOptions turns stream compression on.
+// DefaultRewriteOptions turns stream compression on at level 0.
 func DefaultRewriteOptions() RewriteOptions {
-	return RewriteOptions{CompressStreams: true}
+	return RewriteOptions{CompressStreams: true, Level: 0}
 }
 
 // CompareResult is one byte or pixel comparison.

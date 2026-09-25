@@ -34,6 +34,103 @@ func (file *File) Content(index int) ([]byte, error) {
 	return cloneBytes(file.pages[index]), nil
 }
 
+// PageContentNums returns the object numbers of the content streams for a
+// zero-based page, in /Contents order. A content entry that is not an indirect
+// reference contributes no number. A bad index is rangecheck.
+func (file *File) PageContentNums(pageIndex int) ([]int, error) {
+	if file == nil || pageIndex < 0 || pageIndex >= len(file.pages) {
+		return nil, NewError(opPDF, errRange)
+	}
+	groups, err := file.contentNumPages()
+	if err != nil {
+		return nil, err
+	}
+	if pageIndex >= len(groups) {
+		return nil, NewError(opPDF, errSyntax)
+	}
+	return groups[pageIndex], nil
+}
+
+// contentNumPages walks the page tree and lists the content reference numbers
+// per page, in page order.
+func (file *File) contentNumPages() ([][]int, error) {
+	root, ok := file.trailer.ValueEntry(keyRoot)
+	if !ok || root.Kind == KindNull {
+		return nil, NewError(opPDF, errSyntax)
+	}
+	catalog, err := file.deref(root)
+	if err != nil {
+		return nil, err
+	}
+	pages, ok := catalog.ValueEntry(keyPages)
+	if !ok || pages.Kind == KindNull {
+		return nil, NewError(opPDF, errSyntax)
+	}
+	return file.walkRefNums(pages, map[int]bool{})
+}
+
+func (file *File) walkRefNums(val Value, seen map[int]bool) ([][]int, error) {
+	if val.Kind == KindRef {
+		if seen[val.RefNum] {
+			return nil, NewError(opPDF, errSyntax)
+		}
+		seen[val.RefNum] = true
+	}
+	node, err := file.deref(val)
+	if err != nil {
+		return nil, err
+	}
+	return file.walkNodeNums(node, seen)
+}
+
+func (file *File) walkNodeNums(node Value, seen map[int]bool) ([][]int, error) {
+	typeName, _ := node.NameEntry(keyType)
+	if typeName == keyPage {
+		return [][]int{contentNumRefs(node)}, nil
+	}
+	kids, hasKids := node.ArrayEntry(keyKids)
+	if typeName != keyPages && !hasKids {
+		return nil, NewError(opPDF, errSyntax)
+	}
+	if !hasKids {
+		return nil, NewError(opPDF, errSyntax)
+	}
+	pages := make([][]int, 0, len(kids))
+	for _, kid := range kids {
+		sub, err := file.walkRefNums(kid, seen)
+		if err != nil {
+			return nil, err
+		}
+		pages = append(pages, sub...)
+	}
+	return pages, nil
+}
+
+// contentNumRefs lists the indirect content references on one page dictionary.
+func contentNumRefs(node Value) []int {
+	contents, ok := node.ValueEntry(keyContents)
+	if !ok || contents.Kind == KindNull {
+		return nil
+	}
+	if contents.Kind == KindArray {
+		return arrayRefNums(contents.Array)
+	}
+	if contents.Kind == KindRef {
+		return []int{contents.RefNum}
+	}
+	return nil
+}
+
+func arrayRefNums(items []Value) []int {
+	nums := make([]int, 0, len(items))
+	for _, item := range items {
+		if item.Kind == KindRef {
+			nums = append(nums, item.RefNum)
+		}
+	}
+	return nums
+}
+
 // PaintPage paints one page onto marker. It does not call ShowPage.
 func (file *File) PaintPage(ctx context.Context, index int, marker graphics.Marker, scale float64) error {
 	if ctx == nil {
