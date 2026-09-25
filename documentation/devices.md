@@ -44,11 +44,44 @@ This tag compresses content streams. It does not downsample images, and it does 
 
 ## Bitmap PDF
 
-`ImagePDF` wraps each `PageImage` in one PDF page. The image is 24-bit RGB, 8 bits per component, `/ColorSpace /DeviceRGB`, `/Filter /FlateDecode`. The stored stream is the tightly packed RGB rows, so stride padding is dropped. `/MediaBox` is `[0 0 width*72/dpi height*72/dpi]` points, and a `dpi` of zero or less selects 72.
+`ImagePDF` wraps each `PageImage` in one PDF page. The default image is 24-bit RGB, 8 bits per component, `/ColorSpace /DeviceRGB`, `/Filter /FlateDecode`. `ImagePDFColor` also writes DeviceGray and DeviceCMYK. The stored stream is the tightly packed rows, so stride padding is dropped. `/MediaBox` is `[0 0 width*72/dpi height*72/dpi]` points, and a `dpi` of zero or less selects 72.
 
 Each page has one content stream and one image XObject. The content stream is `q W 0 0 H 0 0 cm /Im0 Do Q`, and `/Resources` carries the XObject. Spectre's PDF interpreter still returns `undefined` for `Do`, so rasterizing this output is not the proof. The test decodes the image stream and compares it with `PageImage`.
 
 The writer emits objects in a fixed order, adds no `/Info`, and sets both trailer `/ID` strings to the SHA-256 of the concatenated Flate image streams. Two calls on the same pages return equal buffers, and `CompareFiles` is the proof. The output is not `pdfwrite` and it is not a DCT encode.
+
+## Image color spaces
+
+`ImagePDFColor` and `WriteImagesColor` pick the stream color space. `ImageColorRGB` and `ImageRGB` store 24-bit RGB, 3 bytes per pixel, with `/ColorSpace /DeviceRGB`. This is the default, and `ImagePDF` and `WriteImages` keep writing those bytes. `ImageColorGray` and `ImageGray` store 8-bit gray, 1 byte per pixel, with `/DeviceGray`. `ImageColorCMYK` and `ImageCMYK` store 32-bit CMYK, 4 bytes per pixel, with `/DeviceCMYK`. Every page uses `/BitsPerComponent 8` and `/Filter /FlateDecode`. `spectreps pdfimage -colorspace rgb|gray|cmyk` selects one, and `rgb` is the default.
+
+DeviceGray is BT.601 luma. For a pixel `(R, G, B)` with bytes 0 through 255:
+
+```
+Y = round(0.299*R + 0.587*G + 0.114*B)
+```
+
+The stream stores `Y`.
+
+DeviceCMYK divides each channel by 255, so `r`, `g`, and `b` run 0 through 1, then:
+
+```
+K = 1 - max(r, g, b)
+```
+
+If `K >= 1`, then `C = M = Y = 0`. Otherwise:
+
+```
+C = (1 - r - K) / (1 - K)
+M = (1 - g - K) / (1 - K)
+Y = (1 - b - K) / (1 - K)
+```
+
+Each of C, M, Y, and K scales by 255 and rounds to the nearest byte. The stream stores the four bytes in C, M, Y, K order.
+
+Worked example. Pure red is `(255, 0, 0)`.
+
+- Gray: `round(0.299*255 + 0.587*0 + 0.114*0)` is `round(76.245)`, so the stream stores `76`.
+- CMYK: `r = 1`, `g = 0`, `b = 0`, so `K = 1 - 1 = 0`, `C = (1 - 1 - 0) / 1 = 0`, `M = (1 - 0 - 0) / 1 = 1`, and `Y = 1`. The stream stores `0 255 255 0`.
 
 ## Validate
 

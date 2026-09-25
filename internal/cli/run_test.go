@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -645,6 +646,126 @@ func checkPDFImageRewrite(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "rewrite.pdf")
 	want(t, []string{"rewrite", "-o", out, src}, 0, "", "")
 	checkPDFImageRaster(t, out, 1)
+}
+
+func TestPDFImageColor(t *testing.T) {
+	t.Run("rgb", checkPDFImageColorRGB)
+	t.Run("gray", checkPDFImageColorGray)
+	t.Run("cmyk", checkPDFImageColorCMYK)
+	t.Run("usage", checkPDFImageColorUsage)
+}
+
+func checkPDFImageColorRGB(t *testing.T) {
+	src := writeTemp(t, "red.pdf", onePagePDF(t, "1 0 0 rg 0 0 20 20 re f"))
+	dir := t.TempDir()
+	plain := filepath.Join(dir, "plain.pdf")
+	named := filepath.Join(dir, "rgb.pdf")
+	args := []string{"pdfimage", "-o", plain, "-w", "20", "-h", "20", "-r", "72", src}
+	want(t, args, 0, "", "")
+	args = []string{"pdfimage", "-colorspace", "rgb", "-o", named, "-w", "20", "-h", "20", "-r", "72", src}
+	want(t, args, 0, "", "")
+	plainBytes := readPayload(t, plain)
+	namedBytes := readPayload(t, named)
+	if !bytes.Equal(plainBytes, namedBytes) {
+		t.Fatal("-colorspace rgb changed the bytes")
+	}
+	if !bytes.Contains(plainBytes, []byte("/ColorSpace /DeviceRGB")) {
+		t.Fatal("missing /DeviceRGB")
+	}
+}
+
+func checkPDFImageColorGray(t *testing.T) {
+	src := writeTemp(t, "red.pdf", onePagePDF(t, "1 0 0 rg 0 0 20 20 re f"))
+	out := filepath.Join(t.TempDir(), "gray.pdf")
+	args := []string{"pdfimage", "-colorspace", "gray", "-o", out, "-w", "20", "-h", "20", "-r", "72", src}
+	want(t, args, 0, "", "")
+	payload := readPayload(t, out)
+	if !bytes.Contains(payload, []byte("/ColorSpace /DeviceGray")) {
+		t.Fatal("missing /DeviceGray")
+	}
+	streams := imageStreamBodies(t, payload)
+	if len(streams) != 1 {
+		t.Fatalf("image streams = %d, want 1", len(streams))
+	}
+	wantBytes := bytes.Repeat([]byte{76}, 400)
+	if !bytes.Equal(streams[0], wantBytes) {
+		t.Fatalf("gray stream = %d bytes, want %d", len(streams[0]), len(wantBytes))
+	}
+}
+
+func checkPDFImageColorCMYK(t *testing.T) {
+	src := writeTemp(t, "red.pdf", onePagePDF(t, "1 0 0 rg 0 0 20 20 re f"))
+	out := filepath.Join(t.TempDir(), "cmyk.pdf")
+	args := []string{"pdfimage", "-colorspace", "cmyk", "-o", out, "-w", "20", "-h", "20", "-r", "72", src}
+	want(t, args, 0, "", "")
+	payload := readPayload(t, out)
+	if !bytes.Contains(payload, []byte("/ColorSpace /DeviceCMYK")) {
+		t.Fatal("missing /DeviceCMYK")
+	}
+	streams := imageStreamBodies(t, payload)
+	if len(streams) != 1 {
+		t.Fatalf("image streams = %d, want 1", len(streams))
+	}
+	wantBytes := bytes.Repeat([]byte{0, 255, 255, 0}, 400)
+	if !bytes.Equal(streams[0], wantBytes) {
+		t.Fatalf("cmyk stream = %d bytes, want %d", len(streams[0]), len(wantBytes))
+	}
+}
+
+func checkPDFImageColorUsage(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "out.pdf")
+	ps := writeTemp(t, "in.ps", []byte("1 2 add"))
+	wantCode(t, []string{"pdfimage", "-colorspace", "srgb", "-o", out, ps}, 2)
+}
+
+func readPayload(t *testing.T, path string) []byte {
+	t.Helper()
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return payload
+}
+
+func imageStreamBodies(t *testing.T, payload []byte) [][]byte {
+	t.Helper()
+	marker := []byte("/Subtype /Image")
+	var out [][]byte
+	rest := payload
+	for {
+		found := bytes.Index(rest, marker)
+		if found < 0 {
+			return out
+		}
+		rest = rest[found:]
+		start := bytes.Index(rest, []byte("stream\n"))
+		if start < 0 {
+			t.Fatal("image stream start missing")
+		}
+		body := rest[start+len("stream\n"):]
+		end := bytes.Index(body, []byte("\nendstream"))
+		if end < 0 {
+			t.Fatal("image stream end missing")
+		}
+		out = append(out, inflateStreamBytes(t, body[:end]))
+		rest = body[end:]
+	}
+}
+
+func inflateStreamBytes(t *testing.T, src []byte) []byte {
+	t.Helper()
+	reader, err := zlib.NewReader(bytes.NewReader(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reader.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return plain
 }
 
 func checkPDFImageOutput(t *testing.T, path string, pages int) {

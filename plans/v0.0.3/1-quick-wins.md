@@ -50,11 +50,11 @@ The `gs` argv item is a written switch map, not code.
 
 ### 3.1 Color policy
 
-- [ ] The DeviceGray and DeviceCMYK conversions from the RGB pixmap are named and written in `documentation/devices.md`, with one worked example. Proof: the doc states both formulas and the example values.
+- [x] The DeviceGray and DeviceCMYK conversions from the RGB pixmap are named and written in `documentation/devices.md`, with one worked example. Proof: the doc states both formulas and the example values. Done 2026-09-25: `documentation/devices.md`, section Image color spaces, states `Y = round(0.299*R + 0.587*G + 0.114*B)` and the DeviceCMYK `K = 1 - max(r, g, b)` division, with pure red `(255, 0, 0)` as gray `76` and CMYK `0 255 255 0`.
 
 ### 3.2 Writer and command
 
-- [ ] `pdfimage -colorspace rgb|gray|cmyk` writes `/DeviceGray` (8 bits per component) or `/DeviceCMYK` (32 bits) image streams. `rgb` stays the default, so existing bytes do not change. `ImagePDF` gains a color mode on the public API. Proof: `go test -count=1 ./internal/pdfout -run TestImageColorSpaces` and `go test -count=1 ./internal/cli -run TestPDFImageColor`.
+- [x] `pdfimage -colorspace rgb|gray|cmyk` writes `/DeviceGray` (8 bits per component) or `/DeviceCMYK` (32 bits) image streams. `rgb` stays the default, so existing bytes do not change. `ImagePDF` gains a color mode on the public API. Proof: `go test -count=1 ./internal/pdfout -run TestImageColorSpaces` and `go test -count=1 ./internal/cli -run TestPDFImageColor` both exited 0 on 2026-09-25.
 
 ## Phase 4: gs switch map
 

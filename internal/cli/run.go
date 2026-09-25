@@ -71,7 +71,7 @@ func usage(w io.Writer) {
 	fmt.Fprint(w, `spectreps version
 spectreps run [-w points] [-h points] [-r dpi] [-o path] file
 spectreps raster [-w points] [-h points] [-r dpi] [-jpegq quality] -o path file
-spectreps pdfimage [-w points] [-h points] [-r dpi] -o path file
+spectreps pdfimage [-w points] [-h points] [-r dpi] [-colorspace rgb|gray|cmyk] -o path file
 spectreps bbox [-w points] [-h points] [-r dpi] file
 spectreps inkcov [-w points] [-h points] [-r dpi] file
 spectreps rewrite [-compress] -o path file.pdf
@@ -159,10 +159,16 @@ func cmdPDFImage(args []string, stderr io.Writer) int {
 	w := set.Float64("w", 0, "page width in points")
 	h := set.Float64("h", 0, "page height in points")
 	r := set.Int("r", 0, "pixels per inch")
+	spaceName := set.String("colorspace", "rgb", "image color space: rgb, gray, or cmyk")
 	outPath := set.String("o", "", "output path")
 	rest, code := parseSet(set, args)
 	if code != 0 {
 		return code
+	}
+	color, ok := parseImageColor(*spaceName)
+	if !ok {
+		usage(stderr)
+		return exitUsage
 	}
 	if len(rest) != 1 || *outPath == "" {
 		usage(stderr)
@@ -187,11 +193,25 @@ func cmdPDFImage(args []string, stderr io.Writer) int {
 	if err != nil {
 		return finish(stderr, err)
 	}
-	payload, err := in.ImagePDF(context.Background(), pages, float64(opt.ResolutionDPI))
+	payload, err := in.ImagePDFColor(context.Background(), pages, float64(opt.ResolutionDPI), color)
 	if err != nil {
 		return finish(stderr, err)
 	}
 	return writeRewrite(*outPath, payload, stderr)
+}
+
+// parseImageColor maps the -colorspace flag value.
+func parseImageColor(value string) (spectreps.ImageColor, bool) {
+	switch value {
+	case "rgb":
+		return spectreps.ImageColorRGB, true
+	case "gray":
+		return spectreps.ImageColorGray, true
+	case "cmyk":
+		return spectreps.ImageColorCMYK, true
+	default:
+		return spectreps.ImageColorRGB, false
+	}
 }
 
 // pdfImagePages paints every page with the raster path. A .pdf input uses

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"strconv"
 	"testing"
 
@@ -93,6 +94,130 @@ func imagePDFBytes(t *testing.T, pages []graphics.Image, dpi float64) []byte {
 		t.Fatal(err)
 	}
 	return got
+}
+
+func imagePDFBytesColor(t *testing.T, pages []graphics.Image, dpi float64, space ImageColorSpace) []byte {
+	t.Helper()
+	got, err := WriteImagesColor(t.Context(), pages, dpi, space)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
+func TestImageColorSpaces(t *testing.T) {
+	images, packed := sampleImages(t)
+	rgb := imagePDFBytes(t, images, imageTestDPI)
+	if !bytes.Equal(rgb, imagePDFBytesColor(t, images, imageTestDPI, ImageRGB)) {
+		t.Fatal("ImageRGB bytes differ from WriteImages")
+	}
+	checkImageDictSpace(t, rgb, "/DeviceRGB", len(images))
+	gray := imagePDFBytesColor(t, images, imageTestDPI, ImageGray)
+	checkImageDictSpace(t, gray, "/DeviceGray", len(images))
+	checkColorStreams(t, gray, packed, ImageGray)
+	cmyk := imagePDFBytesColor(t, images, imageTestDPI, ImageCMYK)
+	checkImageDictSpace(t, cmyk, "/DeviceCMYK", len(images))
+	checkColorStreams(t, cmyk, packed, ImageCMYK)
+	checkRedConversion(t)
+	checkImageColorContext(t)
+}
+
+func checkImageDictSpace(t *testing.T, src []byte, name string, count int) {
+	t.Helper()
+	if got := bytes.Count(src, []byte("/ColorSpace "+name)); got != count {
+		t.Fatalf("%s count = %d, want %d", name, got, count)
+	}
+	if got := bytes.Count(src, []byte("/BitsPerComponent 8")); got != count {
+		t.Fatalf("BitsPerComponent count = %d, want %d", got, count)
+	}
+}
+
+func checkColorStreams(t *testing.T, src []byte, packed [][]byte, space ImageColorSpace) {
+	t.Helper()
+	decoded := decodedImages(t, src)
+	if len(decoded) != len(packed) {
+		t.Fatalf("image streams = %d, want %d", len(decoded), len(packed))
+	}
+	for i, page := range packed {
+		want := convertedSamples(page, space)
+		if !bytes.Equal(decoded[i], want) {
+			t.Fatalf("page %d stream = %d bytes, want %d", i, len(decoded[i]), len(want))
+		}
+	}
+}
+
+// convertedSamples recomputes the frozen policy from the packed RGB bytes.
+func convertedSamples(packed []byte, space ImageColorSpace) []byte {
+	switch space {
+	case ImageGray:
+		out := make([]byte, 0, len(packed)/imageChannels)
+		for at := 0; at < len(packed); at += imageChannels {
+			out = append(out, wantLuma(packed[at], packed[at+1], packed[at+2]))
+		}
+		return out
+	case ImageCMYK:
+		out := make([]byte, 0, len(packed)/imageChannels*cmykChannels)
+		for at := 0; at < len(packed); at += imageChannels {
+			c, m, y, k := wantCMYK(packed[at], packed[at+1], packed[at+2])
+			out = append(out, c, m, y, k)
+		}
+		return out
+	case ImageRGB:
+		return packed
+	default:
+		return packed
+	}
+}
+
+func wantLuma(red, green, blue byte) byte {
+	return byte(math.Round(0.299*float64(red) + 0.587*float64(green) + 0.114*float64(blue)))
+}
+
+func wantCMYK(red, green, blue byte) (byte, byte, byte, byte) {
+	redF := float64(red) / 255
+	greenF := float64(green) / 255
+	blueF := float64(blue) / 255
+	black := 1 - math.Max(redF, math.Max(greenF, blueF))
+	if black >= 1 {
+		return 0, 0, 0, byte(math.Round(black * 255))
+	}
+	scale := func(value float64) byte { return byte(math.Round(value * 255)) }
+	return scale((1 - redF - black) / (1 - black)),
+		scale((1 - greenF - black) / (1 - black)),
+		scale((1 - blueF - black) / (1 - black)),
+		scale(black)
+}
+
+// checkRedConversion is the worked example in documentation/devices.md.
+func checkRedConversion(t *testing.T) {
+	t.Helper()
+	red := []graphics.Image{{Width: 1, Height: 1, Stride: imageChannels, Pixels: []byte{255, 0, 0}}}
+	gray := decodedImages(t, imagePDFBytesColor(t, red, defaultImageDPI, ImageGray))
+	if len(gray) != 1 || !bytes.Equal(gray[0], []byte{76}) {
+		t.Fatalf("red gray = %v, want [76]", gray)
+	}
+	cmyk := decodedImages(t, imagePDFBytesColor(t, red, defaultImageDPI, ImageCMYK))
+	if len(cmyk) != 1 || !bytes.Equal(cmyk[0], []byte{0, 255, 255, 0}) {
+		t.Fatalf("red cmyk = %v, want [0 255 255 0]", cmyk)
+	}
+}
+
+func checkImageColorContext(t *testing.T) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	got, err := WriteImagesColor(ctx, nil, defaultImageDPI, ImageGray)
+	if !errors.Is(err, context.Canceled) || got != nil {
+		t.Fatalf("canceled %v %#v", err, got)
+	}
+	defer func() {
+		recovered := recover()
+		if recovered != panicNilContext {
+			t.Fatalf("panic %v", recovered)
+		}
+	}()
+	//nolint:staticcheck // nil context is the case under test
+	_, _ = WriteImagesColor(nil, nil, defaultImageDPI, ImageCMYK)
 }
 
 func checkImageHeader(t *testing.T, src []byte) {
