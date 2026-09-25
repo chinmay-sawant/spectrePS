@@ -6,7 +6,7 @@ NPROC := $(shell nproc 2>/dev/null || echo 1)
 # BENCH_PKGS is the packages with Benchmark functions. make test never runs them.
 BENCH_PKGS := ./spectreps ./internal/cli ./internal/pdf ./internal/pdfout ./internal/graphics ./internal/ps
 
-.PHONY: help build test lint fmt tidy clean size-check pdfa-check pdfua2-check bench bench-profile bench-check
+.PHONY: help build test lint fmt tidy clean size-check pdfa-check pdfua2-check refs-gs-check bench bench-profile bench-check
 
 help:
 	@printf '%s\n' \
@@ -16,6 +16,7 @@ help:
 		'size-check  Go files over 2000 lines must be allowlisted' \
 		'pdfa-check  run veraPDF over sampledata/pdfa when installed' \
 		'pdfua2-check run veraPDF over sampledata/pdfua2 when installed' \
+		'refs-gs-check run the Ghostscript reference proofs when gs is installed' \
 		'bench       run the benchmarks with -count=3 into profiles/bench.txt' \
 		'bench-profile write CPU and memory profiles per package under profiles/' \
 		'bench-check run the benchmarks with -count=5 and compare with benchstat' \
@@ -44,20 +45,26 @@ size-check:
 	bash scripts/check-file-size.sh
 
 # pdfa-check runs veraPDF as a proof tool over the sampled PDF/A writes.
-# It is not a dependency and it skips when the CLI is absent. veraPDF is Java,
-# so it stays out of make test.
+# Base files go through the 4 profile and the 4f- files through 4f. It is not
+# a dependency and it skips when the CLI is absent. veraPDF is Java, so it
+# stays out of make test.
 pdfa-check:
 	@verapdf=$$(if [ -x ./verapdf/verapdf ]; then printf '%s' ./verapdf/verapdf; elif command -v verapdf >/dev/null 2>&1; then command -v verapdf; fi); \
 	if [ -z "$$verapdf" ]; then \
 		printf '%s\n' 'pdfa-check: verapdf not installed, skipping'; \
 		exit 0; \
 	fi; \
-	files=$$(find sampledata/pdfa -name '*.pdf' ! -path '*/negative/*' 2>/dev/null); \
-	if [ -z "$$files" ]; then \
-		printf '%s\n' 'pdfa-check: no samples under sampledata/pdfa, skipping'; \
+	roots='sampledata/pdfa sampledata/validation/pdfa'; \
+	base=$$(find $$roots -name '*.pdf' ! -path '*/negative/*' ! -name '4f-*' 2>/dev/null); \
+	foured=$$(find $$roots -name '4f-*.pdf' ! -path '*/negative/*' 2>/dev/null); \
+	if [ -z "$$base" ] && [ -z "$$foured" ]; then \
+		printf '%s\n' 'pdfa-check: no samples under sampledata/pdfa or sampledata/validation/pdfa, skipping'; \
 		exit 0; \
 	fi; \
-	"$$verapdf" --flavour 4 $$files
+	status=0; \
+	if [ -n "$$base" ]; then "$$verapdf" --flavour 4 $$base || status=1; fi; \
+	if [ -n "$$foured" ]; then "$$verapdf" --flavour 4f $$foured || status=1; fi; \
+	exit $$status
 
 # pdfua2-check runs veraPDF as a proof tool over the sampled PDF/UA-2 writes.
 # It is not a dependency and it skips when the CLI is absent. veraPDF is Java,
@@ -68,12 +75,18 @@ pdfua2-check:
 		printf '%s\n' 'pdfua2-check: verapdf not installed, skipping'; \
 		exit 0; \
 	fi; \
-	files=$$(find sampledata/pdfua2 -name '*.pdf' ! -path '*/negative/*' 2>/dev/null); \
+	files=$$(find sampledata/pdfua2 sampledata/validation/tagged -name '*.pdf' ! -path '*/negative/*' 2>/dev/null); \
 	if [ -z "$$files" ]; then \
-		printf '%s\n' 'pdfua2-check: no samples under sampledata/pdfua2, skipping'; \
+		printf '%s\n' 'pdfua2-check: no samples under sampledata/pdfua2 or sampledata/validation/tagged, skipping'; \
 		exit 0; \
 	fi; \
 	"$$verapdf" --flavour ua2 --format json $$files
+
+# refs-gs-check runs the phase 11 Ghostscript reference proofs. gs is a proof
+# tool only: the target prints a skip when it is absent, and it never runs
+# inside make test or make lint.
+refs-gs-check:
+	bash scripts/ref-gs-check.sh
 
 # bench runs every benchmark three times and records the output. Benchmark
 # timing is machine-specific and never gates make test.
