@@ -140,7 +140,7 @@ A missing name, an entry whose `/Subtype` is not `/Image`, an image with an `/SM
 
 `BMC`, `BDC`, `EMC`, `MP`, and `DP` parse. Nesting caps at 64 with `limitcheck`, an unmatched `EMC` is `syntaxerror in content`, and `BX` skips content through the matching `EX`. An unterminated compatibility section is `syntaxerror in content`, and an `EX` outside a section is ignored. A page with marked content rasterizes and extracts as if the markers were absent.
 
-The read seams are separate from the number. `PaintOptions.MarkedContent` receives `BeginMarkedContent` at `BMC` and `BDC` and `EndMarkedContent` at the matching `EMC`, both at the same depth, with 1 for the outermost sequence. The properties value is the resolved `/Properties` entry for a name operand, the dictionary for an inline operand, and null for `BMC`. `MP` and `DP` fire no event because they have no `EMC`. `TextOptions.Runs` receives one `TextRun` per `Tj`, `TJ`, `'`, or `"` with the shown bytes, the font resource name, the size, the text and line matrices, rise, spacing, and horizontal scale. For `TJ` the bytes are the string elements concatenated and the numbers are omitted. `ImageNameMarker` receives the resource name and the resolved XObject dictionary before an image decodes. A nil or typed-nil sink is ignored.
+The read seams are separate from the number. `PaintOptions.MarkedContent` receives `BeginMarkedContent` at `BMC` and `BDC` and `EndMarkedContent` at the matching `EMC`, both at the same depth, with 1 for the outermost sequence. The properties value is the resolved `/Properties` entry for a name operand, the dictionary for an inline operand, and null for `BMC`. `MP` and `DP` fire no event because they have no `EMC`. `TextOptions.Runs` receives one `TextRun` per `Tj`, `TJ`, `'`, or `"` with the shown bytes, the font resource name, the size, the text and line matrices, rise, spacing, and horizontal scale. The run also carries the decoded character codes, the `/ToUnicode` result per code, the CTM, the paint scale, and the device advance box of the whole run. For `TJ` the bytes are the string elements concatenated and the numbers are omitted. `ImageNameMarker` receives the resource name and the resolved XObject dictionary before an image decodes. A nil or typed-nil sink is ignored, and a marker that accepts text runs but no glyph coverage skips glyph rasterization instead of refusing the text.
 
 ## Rewrite
 
@@ -173,7 +173,41 @@ An image at or below its cap keeps its size. An image Spectre cannot decode, and
 
 The image helpers are three functions in `internal/pdfout`. `ScaleImage` takes any `image.Image` and returns RGBA resampled with the CatmullRom kernel from `golang.org/x/image/draw`; width and height below 1 clamp to 1. `EncodeDCT` wraps `image/jpeg` with the quality clamped to 1 through 100, and `EncodeFlateRGB` writes tightly packed RGB rows, top row first, inside zlib. All three are deterministic, so the same input returns the same bytes. Levels 3 through 5 call `ScaleImage` and `EncodeDCT`, and level 2 calls `EncodeFlateRGB`.
 
-## Tagged preflight
+## Tagged generation and preflight
+
+`RewritePDF` with `RewriteOptions.Tag` generates a PDF/UA-2 structure tree for an untagged PDF. `spectreps rewrite -tags` is the CLI. Generation covers the content the text machine reads: paths, text, images, and the marked-content operators. A source operator the recorder cannot express, such as a clip `W` or `W*`, returns `undefined` with that operator name instead of writing a wrong tree. Form XObjects run as content, so a tagged write flattens them.
+
+The recorder paints one page at 72 dpi, so one device pixel is one user point. Text is re-emitted with the recorded `Tm`, and a non-identity CTM or a paint scale is re-emitted as `cm` inside `q`/`Q`, so a translated, scaled, or rotated run keeps its device placement. An image event re-emits its draw matrix the same way, so the unit square stamps at the recorded device box. Path points are re-emitted in device space.
+
+An untagged PDF stores no semantics, so the reading order is an approximation from device geometry, not a fact, open decision 5. The thresholds are:
+
+| Rule | Threshold |
+| --- | --- |
+| One baseline | Runs whose baseline differs by at most 0.5 of the line box height. |
+| One visual segment | Runs on one baseline with a horizontal gap at or under 3 line heights; a wider gap starts a new segment, so a column gutter separates. |
+| One paragraph | Segments whose boxes overlap horizontally and whose vertical gap is at or under 1.35 times the smaller line height merge into one `/P`. |
+| Reading order | Items that overlap vertically order left to right; otherwise top to bottom. |
+| Heading | A run size at or above 1.2 times the body size, where the body size is the decoded-text weighted mode of the run sizes. The largest heading size is `/H1`, the next `/H2`, through `/H6`. |
+| List | A bullet from `•`, `·`, `◦`, `‣`, `▪`, `–`, `—`, `-`, or `*`, or a decimal number of up to three digits followed by `.` or `)` and a space. The `/L` carries `/ListNumbering` `Disc` or `Decimal`, and each `/LI` carries `/Lbl` and `/LBody`. |
+| Table | Two or more consecutive baseline rows of two or more cells whose column starts agree within 4 points across rows and are at least 2 line heights apart. The first row is `/TH` with `/A << /O /Table /Scope /Column >>`; later rows are `/TD`. |
+| Figure | Every image XObject. The `/Alt` source is the innermost open BDC property dictionary, then the image XObject dictionary. |
+| ActualText | Open decision 9 is narrow: a run carries `/ActualText` only when a glyph maps to a ligature code point (`U+FB00` through `U+FB06`, `U+0132`, `U+0133`) or has no Unicode mapping. The value expands a ligature and falls back to the code point. A run that shares an element with other runs becomes a `/Span` child. |
+| Artifact | An event no element claims, such as a rule or a decoration, wraps in `/Artifact BMC`. A text block whose trimmed text is at most 64 runes long and repeats in the same vertical band (within 2 points) on two or more pages is page furniture and wraps in `/Artifact` too. |
+
+Everything the recorder captured is covered: an event either joins a structure element, becomes a Figure, or wraps in an Artifact. The artifacts write no MCID and no parent tree entry, so the UA-2 content check ignores them and veraPDF sees no untagged content.
+
+The claim is opt-in through `RewriteOptions.Claim` or `-claim`. The builder runs `pdf.Open` plus `pdfa.PreflightUA2` on its own first-pass bytes, and `pdfa.UA2Write` adds `pdfuaid:part 2` and `pdfuaid:rev 2024` only when that preflight passes. `dc:title` comes from `RewriteOptions.Title`, then the source XMP title; with neither, `ua2-title` fails and the tree still comes back with no claim. `/Lang` comes from `RewriteOptions.Lang`, then the source catalog. The claim wording is generate and preflight: it is not a certification.
+
+The refusals are named:
+
+| Request | Result |
+| --- | --- |
+| `Tag` on a tagged input | `Error: /tagged in RewritePDF`. |
+| `Tag` with `PDFA` set | `Error: /unsupported in RewritePDF`, open decision 10. |
+| An image with no `/Alt` source | `Error: /alt in Tag`. |
+| `Claim` with no title | `Error: /ua2-title in PDFUA`. The tree is kept and no claim is written. |
+| `Claim` that fails any other UA-2 rule | That rule, `Error: /ua2-<rule> in PDFUA`. The tree is kept and no claim is written. |
+| `-claim`, `-tag-title`, or `-tag-lang` without `-tags` | Exit 2. |
 
 The structure model is `internal/pdf/structtree.go`. It parses `/MarkInfo`, `/StructTreeRoot`, `/K`, `/S`, `/P`, `/Pg`, `/MCID`, `/Alt`, `/ActualText`, `/Lang`, `/Namespaces`, `/RoleMap`, `/RoleMapNS`, and `/ParentTree` into typed values. The tree walk caps depth at 64 and reports a cycle as `limitcheck`. The parent tree resolves an MCID to its structure element and back; a claim with no agreeing entry is `undefined in ParentTree`. A role map resolves a custom type to a standard type; a cycle or a chain past 32 hops is `limitcheck`, a mapping into its own namespace or to itself is `syntaxerror`, and an unmapped custom type is `undefined`.
 
@@ -183,7 +217,7 @@ The font check is dictionary-level only. A font passes when it has `/ToUnicode`,
 
 `PreflightUA2` is the UA-2 request, separate from the PDF/A preflight. It returns `Error: /ua2-<rule> in PDFUA` for `ua2-marked`, `ua2-structtree`, `ua2-document`, `ua2-lang`, `ua2-displaydoctitle`, `ua2-pdfuaid`, `ua2-title`, `ua2-rolemap`, and `ua2-mcid`. A PDF/A-only problem such as an LZW stream or a non-embedded font does not fail the UA-2 request, and the UA-2 checks never run for a PDF/A request. The claim is preflight only, never certification.
 
-`make pdfua2-check` runs `verapdf --flavour ua2 --format json` over the PDFs under `sampledata/pdfua2/` and skips when the CLI is absent. A `negative/` subfolder holds deliberate failures and is excluded. On 2026-09-25, veraPDF 1.30.2 reported 1727 passed rules and 0 failed rules for `tagged-ua2.pdf` and `compliant-ua2.pdf`. The verdict is veraPDF's.
+`make pdfua2-check` runs `verapdf --flavour ua2 --format json` over the PDFs under `sampledata/pdfua2/` and skips when the CLI is absent. A `negative/` subfolder holds deliberate failures and is excluded. `sampledata/pdfua2/generated/report.pdf` is a Spectre tagged write, and `go run internal/tag/gen_samples.go` regenerates it together with `negative/no-title.pdf`, the refused claim case. On 2026-09-26, veraPDF 1.30.2 reported 1727 passed rules and 0 failed rules for `generated/report.pdf`, `tagged-ua2.pdf`, and `compliant-ua2.pdf`. The verdict is veraPDF's.
 
 ## PostScript output
 
@@ -251,6 +285,8 @@ Each channel scales by 255 and rounds to the nearest byte. Worked example: the q
 For PostScript, any `JobError` fails the command. For PDF, repair-and-continue is not the default of this command. A bad xref, a bad stream, or an unsupported operator fails the command with that `JobError`. Rendering commands may later warn and continue. `validate` does not.
 
 `validate` does not write PDF/A metadata and does not run the PDF/A preflight. PDF/A creation is the rewrite option below, and its result is not a certificate.
+
+A tagged input also runs the PDF/UA-2 machine checks after its pages paint, open decision 11. `Document.Tagged` reads the catalog `/StructTreeRoot` or a true `/MarkInfo /Marked`, and a document that carries either one is a UA-2 request for `validate`, so a tree the machine rules refuse fails the command with `Error: /ua2-<rule> in PDFUA`. An untagged PDF never runs the UA-2 checks and keeps the interpreter-only behavior.
 
 ## PDF/A-4 profile preflight
 

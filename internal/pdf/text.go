@@ -75,6 +75,21 @@ type TextRun struct {
 	WordSpacing float64
 	HScale      float64
 	Bytes       []byte
+	// Codes holds the character codes the run shows, one per glyph. A Type0
+	// font reads two-byte codes and drops a trailing odd byte.
+	Codes []uint32
+	// Unicode holds the /ToUnicode result per code. An entry is empty when
+	// the font has no mapping for that code.
+	Unicode []string
+	// CTM is the current transformation matrix at show time, and Scale is
+	// the paint scale in device pixels per user unit. Together they let a
+	// recorder reproduce device placement through cm and Tm.
+	CTM   graphics.Matrix
+	Scale float64
+	// Box is the device-space advance box of the whole run, baseline at the
+	// text matrix origin. The vertical extent is the nominal ascent and
+	// descent of the text size.
+	Box Box
 }
 
 // TextRunSink receives one TextRun per show operator, in stream order, before
@@ -82,6 +97,9 @@ type TextRun struct {
 type TextRunSink interface {
 	TextRun(r TextRun)
 }
+
+// codeSize is the byte length of one two-byte character code.
+const codeSize = 2
 
 // TextOptions carries the text seam for one content run.
 type TextOptions struct {
@@ -392,11 +410,14 @@ func (run *runner) doubleQuoteShow() error {
 }
 
 // fireRun delivers one show operator to the run sink with the current text
-// state, before the operator paints its glyphs. A nil sink discards it.
+// state, before the operator paints its glyphs. A nil sink discards it. The
+// run carries the decoded codes, their Unicode mappings, the CTM, the paint
+// scale, and the device advance box.
 func (run *runner) fireRun(text []byte) {
 	if !activeSink(run.runs) {
 		return
 	}
+	codes := run.runCodes(text)
 	run.runs.TextRun(TextRun{
 		FontName:    run.text.fontName,
 		Size:        run.text.size,
@@ -407,7 +428,57 @@ func (run *runner) fireRun(text []byte) {
 		WordSpacing: run.text.wordSpacing,
 		HScale:      run.text.hscale,
 		Bytes:       slices.Clone(text),
+		Codes:       codes,
+		Unicode:     run.runUnicode(codes),
+		CTM:         run.ctm,
+		Scale:       run.scale,
+		Box:         run.runBox(codes),
 	})
+}
+
+// runCodes splits one shown string into character codes the way showBytes
+// reads them.
+func (run *runner) runCodes(text []byte) []uint32 {
+	fnt := run.text.font
+	if fnt != nil && fnt.twoByteCodes() {
+		codes := make([]uint32, 0, (len(text)+1)/codeSize)
+		for idx := 0; idx+1 < len(text); idx += 2 {
+			codes = append(codes, uint32(text[idx])<<byteShift|uint32(text[idx+1]))
+		}
+		return codes
+	}
+	codes := make([]uint32, len(text))
+	for idx, code := range text {
+		codes[idx] = uint32(code)
+	}
+	return codes
+}
+
+// runUnicode maps every code through the font. A font with no mapping leaves
+// the entry empty.
+func (run *runner) runUnicode(codes []uint32) []string {
+	fnt := run.text.font
+	out := make([]string, len(codes))
+	if fnt == nil {
+		return out
+	}
+	for idx, code := range codes {
+		out[idx], _ = fnt.Unicode(code)
+	}
+	return out
+}
+
+// runBox is the device advance box of one whole run. The advances follow the
+// current text state, so the box holds the run origin and its advanced end.
+func (run *runner) runBox(codes []uint32) Box {
+	fnt := run.text.font
+	total := 0.0
+	if fnt != nil {
+		for _, code := range codes {
+			total += run.advance(fnt, code)
+		}
+	}
+	return run.glyphBox(total)
 }
 
 // showBytes shows one string. A Type0 font reads two-byte codes and ignores a
@@ -434,13 +505,22 @@ func (run *runner) showBytes(opName string, text []byte) error {
 	return nil
 }
 
-// showCode paints one glyph, delivers it to the sink, and advances. The
-// device check runs first, so a device without glyph support reports
+// showCode paints one glyph, delivers it to the sink, and advances. A marker
+// without glyph support keeps the old refusal, unless it accepts text runs,
+// because a recorder with the run seam re-emits text instead of painting it.
+// The device check runs first, so a device without glyph support reports
 // undefined before the font's outline source is consulted.
 func (run *runner) showCode(opName string, fnt *Font, code uint32) error {
-	if run.marker != nil {
-		if err := run.paintGlyph(opName, fnt, code); err != nil {
-			return err
+	if activeSink(run.marker) {
+		painter, isGlyph := run.marker.(glyphMarker)
+		runs, isRuns := run.marker.(TextRunSink)
+		switch {
+		case isGlyph && activeSink(painter):
+			if err := run.paintGlyph(opName, fnt, code); err != nil {
+				return err
+			}
+		case !isRuns || !activeSink(runs):
+			return NewError(opName, errUndefined)
 		}
 	}
 	advance := run.advance(fnt, code)

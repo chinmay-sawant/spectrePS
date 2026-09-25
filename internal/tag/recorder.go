@@ -6,6 +6,7 @@ package tag
 import (
 	"bytes"
 	"image"
+	"math"
 	"slices"
 	"strconv"
 
@@ -20,6 +21,7 @@ const (
 	errMCID     = "mcid"
 	errRoleMap  = "rolemap"
 	errImage    = "image"
+	errAlt      = "alt"
 	percentFull = 100
 )
 
@@ -72,9 +74,14 @@ type Event struct {
 	// EvenOdd selects the even-odd fill rule.
 	EvenOdd bool
 	// ImageName is the /XObject name, and ImageDict is its resolved
-	// dictionary, for an image event.
-	ImageName string
-	ImageDict pdf.Value
+	// dictionary, for an image event. ImageCTM and ImageScale are the
+	// matrix and paint scale at draw time, and ImageBox is the device-space
+	// box of the painted unit square, filled at DrawImage time.
+	ImageName  string
+	ImageDict  pdf.Value
+	ImageCTM   graphics.Matrix
+	ImageScale float64
+	ImageBox   pdf.Box
 	// Text is the shown run of a text event.
 	Text TextRun
 	// Tag and Properties are the marked-content boundary of a marked event.
@@ -122,15 +129,44 @@ func (rec *Recorder) Fill(pts []graphics.Point, red, green, blue float64, evenOd
 	rec.events = append(rec.events, evt)
 }
 
-// DrawImage consumes one pending image name. A draw with no name came from a
-// runner without the ImageName seam, so the recorder refuses it instead of
-// dropping the image.
-func (rec *Recorder) DrawImage(_ image.Image, _ graphics.Matrix, _ float64) {
+// DrawImage consumes one pending image name and records the painted box. A
+// draw with no name came from a runner without the ImageName seam, so the
+// recorder refuses it instead of dropping the image.
+func (rec *Recorder) DrawImage(pic image.Image, ctm graphics.Matrix, scale float64) {
 	if rec.imagePending {
 		rec.imagePending = false
+		rec.recordImageBox(pic, ctm, scale)
 		return
 	}
 	rec.setErr(pdf.NewError(opTag, errImage))
+}
+
+// recordImageBox stores the device box of the last image event. The unit
+// square maps through the image matrix, exactly like the paint path. A nil
+// image records no box.
+func (rec *Recorder) recordImageBox(pic image.Image, ctm graphics.Matrix, scale float64) {
+	if pic == nil || len(rec.events) == 0 {
+		return
+	}
+	last := &rec.events[len(rec.events)-1]
+	if last.Kind != EventImage {
+		return
+	}
+	last.ImageCTM = ctm
+	last.ImageScale = scale
+	mat := graphics.Concat(ctm, scaleMatrix(scale))
+	width := float64(pic.Bounds().Dx())
+	height := float64(pic.Bounds().Dy())
+	corners := [4][2]float64{{0, 0}, {width, 0}, {0, height}, {width, height}}
+	box := pdf.Box{MinX: math.Inf(1), MinY: math.Inf(1), MaxX: math.Inf(-1), MaxY: math.Inf(-1)}
+	for _, corner := range corners {
+		posX, posY := mat.Apply(corner[0], corner[1])
+		box.MinX = math.Min(box.MinX, posX)
+		box.MinY = math.Min(box.MinY, posY)
+		box.MaxX = math.Max(box.MaxX, posX)
+		box.MaxY = math.Max(box.MaxY, posY)
+	}
+	last.ImageBox = box
 }
 
 // ImageName records one XObject name and dictionary before decode.
@@ -208,6 +244,9 @@ func newEvent(kind EventKind) Event {
 		EvenOdd:    false,
 		ImageName:  "",
 		ImageDict:  pdf.NullVal(),
+		ImageCTM:   graphics.Identity(),
+		ImageScale: 1,
+		ImageBox:   pdf.Box{MinX: 0, MinY: 0, MaxX: 0, MaxY: 0},
 		Text:       zeroTextRun(),
 		Tag:        "",
 		Properties: pdf.NullVal(),
@@ -228,17 +267,24 @@ func zeroTextRun() TextRun {
 		WordSpacing: 0,
 		HScale:      1,
 		Bytes:       nil,
+		Codes:       nil,
+		Unicode:     nil,
+		CTM:         graphics.Identity(),
+		Scale:       1,
+		Box:         pdf.Box{MinX: 0, MinY: 0, MaxX: 0, MaxY: 0},
 	}
 }
 
 // span is one generated marked-content sequence: a half-open range of events
-// on one page, with its MCID and the tag name BDC writes.
+// on one page, with its MCID and the tag name BDC writes. A nil elem is an
+// artifact span: it writes /Artifact BMC and claims no MCID.
 type span struct {
 	first int
 	last  int
 	mcid  int
 	tag   string
 	elem  *builtElem
+	claim *builtClaim
 }
 
 // emitEvents writes the events. Every span wraps its range in
@@ -281,7 +327,7 @@ func emitEvent(buf *bytes.Buffer, evt Event) {
 	case EventFill:
 		writeFill(buf, evt)
 	case EventImage:
-		writeImage(buf, evt.ImageName)
+		writeImage(buf, evt)
 	case EventText:
 		writeTextRun(buf, evt.Text)
 	case EventBeginMarked:
@@ -291,8 +337,13 @@ func emitEvent(buf *bytes.Buffer, evt Event) {
 	}
 }
 
-// writeBeginGenerated writes one generated BDC with its MCID.
+// writeBeginGenerated writes one generated BDC with its MCID, or one
+// /Artifact BMC for an artifact span.
 func writeBeginGenerated(buf *bytes.Buffer, mark span) {
+	if mark.elem == nil {
+		writeOp(buf, nameText(artifactType), "BMC")
+		return
+	}
 	props := pdf.DictVal(map[string]pdf.Value{"MCID": pdf.IntVal(int64(mark.mcid))})
 	writeOp(buf, nameText(mark.tag), string(pdf.SerializeValue(props)), "BDC")
 }
@@ -349,15 +400,22 @@ func writePath(buf *bytes.Buffer, pts []graphics.Point) {
 	}
 }
 
-// writeImage writes one Do with the recorded XObject name.
-func writeImage(buf *bytes.Buffer, name string) {
-	writeOp(buf, nameText(name), "Do")
+// writeImage writes one q, cm, Do, and Q so the painted unit square keeps its
+// device placement, exactly like the text path.
+func writeImage(buf *bytes.Buffer, evt Event) {
+	saved := writeCTM(buf, evt.ImageCTM, evt.ImageScale)
+	writeOp(buf, nameText(evt.ImageName), "Do")
+	if saved {
+		buf.WriteString("Q\n")
+	}
 }
 
 // writeTextRun writes one text object from the recorded run. The absolute Tm
-// reproduces the placement, so Td and TD are not needed. Tc, Tw, Tz, and Ts
-// are always written because they persist across BT and ET.
+// reproduces the placement, and a non-identity CTM or paint scale is
+// re-emitted as cm inside q/Q so the device placement matches. Tc, Tw, Tz,
+// and Ts are always written because they persist across BT and ET.
 func writeTextRun(buf *bytes.Buffer, run TextRun) {
+	saved := writeTextCTM(buf, run)
 	buf.WriteString("BT\n")
 	writeOp(buf, nameText(run.FontName), formatNum(run.Size), "Tf")
 	writeOp(buf, formatNum(run.CharSpacing), "Tc")
@@ -371,6 +429,39 @@ func writeTextRun(buf *bytes.Buffer, run TextRun) {
 	writeOp(buf, matrixText(run.TextMatrix), "Tm")
 	writeOp(buf, hexText(run.Bytes), "Tj")
 	buf.WriteString("ET\n")
+	if saved {
+		buf.WriteString("Q\n")
+	}
+}
+
+// writeTextCTM writes the q and cm that reproduce the device placement of
+// one run. The result is true when a Q must follow.
+func writeTextCTM(buf *bytes.Buffer, run TextRun) bool {
+	return writeCTM(buf, run.CTM, run.Scale)
+}
+
+// writeCTM writes the q and cm that reproduce one device matrix. A zero
+// matrix or scale counts as the neutral value, so a zero-value event keeps
+// the plain operator. The result is true when a Q must follow.
+func writeCTM(buf *bytes.Buffer, ctm graphics.Matrix, scale float64) bool {
+	if ctm == (graphics.Matrix{A: 0, B: 0, C: 0, D: 0, E: 0, F: 0}) {
+		ctm = graphics.Identity()
+	}
+	if scale == 0 {
+		scale = 1
+	}
+	mat := graphics.Concat(ctm, scaleMatrix(scale))
+	if mat == graphics.Identity() {
+		return false
+	}
+	buf.WriteString("q\n")
+	writeOp(buf, matrixText(mat), "cm")
+	return true
+}
+
+// scaleMatrix is one uniform device scale.
+func scaleMatrix(scale float64) graphics.Matrix {
+	return graphics.Matrix{A: scale, B: 0, C: 0, D: scale, E: 0, F: 0}
 }
 
 // matrixText writes one matrix as the six Tm operands.

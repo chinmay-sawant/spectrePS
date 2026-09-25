@@ -70,8 +70,22 @@ Any other `-colorspace` value exits 2. `rgb` keeps the 24-bit RGB bytes from ear
 | `-compress` | Flate content streams at level 0 | true |
 | `-level` | Compression level, 0 through 5 | 0 |
 | `-pdfa` | PDF/A-4 claim: `4` or `4f` | omitted |
+| `-tags` | Generate a PDF/UA-2 structure tree | false |
+| `-claim` | Write the `pdfuaid` claim after the tagged write passes preflight | false |
+| `-tag-title` | `dc:title` of the tagged write | source XMP title |
+| `-tag-lang` | Catalog `/Lang` of the tagged write | source catalog `/Lang` |
 
 `-level 0` re-emits the path subset and keeps `-compress` as the Flate switch. `-level 1` through `-level 5` use the pass-through writer, so text, fonts, and content Spectre cannot interpret are copied. A level above 0 Flates content streams and ignores `-compress`. The image policy per level is in `documentation/devices.md`. Any other value exits 2. A tagged PDF at `-level 0` exits 1 with `Error: /tagged in RewritePDF`; levels 1 through 5 keep the tags and the source header version.
+
+`-tags` generates a PDF/UA-2 structure tree from the content the text machine reads, and `-claim` writes `pdfuaid:part 2` and `pdfuaid:rev 2024` only when the built bytes pass `pdfa.PreflightUA2`. `-tag-title` and `-tag-lang` fill `dc:title` and the catalog `/Lang`; a claim with neither a caller title nor a source title fails `ua2-title`, and that refusal still writes the tree with no claim. The reading-order thresholds are in `documentation/devices.md`, and the result is generate and preflight, never certification. The refusals are:
+
+| Request | Result |
+| --- | --- |
+| `-tags` on a tagged input | Exit 1, `Error: /tagged in RewritePDF`. |
+| `-tags` with `-pdfa` | Exit 1, `Error: /unsupported in RewritePDF`. |
+| An image with no `/Alt` source | Exit 1, `Error: /alt in Tag`. |
+| `-claim` with no title | Exit 1, `Error: /ua2-title in PDFUA`, and the tree is written with no claim. |
+| `-claim`, `-tag-title`, or `-tag-lang` without `-tags` | Exit 2. |
 
 `-pdfa 4` claims PDF/A-4 base and `-pdfa 4f` claims PDF/A-4f. A claim uses the pass-through writer at the selected level, appends the XMP metadata and the sRGB output intent, and changes the header to `%PDF-2.0` with a binary marker. The command runs the profile preflight first. A known violation exits 1 with one stderr line in the form `Error: /rule in PDFA`, and writes no output file. The rules are the table in `documentation/devices.md`. The claim is a profile preflight, not a certificate.
 
@@ -100,7 +114,7 @@ Images: 1
 
 `PDF version` is the header version. `Pages` is the page tree leaf count, and each `Page` line is the resolved `/MediaBox` width and height in points, inherited from the nearest `/Pages` ancestor and defaulting to 612 by 792 when the tree has none. `Tagged` is the reader tagged flag. The `Fonts:` block lists every in-use `/Type /Font` dictionary except CIDFont descendants, sorted by name, and `embedded=true` means a `/FontFile`, `/FontFile2`, or `/FontFile3` program is in the file. A file with no fonts prints `Fonts: none`. `Images` counts the in-use image XObjects. An encrypted trailer exits 1 with `Error: /invalidaccess in Encrypt`, because the reader refuses it. A missing input or a bad flag exits 2, an unreadable path exits 3, and a malformed document exits 1.
 
-`validate` takes one input and writes errors to stderr. It has no output file. `validate` does not run the PDF/UA-2 preflight yet. That preflight is `internal/pdfa.PreflightUA2`, it runs only for a UA-2 request, and its rules are in `documentation/devices.md`. The scope is preserve and preflight, and the claim is preflight only.
+`validate` takes one input and writes errors to stderr. It has no output file. For a tagged input, one whose catalog carries `/StructTreeRoot` or a true `/MarkInfo /Marked`, `validate` also runs the PDF/UA-2 machine checks after the pages paint, open decision 11. A tree the rules refuse exits 1 with `Error: /ua2-<rule> in PDFUA`; an untagged PDF is not a UA-2 request. The rules are in `documentation/devices.md`, and the check is preflight only, never certification.
 
 `compare bytes` takes two paths and no device flags. `compare raster` rasterizes the selected pages of both inputs with the same options and calls `CompareRaster` on each page pair. A `.pdf` input opens with `OpenPDF` and paints each selected page with `RasterizePage`; any other input uses `RunPostScript`. Different selected page counts print `mismatch length` and exit 1. It does not hash the encoded files.
 

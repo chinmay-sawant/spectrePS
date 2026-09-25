@@ -3,6 +3,7 @@ package tag
 import (
 	"bytes"
 	"fmt"
+	"image"
 	"testing"
 
 	"github.com/chinmay-sawant/spectrePS/internal/graphics"
@@ -79,6 +80,16 @@ func kidRefs(pages int) string {
 	return buf.String()
 }
 
+// openEmptyFixture builds a tagged fixture whose recorders start empty.
+func openEmptyFixture(t *testing.T, pages int) (*pdf.File, []*Recorder) {
+	t.Helper()
+	file, recs := openTagFixture(t, pages)
+	for index := range recs {
+		recs[index] = NewRecorder()
+	}
+	return file, recs
+}
+
 // recordStrokes returns a recorder with count stroke events.
 func recordStrokes(count int) *Recorder {
 	rec := NewRecorder()
@@ -89,6 +100,69 @@ func recordStrokes(count int) *Recorder {
 		}, 1, 0, 0, 0)
 	}
 	return rec
+}
+
+// recordRun records one synthetic text run at a device baseline. The box is
+// half an em per rune wide and one em tall, which matches the reader's
+// fallback geometry.
+func recordRun(rec *Recorder, text string, posX, posY, size float64) {
+	width := float64(len([]rune(text))) * size * 0.5
+	codes := make([]uint32, 0, len([]rune(text)))
+	units := make([]string, 0, len(codes))
+	for _, unit := range text {
+		codes = append(codes, uint32(unit))
+		units = append(units, string(unit))
+	}
+	rec.TextRun(pdf.TextRun{
+		FontName:   "F1",
+		Size:       size,
+		TextMatrix: graphics.Matrix{A: 1, B: 0, C: 0, D: 1, E: posX, F: posY},
+		LineMatrix: graphics.Matrix{A: 1, B: 0, C: 0, D: 1, E: posX, F: posY},
+		HScale:     1,
+		Bytes:      []byte(text),
+		Codes:      codes,
+		Unicode:    units,
+		CTM:        graphics.Identity(),
+		Scale:      1,
+		Box: pdf.Box{
+			MinX: posX, MinY: posY - size*0.25,
+			MaxX: posX + width, MaxY: posY + size*0.75,
+		},
+	})
+}
+
+// recordImage records one image event with its own /Alt entry.
+func recordImage(rec *Recorder, alt string, box pdf.Box) {
+	dict := pdf.DictVal(map[string]pdf.Value{})
+	if alt != "" {
+		dict = pdf.DictVal(map[string]pdf.Value{"Alt": pdf.StringVal(alt)})
+	}
+	rec.ImageName("Im0", dict)
+	rec.DrawImage(image.NewRGBA(image.Rect(0, 0, 10, 10)), graphics.Identity(), 1)
+	last := &rec.events[len(rec.events)-1]
+	last.ImageBox = box
+}
+
+// planKids returns the top-level kids of one plan.
+func planKids(t *testing.T, plan *Plan) []*Element {
+	t.Helper()
+	if plan == nil || plan.Root == nil {
+		t.Fatal("plan or root is nil")
+	}
+	return plan.Root.Kids
+}
+
+// wantClaims fails when one element's claim list differs.
+func wantClaims(t *testing.T, elem *Element, want []Claim) {
+	t.Helper()
+	if len(elem.Claims) != len(want) {
+		t.Fatalf("%s claims = %+v, want %+v", elem.Type, elem.Claims, want)
+	}
+	for index := range want {
+		if elem.Claims[index] != want[index] {
+			t.Fatalf("%s claim %d = %+v, want %+v", elem.Type, index, elem.Claims[index], want[index])
+		}
+	}
 }
 
 // documentPlan returns a Document with one P child per claim list.

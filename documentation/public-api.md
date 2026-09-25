@@ -51,6 +51,10 @@ type RewriteOptions struct {
     CompressStreams bool
     Level           int // 0 re-emits the path subset, 1 through 5 pass through
     PDFA            PDFAMode // zero leaves the claim off
+    Tag             bool     // generate a PDF/UA-2 structure tree
+    Claim           bool     // write pdfuaid after a passing tag preflight
+    Title           string   // dc:title of the tagged write
+    Lang            string   // catalog /Lang of the tagged write
 }
 
 func DefaultRewriteOptions() RewriteOptions // CompressStreams true at level 0
@@ -125,6 +129,7 @@ func (doc *Document) Info() (PDFInfo, error)
 func (in *Instance) RasterizePage(ctx context.Context, doc *Document, pageIndex int, opt RunOptions) (PageImage, error)
 func (in *Instance) ExtractText(ctx context.Context, doc *Document, pageIndex int) (string, error)
 func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOptions) ([]byte, error)
+func (in *Instance) PreflightUA2(ctx context.Context, doc *Document) error
 func (in *Instance) WritePostScript(ctx context.Context, doc *Document, opt PostScriptOptions) ([]byte, error)
 func (in *Instance) ImagePDF(ctx context.Context, pages []PageImage, dpi float64) ([]byte, error)
 func (in *Instance) ImagePDFColor(ctx context.Context, pages []PageImage, dpi float64, color ImageColor) ([]byte, error)
@@ -189,6 +194,10 @@ A cancelled `ctx` returns `ctx.Err()` and no partial success. `nil` context is a
 `DefaultRewriteOptions` turns stream compression on at level 0. The zero `RewriteOptions` leaves it off, so a test can ask for uncompressed streams on purpose. The CLI uses `DefaultRewriteOptions` when no flag is given.
 
 `RewritePDF` at level 0 refuses a tagged document with `Error: /tagged in RewritePDF`, because the path-only writer cannot keep the tree. Levels 1 through 5 keep the tags and the source header version. `Document.Tagged` reads the catalog `/StructTreeRoot` or a true `/MarkInfo /Marked`. The claim for this work is preflight only, never certification.
+
+`RewriteOptions.Tag` builds the tagged write: one recorder per page at 72 dpi, a reading order derived from device geometry, and a PDF/UA-2 structure tree. `Claim` writes `pdfuaid:part 2` and `pdfuaid:rev 2024` only after the built bytes pass `pdfa.PreflightUA2`; `Title` and `Lang` fill `dc:title` and the catalog `/Lang`, with the source XMP and catalog as fallbacks. A refusal keeps the tree and writes no claim, so `RewritePDF` returns the bytes with a `JobError` in that case: `ua2-title` when no title exists, and another `ua2-<rule>` when the preflight fails elsewhere. A tagged input returns `Error: /tagged in RewritePDF`, an image with no `/Alt` source returns `Error: /alt in Tag`, and `Tag` with `PDFA` set returns `Error: /unsupported in RewritePDF`. The reading-order thresholds and the whole refusal matrix are in `documentation/devices.md`. The result is generate and preflight, never certification.
+
+`PreflightUA2` runs the PDF/UA-2 machine checks on an open document and returns a `JobError` with `Op` `PDFUA` and the failed rule in `Msg`. It is the request `validate` makes for a tagged input. A nil document returns `rangecheck`. The result is preflight only, never certification.
 
 `RewriteOptions.PDFA` appends a PDF/A-4 claim. `PDFA4` is the base claim and `PDFA4F` is the embedded-file claim. A claim uses the pass-through writer at the selected level, runs the profile preflight, and returns a `JobError` with `Op` `PDFA` and the failed rule in `Msg` when the input carries a known violation. The claim is a profile preflight, not a certificate. The rules and the writer changes are in `documentation/devices.md`.
 

@@ -44,6 +44,12 @@ const (
 	keyLang              = "Lang"
 	keyContents          = "Contents"
 	keyNums              = "Nums"
+	keyAttr              = "A"
+	keyScope             = "Scope"
+	keyListNumbering     = "ListNumbering"
+
+	// artifactType is the marked-content tag that wraps decorations.
+	artifactType = "Artifact"
 
 	// namespacePDF20 is the PDF 2.0 standard structure namespace. Every
 	// generated element carries /NS pointing at its dictionary, open
@@ -57,21 +63,27 @@ const (
 // Plan is one authored structure tree. Root must be a Document, the top
 // element PDF/UA-2 requires. Roles maps a structure type that is not standard
 // in the PDF 2.0 namespace to a standard type in the PDF 1.7 namespace, for
-// example TOC to Div.
+// example TOC to Div. Artifacts lists content that stays outside the tree and
+// is wrapped in /Artifact BMC.
 type Plan struct {
-	Root  *Element
-	Roles map[string]string
+	Root      *Element
+	Roles     map[string]string
+	Artifacts []Claim
 }
 
 // Element is one authored structure element. Claims are the marked-content
-// sequences this element owns, and Kids are its child elements.
+// sequences this element owns, Kids are its child elements, Scope is the
+// /Scope value of a table header cell, and ListNumbering is the /A
+// /ListNumbering value of a list.
 type Element struct {
-	Type       string
-	Alt        string
-	ActualText string
-	Lang       string
-	Kids       []*Element
-	Claims     []Claim
+	Type          string
+	Alt           string
+	ActualText    string
+	Lang          string
+	Scope         string
+	ListNumbering string
+	Kids          []*Element
+	Claims        []Claim
 }
 
 // Claim is one generated marked-content sequence: the half-open range
@@ -85,15 +97,17 @@ type Claim struct {
 
 // builtElem is one structure element with its allocated object number.
 type builtElem struct {
-	num      int
-	parent   int
-	typeName string
-	alt      string
-	actual   string
-	lang     string
-	page     int
-	kids     []*builtElem
-	claims   []builtClaim
+	num           int
+	parent        int
+	typeName      string
+	alt           string
+	actual        string
+	lang          string
+	scope         string
+	listNumbering string
+	page          int
+	kids          []*builtElem
+	claims        []builtClaim
 }
 
 // builtClaim is one claim with its assigned MCID.
@@ -119,6 +133,7 @@ type builder struct {
 	targets      []int
 	appended     []bool
 	spans        [][]span
+	parents      [][]*builtElem
 	root         *builtElem
 	elems        []*builtElem
 	roles        map[string]string
@@ -178,6 +193,7 @@ func newBuilderState(file *pdf.File, recs []*Recorder, plan *Plan) (*builder, er
 		targets:      nil,
 		appended:     nil,
 		spans:        nil,
+		parents:      nil,
 		root:         nil,
 		elems:        nil,
 		roles:        plan.Roles,
@@ -248,15 +264,17 @@ func (built *builder) collect(elem *Element, depth, parent int) (*builtElem, err
 		return nil, pdf.NewError(opTag, errRoleMap)
 	}
 	node := &builtElem{
-		num:      built.next,
-		parent:   parent,
-		typeName: elem.Type,
-		alt:      elem.Alt,
-		actual:   elem.ActualText,
-		lang:     elem.Lang,
-		page:     -1,
-		kids:     nil,
-		claims:   nil,
+		num:           built.next,
+		parent:        parent,
+		typeName:      elem.Type,
+		alt:           elem.Alt,
+		actual:        elem.ActualText,
+		lang:          elem.Lang,
+		scope:         elem.Scope,
+		listNumbering: elem.ListNumbering,
+		page:          -1,
+		kids:          nil,
+		claims:        nil,
 	}
 	built.next++
 	built.elems = append(built.elems, node)
@@ -283,14 +301,34 @@ type claimRef struct {
 
 // assignMCIDs validates every claim and numbers it in paint order. MCIDs are
 // unique on their page and start at zero, so the parent tree array index is
-// the paint order position.
+// the paint order position. Artifact spans share the paint order but write no
+// MCID and no parent tree entry.
 func (built *builder) assignMCIDs() error {
+	byPage, artifacts, err := built.claimRefs()
+	if err != nil {
+		return err
+	}
+	built.spans = make([][]span, len(built.recs))
+	built.parents = make([][]*builtElem, len(built.recs))
+	for page := range built.recs {
+		marks, err := built.pageSpans(page, byPage[page], artifacts[page])
+		if err != nil {
+			return err
+		}
+		built.spans[page] = marks
+	}
+	return nil
+}
+
+// claimRefs validates every structure claim and every artifact claim and
+// groups them by page.
+func (built *builder) claimRefs() ([][]claimRef, [][]Claim, error) {
 	byPage := make([][]claimRef, len(built.recs))
 	for _, elem := range built.elems {
 		for index := range elem.claims {
 			claim := &elem.claims[index]
-			if err := built.validClaim(claim); err != nil {
-				return err
+			if err := built.validRange(claim.page, claim.first, claim.last); err != nil {
+				return nil, nil, err
 			}
 			if elem.page < 0 {
 				elem.page = claim.page
@@ -298,42 +336,73 @@ func (built *builder) assignMCIDs() error {
 			byPage[claim.page] = append(byPage[claim.page], claimRef{elem: elem, claim: claim})
 		}
 	}
-	built.spans = make([][]span, len(built.recs))
-	for page, refs := range byPage {
-		sort.SliceStable(refs, func(i, j int) bool {
-			return refs[i].claim.first < refs[j].claim.first
-		})
-		previous := 0
-		for mcid, ref := range refs {
-			if ref.claim.first < previous {
-				return pdf.NewError(opTag, errMCID)
-			}
-			previous = ref.claim.last
-			ref.claim.mcid = mcid
-			built.spans[page] = append(built.spans[page], span{
-				first: ref.claim.first,
-				last:  ref.claim.last,
-				mcid:  mcid,
-				tag:   ref.elem.typeName,
-				elem:  ref.elem,
-			})
+	artifacts := make([][]Claim, len(built.recs))
+	for _, claim := range built.plan.Artifacts {
+		if err := built.validRange(claim.Page, claim.First, claim.Last); err != nil {
+			return nil, nil, err
 		}
+		artifacts[claim.Page] = append(artifacts[claim.Page], Claim{
+			Page: claim.Page, First: claim.First, Last: claim.Last,
+		})
 	}
-	return nil
+	return byPage, artifacts, nil
 }
 
-// validClaim checks one claim against the recorded events of its page. A
+// pageSpans merges one page's structure and artifact claims in paint order
+// and numbers the structure claims.
+func (built *builder) pageSpans(page int, refs []claimRef, artifacts []Claim) ([]span, error) {
+	marks := make([]span, 0, len(refs)+len(artifacts))
+	for _, ref := range refs {
+		marks = append(marks, span{
+			first: ref.claim.first,
+			last:  ref.claim.last,
+			mcid:  -1,
+			tag:   ref.elem.typeName,
+			elem:  ref.elem,
+			claim: ref.claim,
+		})
+	}
+	for _, claim := range artifacts {
+		marks = append(marks, span{
+			first: claim.First,
+			last:  claim.Last,
+			mcid:  -1,
+			tag:   artifactType,
+			elem:  nil,
+			claim: nil,
+		})
+	}
+	sort.SliceStable(marks, func(i, j int) bool {
+		return marks[i].first < marks[j].first
+	})
+	previous := 0
+	for index := range marks {
+		if marks[index].first < previous {
+			return nil, pdf.NewError(opTag, errMCID)
+		}
+		previous = marks[index].last
+		if marks[index].elem == nil {
+			continue
+		}
+		marks[index].mcid = len(built.parents[page])
+		marks[index].claim.mcid = marks[index].mcid
+		built.parents[page] = append(built.parents[page], marks[index].elem)
+	}
+	return marks, nil
+}
+
+// validRange checks one claim against the recorded events of its page. A
 // claim with no emittable event would write an empty marked-content sequence,
 // so it is refused.
-func (built *builder) validClaim(claim *builtClaim) error {
-	if claim.page < 0 || claim.page >= len(built.recs) {
+func (built *builder) validRange(page, first, last int) error {
+	if page < 0 || page >= len(built.recs) {
 		return pdf.NewError(opTag, errMCID)
 	}
-	events := built.recs[claim.page].events
-	if claim.first < 0 || claim.last > len(events) || claim.first >= claim.last {
+	events := built.recs[page].events
+	if first < 0 || last > len(events) || first >= last {
 		return pdf.NewError(opTag, errMCID)
 	}
-	for _, evt := range events[claim.first:claim.last] {
+	for _, evt := range events[first:last] {
 		if !evt.marked() {
 			return nil
 		}
@@ -450,13 +519,14 @@ func (built *builder) namespacesValue() pdf.Value {
 }
 
 // parentTreeValue writes one flat /Nums array. Each page gets a fresh key and
-// one array slot per MCID, in paint order.
+// one array slot per structure MCID, in paint order. Artifact spans carry no
+// MCID, so they stay out of the parent tree.
 func (built *builder) parentTreeValue() pdf.Value {
 	nums := make([]pdf.Value, 0, len(built.recs)*parentTreePairLen)
 	for page := range built.recs {
-		refs := make([]pdf.Value, 0, len(built.spans[page]))
-		for _, mark := range built.spans[page] {
-			refs = append(refs, pdf.RefVal(mark.elem.num, 0))
+		refs := make([]pdf.Value, 0, len(built.parents[page]))
+		for _, elem := range built.parents[page] {
+			refs = append(refs, pdf.RefVal(elem.num, 0))
 		}
 		nums = append(nums, pdf.IntVal(int64(built.parentBase+page)), pdf.ArrayVal(refs))
 	}
@@ -485,10 +555,32 @@ func (built *builder) elemBody(elem *builtElem) []byte {
 	if elem.lang != "" {
 		entries[keyLang] = pdf.StringVal(elem.lang)
 	}
+	if attrs := attributeDict(elem); attrs != nil {
+		entries[keyAttr] = pdf.DictVal(attrs)
+	}
 	if kids := built.kidsValue(elem); len(kids) > 0 {
 		entries[keyKids] = pdf.ArrayVal(kids)
 	}
 	return pdf.SerializeValue(pdf.DictVal(entries))
+}
+
+// attributeDict writes the /A attribute object of one element: a table scope
+// or a list numbering. It is nil when the element carries neither.
+func attributeDict(elem *builtElem) map[string]pdf.Value {
+	switch {
+	case elem.scope != "":
+		return map[string]pdf.Value{
+			"O":      pdf.NameVal("Table"),
+			keyScope: pdf.NameVal(elem.scope),
+		}
+	case elem.listNumbering != "":
+		return map[string]pdf.Value{
+			"O":              pdf.NameVal("List"),
+			keyListNumbering: pdf.NameVal(elem.listNumbering),
+		}
+	default:
+		return nil
+	}
 }
 
 // kidsValue writes the /K array: claims first, then child element references.
