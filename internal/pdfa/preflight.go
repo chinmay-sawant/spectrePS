@@ -2,6 +2,7 @@ package pdfa
 
 import (
 	"context"
+	"slices"
 
 	"github.com/chinmay-sawant/spectrePS/internal/pdf"
 )
@@ -37,7 +38,9 @@ const (
 	keyEmbeddedFiles    = "EmbeddedFiles"
 	keyFilter           = "Filter"
 	keyColorSpace       = "ColorSpace"
+	keyResources        = "Resources"
 	keyAlternates       = "Alternates"
+	keyAlternate        = "Alternate"
 	keyOPI              = "OPI"
 	keyBM               = "BM"
 	typeFont            = "Font"
@@ -166,7 +169,28 @@ func (scan *scanner) dict(val pdf.Value) error {
 	if _, ok := val.ValueEntry(keyOPI); ok {
 		return pdf.NewError(opPDFA, ruleOPINotAllowed)
 	}
-	return scan.colorSpace(val)
+	if err := scan.colorSpace(val); err != nil {
+		return err
+	}
+	return scan.resources(val)
+}
+
+// resources applies the color space rule to the /ColorSpace subdictionary of a
+// resource dictionary. A page, a form, and a pattern each carry one, and the
+// dictionary is reached even when it is written directly inside the parent.
+func (scan *scanner) resources(val pdf.Value) error {
+	entry, ok := val.ValueEntry(keyResources)
+	if !ok || entry.Kind == pdf.KindNull {
+		return nil
+	}
+	node, err := scan.resolve(entry)
+	if err != nil {
+		return err
+	}
+	if node.Kind != pdf.KindDict {
+		return nil
+	}
+	return scan.colorSpace(node)
 }
 
 func (scan *scanner) blendMode(val pdf.Value) error {
@@ -178,13 +202,15 @@ func (scan *scanner) blendMode(val pdf.Value) error {
 }
 
 // colorSpace refuses DeviceCMYK on any dictionary entry. The claim appends an
-// RGB output intent, so no matching CMYK profile exists.
+// RGB output intent, so no matching CMYK profile exists. A page /ColorSpace
+// resource is a dictionary of names, and a Separation or DeviceN alternate
+// names DeviceCMYK inside it.
 func (scan *scanner) colorSpace(val pdf.Value) error {
 	entry, ok := val.ValueEntry(keyColorSpace)
 	if !ok {
 		return nil
 	}
-	found, err := scan.deviceCMYK(entry)
+	found, err := scan.deviceCMYK(entry, map[int]bool{})
 	if err != nil {
 		return err
 	}
@@ -194,26 +220,69 @@ func (scan *scanner) colorSpace(val pdf.Value) error {
 	return nil
 }
 
-func (scan *scanner) deviceCMYK(entry pdf.Value) (bool, error) {
-	if entry.Kind == pdf.KindRef {
+func (scan *scanner) deviceCMYK(entry pdf.Value, visited map[int]bool) (bool, error) {
+	switch entry.Kind {
+	case pdf.KindRef:
+		if visited[entry.RefNum] {
+			return false, nil
+		}
+		visited[entry.RefNum] = true
 		resolved, err := scan.resolve(entry)
 		if err != nil {
 			return false, err
 		}
-		return scan.deviceCMYK(resolved)
-	}
-	if entry.Kind == pdf.KindName {
+		return scan.deviceCMYK(resolved, visited)
+	case pdf.KindName:
 		return entry.Name == nameDeviceCMYK, nil
+	case pdf.KindArray:
+		return scan.deviceCMYKArray(entry, visited)
+	case pdf.KindDict:
+		return scan.deviceCMYKDict(entry, visited)
+	case pdf.KindStream:
+		return scan.deviceCMYKStream(entry, visited)
+	case pdf.KindNull, pdf.KindBool, pdf.KindInt, pdf.KindReal, pdf.KindString:
+		return false, nil
 	}
-	if entry.Kind == pdf.KindArray {
-		for _, item := range entry.Array {
-			found, err := scan.deviceCMYK(item)
-			if err != nil || found {
-				return found, err
-			}
+	return false, nil
+}
+
+// deviceCMYKArray walks one color space array. A Separation, DeviceN, or
+// Indexed value names its spaces in the array elements.
+func (scan *scanner) deviceCMYKArray(entry pdf.Value, visited map[int]bool) (bool, error) {
+	for _, item := range entry.Array {
+		found, err := scan.deviceCMYK(item, visited)
+		if err != nil || found {
+			return found, err
 		}
 	}
 	return false, nil
+}
+
+// deviceCMYKDict walks a color space resource dictionary: each value names one
+// space, and a Separation or DeviceN alternate is reached through it.
+func (scan *scanner) deviceCMYKDict(entry pdf.Value, visited map[int]bool) (bool, error) {
+	keys := make([]string, 0, len(entry.Dict))
+	for key := range entry.Dict {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	for _, key := range keys {
+		found, err := scan.deviceCMYK(entry.Dict[key], visited)
+		if err != nil || found {
+			return found, err
+		}
+	}
+	return false, nil
+}
+
+// deviceCMYKStream walks an ICCBased profile stream. Its /Alternate names the
+// space the samples preview as, and DeviceCMYK there has no matching profile.
+func (scan *scanner) deviceCMYKStream(entry pdf.Value, visited map[int]bool) (bool, error) {
+	alternate, ok := entry.ValueEntry(keyAlternate)
+	if !ok || alternate.Kind == pdf.KindNull {
+		return false, nil
+	}
+	return scan.deviceCMYK(alternate, visited)
 }
 
 func (scan *scanner) font(val pdf.Value) error {

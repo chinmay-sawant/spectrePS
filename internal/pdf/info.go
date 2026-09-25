@@ -172,7 +172,7 @@ func (file *File) pageSize(entry Value) (PageSize, error) {
 		if err != nil {
 			return PageSize{}, err
 		}
-		value, ok := numberOf(number)
+		value, ok := numberValueOf(number)
 		if !ok {
 			return PageSize{}, NewError(opInfo, errSyntax)
 		}
@@ -181,7 +181,7 @@ func (file *File) pageSize(entry Value) (PageSize, error) {
 	return PageSize{Width: corners[2] - corners[0], Height: corners[3] - corners[1]}, nil
 }
 
-func numberOf(val Value) (float64, bool) {
+func numberValueOf(val Value) (float64, bool) {
 	if val.Kind == KindInt {
 		return float64(val.Int), true
 	}

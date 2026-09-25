@@ -166,9 +166,9 @@ func DecodeLZWImageValue(val Value) (image.Image, error) {
 	if err != nil || filter != opLZW {
 		return nil, NewError(opImage, errUndefined)
 	}
-	width, height, space, err := imageParams(val)
+	width, height, space, err := imageParams(nil, val, opImage)
 	if err != nil {
 		return nil, err
 	}
-	return decodeFlateImage(val, width, height, space)
+	return decodeFlateImage(val, width, height, space, opImage)
 }

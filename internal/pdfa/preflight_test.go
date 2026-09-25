@@ -13,6 +13,7 @@ const (
 	plainCatalog    = "<< /Type /Catalog /Pages 2 0 R >>"
 	embeddedCatalog = "<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles << /Names [] >> >> >>"
 	emptyStream     = "<< /Length 0 >>\nstream\n\nendstream"
+	iccCMYKStream   = "<< /N 4 /Alternate /DeviceCMYK /Length 0 >>\nstream\n\nendstream"
 )
 
 func TestPreflightFonts(t *testing.T) {
@@ -164,6 +165,100 @@ func checkNormalBlend(t *testing.T) {
 	file := preflightFile(t, plainCatalog, "/ExtGState << /GS0 5 0 R >>",
 		"<< /Type /ExtGState /BM /Normal >>")
 	wantNoRule(t, Preflight(t.Context(), file, Mode4))
+}
+
+// TestPreflightSeparation applies cmyk-without-profile to a Separation or
+// DeviceN value nested inside the page /ColorSpace resource, through a name,
+// an array, or a reference.
+func TestPreflightSeparation(t *testing.T) {
+	for _, testCase := range separationPreflightCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			file := preflightFile(t, plainCatalog, testCase.resources, testCase.extra...)
+			err := Preflight(t.Context(), file, Mode4)
+			if testCase.rule == "" {
+				wantNoRule(t, err)
+				return
+			}
+			wantRule(t, err, testCase.rule)
+		})
+	}
+}
+
+// TestPreflightSeparationVisitedFirst proves the color space walk keeps its
+// own visited set: an array object scanned before the page still refuses when
+// the page /ColorSpace resource names it.
+func TestPreflightSeparationVisitedFirst(t *testing.T) {
+	objects := []string{
+		"<< /Type /Catalog /Pages 6 0 R >>",
+		"[/Separation /Spot /DeviceCMYK 5 0 R]",
+		"<< /Type /Page /Parent 6 0 R /MediaBox [0 0 20 20] /Contents 4 0 R " +
+			"/Resources << /ColorSpace << /CS0 2 0 R >> >> >>",
+		emptyStream,
+		emptyStream,
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+	}
+	file, err := pdf.Open(t.Context(), buildClassicPDF(t, objects))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantRule(t, Preflight(t.Context(), file, Mode4), ruleCMYKWithoutProfile)
+}
+
+// preflightCase is one resources and extra-object fixture for a rule check.
+type preflightCase struct {
+	name      string
+	resources string
+	extra     []string
+	rule      string
+}
+
+// separationPreflightCases lists the nested Separation and DeviceN forms.
+func separationPreflightCases() []preflightCase {
+	return []preflightCase{
+		{
+			name:      "separation through a reference",
+			resources: "/ColorSpace << /CS0 6 0 R >>",
+			extra:     []string{emptyStream, "[/Separation /Spot /DeviceCMYK 5 0 R]"},
+			rule:      ruleCMYKWithoutProfile,
+		},
+		{
+			name:      "separation direct array",
+			resources: "/ColorSpace << /CS0 [/Separation /Spot /DeviceCMYK 5 0 R] >>",
+			extra:     []string{emptyStream},
+			rule:      ruleCMYKWithoutProfile,
+		},
+		{
+			name:      "alternate through a name",
+			resources: "/ColorSpace << /CS0 [/Separation /Spot 6 0 R 5 0 R] >>",
+			extra:     []string{emptyStream, "/DeviceCMYK"},
+			rule:      ruleCMYKWithoutProfile,
+		},
+		{
+			name: "device N",
+			resources: "/ColorSpace << /CS0 " +
+				"[/DeviceN [/Cyan /Magenta /Yellow /Black] 6 0 R 5 0 R] >>",
+			extra: []string{emptyStream, "/DeviceCMYK"},
+			rule:  ruleCMYKWithoutProfile,
+		},
+		{
+			name:      "icc alternate stream",
+			resources: "/ColorSpace << /CS0 6 0 R >>",
+			extra:     []string{iccCMYKStream, "[/ICCBased 5 0 R]"},
+			rule:      ruleCMYKWithoutProfile,
+		},
+		{
+			name:      "rgb separation passes",
+			resources: "/ColorSpace << /CS0 6 0 R >>",
+			extra:     []string{emptyStream, "[/Separation /Spot /DeviceRGB 5 0 R]"},
+			rule:      "",
+		},
+		{
+			name:      "reference cycle passes",
+			resources: "/ColorSpace 5 0 R",
+			extra:     []string{"5 0 R"},
+			rule:      "",
+		},
+	}
 }
 
 func TestPreflightEmbeddedFiles(t *testing.T) {

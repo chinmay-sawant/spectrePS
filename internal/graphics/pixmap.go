@@ -32,10 +32,13 @@ type Image struct {
 
 // Pixmap is the RGB device. It flips Y when it stores a pixel.
 type Pixmap struct {
-	w     int
-	h     int
-	pix   []byte
-	pages []Image
+	w           int
+	h           int
+	pix         []byte
+	pages       []Image
+	fillAlpha   float64
+	strokeAlpha float64
+	blendMode   BlendMode
 }
 
 // NewPixmap allocates a white page. The caller has already applied the pixel caps.
@@ -45,7 +48,15 @@ func NewPixmap(width, height int) *Pixmap {
 	for i := range pix {
 		pix[i] = whiteByte
 	}
-	return &Pixmap{w: width, h: height, pix: pix, pages: nil}
+	return &Pixmap{
+		w:           width,
+		h:           height,
+		pix:         pix,
+		pages:       nil,
+		fillAlpha:   1,
+		strokeAlpha: 1,
+		blendMode:   BlendNormal,
+	}
 }
 
 // Stroke paints a centered stroke. width is already in device pixels.
@@ -54,9 +65,8 @@ func (p *Pixmap) Stroke(pts []Point, width, red, green, blue float64) {
 		width = -width
 	}
 	half := width / halfWidth
-	redByte, greenByte, blueByte := colorByte(red), colorByte(green), colorByte(blue)
 	for _, seg := range segments(pts) {
-		p.strokeSegment(seg[0], seg[1], half, redByte, greenByte, blueByte)
+		p.strokeSegment(seg[0], seg[1], half, red, green, blue, p.strokeAlpha)
 	}
 }
 
@@ -66,13 +76,12 @@ func (p *Pixmap) Fill(pts []Point, red, green, blue float64, evenOdd bool) {
 	if len(subs) == 0 {
 		return
 	}
-	redByte, greenByte, blueByte := colorByte(red), colorByte(green), colorByte(blue)
 	for row := range p.h {
 		centerY := float64(p.h-1-row) + pixelCenter
 		for col := range p.w {
 			centerX := float64(col) + pixelCenter
 			if inside(subs, centerX, centerY, evenOdd) {
-				p.set(col, row, redByte, greenByte, blueByte)
+				p.paint(col, row, red, green, blue, p.fillAlpha)
 			}
 		}
 	}
@@ -213,7 +222,7 @@ func unitBox(mat Matrix) (float64, float64, float64, float64) {
 	return minX, minY, maxX, maxY
 }
 
-func (p *Pixmap) strokeSegment(a, b Point, half float64, red, green, blue byte) {
+func (p *Pixmap) strokeSegment(a, b Point, half float64, red, green, blue, alpha float64) {
 	minX := math.Min(a.X, b.X) - half
 	maxX := math.Max(a.X, b.X) + half
 	minY := math.Min(a.Y, b.Y) - half
@@ -230,7 +239,7 @@ func (p *Pixmap) strokeSegment(a, b Point, half float64, red, green, blue byte) 
 		for col := col0; col < col1; col++ {
 			centerX := float64(col) + pixelCenter
 			if distToSeg(centerX, centerY, a.X, a.Y, b.X, b.Y) <= half {
-				p.set(col, row, red, green, blue)
+				p.paint(col, row, red, green, blue, alpha)
 			}
 		}
 	}
