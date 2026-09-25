@@ -75,10 +75,11 @@ The first file fills a quarter page with 100 percent cyan. The second fills a wh
 
 The reader walks the xref for in-use objects whose dictionary has `/Subtype /Image`. `ImageObjectNums` returns their object numbers in ascending order. `DecodeImage` returns an `image.Image` or an error. It never returns a blank image for a failed decode.
 
-Three stream forms decode:
+Four stream forms decode:
 
 - `/FlateDecode` with `/DeviceRGB` or `/DeviceGray` at 8 bits per component, through the same zlib path as content streams. A predictor above 1 is rejected.
 - `/DCTDecode` through `image/jpeg`.
+- `/CCITTFaxDecode` with `/DeviceGray` at 1 bit per component, through `golang.org/x/image/ccitt`. `/K < 0` is Group 4, `/K == 0` with `/EndOfLine true` is Group 3, and `/K > 0` is undefined. `/Columns` and `/Rows` default to `/Width` and `/Height`, `/BlackIs1` inverts the samples, and `/EncodedByteAlign` byte-aligns the codes. `Columns * Rows` above the 32 MiB decoded cap returns `limitcheck` before allocation.
 - `/JPXDecode` through `github.com/mrjoshuak/go-jpeg2000`, a pure-Go decoder. `/ColorSpace` and `/BitsPerComponent` are optional and ignored for JPX: the codestream carries the color and the precision, so the branch runs before the shared parameter check. A header that declares more decoded sample bytes than the 32 MiB Flate cap returns `limitcheck` before the decoder allocates.
 
 Any other filter, color space, or bit depth returns `undefined`, as does a Flate stream whose byte count does not match width by height by components. JPEG is lossy, so decoded pixels are not a byte oracle for the source; a JPEG2000 stream may be lossless or lossy. A failed decode returns `syntaxerror` or `limitcheck`, never a blank image.
@@ -99,7 +100,7 @@ The level table:
 | --- | --- | --- | --- |
 | 0 | Path subset | re-emitted, Flate when `CompressStreams` is true | unchanged |
 | 1 | Light | Flate every uncompressed stream | unchanged |
-| 2 | Balanced | Flate | Flate and raw image streams re-encoded losslessly, no resample |
+| 2 | Balanced | Flate | Flate, raw, and CCITT image streams re-encoded losslessly, no resample |
 | 3 | Medium | Flate | re-encoded as DCT, longest side capped at 1754 px, quality 80 |
 | 4 | Strong | Flate | re-encoded as DCT, longest side capped at 1123 px, quality 60 |
 | 5 | Hard | Flate | re-encoded as DCT, longest side capped at 842 px, quality 40 |

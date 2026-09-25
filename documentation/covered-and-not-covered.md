@@ -14,7 +14,7 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 - Select pages with `-pages`, in the style of `-dFirstPage` and `-dLastPage`. `raster`, `bbox`, `inkcov`, `pdfimage`, and `compare raster` take the flag.
 - Report the painted box in points, the RGB mark coverage of a page in the style of `bbox` and `inkcov`, and the weighted RGB ink amount in the style of `ink_cov`. Spectre's channels are RGB because the pixmap is RGB, so neither ink report is a CMYK report.
 - Wrap each painted page in a new PDF as one image, in the style of `pdfimage24`, `pdfimage8`, and `pdfimage32`. Spectre uses Flate image streams and the RGB, gray, and CMYK spaces.
-- Rewrite a PDF as a new file, compress streams, and re-encode images. Spectre Flates content, re-encodes Flate and raw image streams losslessly at level 2, and DCT-encodes images with a longest-side cap at levels 3 through 5. Levels 3 through 5 decode JPEG2000 streams and re-encode them as DCT. CCITT streams copy unchanged.
+- Rewrite a PDF as a new file, compress streams, and re-encode images. Spectre Flates content, re-encodes Flate, raw, and CCITT image streams losslessly at level 2, and DCT-encodes images with a longest-side cap at levels 3 through 5. Levels 3 through 5 also decode JPEG2000 streams and re-encode them as DCT.
 - Stop on the first broken-file error, the same idea as `-dPDFSTOPONERROR`.
 - A library call and a CLI over that call, the same split as `gsapi` and the `gs` binary.
 - Block file write, rename, and delete by default, which is the rough idea of SAFER.
@@ -24,7 +24,7 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 - Full PostScript LanguageLevel 3, including filters other than Flate, `%pipe%`, and `%disk`.
 - Full PDF 1.7 and PDF 2.0, including transparency, optional content, encryption, and passwords.
 - Fonts, `show`, text extraction (`txtwrite`, `ps2ascii`), and OCR (`pdfocr`, Tesseract).
-- Images inside a PDF on the reading side. `Do` still returns `undefined`, so an image page does not rasterize. Rewrite copies CCITT image streams unchanged; JPEG2000 streams decode and re-encode as DCT at levels 3 through 5.
+- Images inside a PDF on the reading side. `Do` still returns `undefined`, so an image page does not rasterize. Rewrite decodes CCITT G4 and G3 and JPEG2000 image streams: level 2 re-encodes CCITT losslessly as Flate, and levels 3 through 5 re-encode both as DCT.
 - Font embedding and subsetting.
 - PDF/A-1b, PDF/A-2b, and PDF/A-3b creation.
 - PDF/X creation.

@@ -57,6 +57,7 @@ func (file *File) ImageObjectNums() ([]int, error) {
 // DecodeImage decodes one image XObject. num comes from ImageObjectNums.
 // FlateDecode supports DeviceRGB and DeviceGray at 8 bits per component.
 // DCTDecode decodes through image/jpeg.
+// CCITTFaxDecode decodes Group 4 and Group 3 into Gray at 1 bit per component.
 // JPXDecode decodes through the pure-Go JPEG2000 decoder and ignores the
 // /BitsPerComponent and /ColorSpace entries, which are optional for JPX.
 // Any other filter, color space, or bit depth returns undefined.
@@ -73,6 +74,9 @@ func (file *File) DecodeImage(num int) (image.Image, error) {
 	}
 	if filter == nameJPX {
 		return decodeJPXImage(stream)
+	}
+	if filter == nameCCITT {
+		return decodeCCITTImage(stream)
 	}
 	width, height, space, err := imageParams(stream)
 	if err != nil {
