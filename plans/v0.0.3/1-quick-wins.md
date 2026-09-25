@@ -64,8 +64,8 @@ The `gs` argv item is a written switch map, not code.
 
 ## Phase 5: Closure
 
-- [ ] `make lint` passes. Outcome recorded on the day.
-- [ ] `make test` passes. Outcome recorded on the day.
+- [x] `make lint` passes. Outcome on 2026-09-25: `make lint` exited 0. `golangci-lint run ./...` reported no issues, and `make size-check` printed `size-check: clean (0 over-limit files).`
+- [x] `make test` passes. Outcome on 2026-09-25: `make test` exited 0. Every package with tests printed `ok`: `internal/cli`, `internal/graphics`, `internal/pdf`, `internal/pdfout`, `internal/ps`, and `spectreps`.
 
 ## Dependencies
 
