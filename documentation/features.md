@@ -55,7 +55,8 @@ The released tag is v0.0.1. The v0.0.2 work adds the page summaries, JPEG raster
 | Feature | Why it waits | Next gate |
 | --- | --- | --- |
 | Images inside a PDF, `Do` | The PDF interpreter has no image XObject model. | A plan file for image XObjects. |
-| DCT, CCITT, and downsampling on rewrite | Rewrite has no image samples to resample. | `Do` support in the PDF interpreter. |
+| DCT, CCITT, and downsampling on rewrite | Rewrite has no image samples to resample. | `Do` support in the PDF interpreter, then `plans/v0.0.3/1-pdf-compression.md`. |
+| PDF compression levels 1 to 5 over arbitrary PDFs | Levels need text, images, and a policy. Today `rewrite` re-emits the path subset only and has one Flate switch. | `plans/v0.0.3/1-pdf-compression.md`. |
 | TIFF raster | The encoder is `golang.org/x/image/tiff`, not the standard library. | A dependency row of its own, then a plan file. |
 | Text extraction, `show`, `Tj` | Fonts are a separate machine from the path engine. | A new plan file after the font decision. |
 | PDF/A-1b, PDF/A-2b, PDF/A-3b creation | Needs a named level, a named policy, and metadata. The file is not a conformance certificate. | A plan file that states the level and the policy. |

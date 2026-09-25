@@ -151,5 +151,6 @@ sample.pdf: PDF document, version 1.4, 1 pages
 | Extension | Files | Insertions | Deletions |
 | --- | ---: | ---: | ---: |
 | `.go` | 9 | 1285 | 34 |
-| `.md` | 15 | 447 | 32 |
-| **Total** | **24** | **1732** | **66** |
+| `.md` | 17 | 548 | 33 |
+| `.pdf` | 2 | Binary | Binary |
+| **Total** | **28** | **1833** | **67** |
