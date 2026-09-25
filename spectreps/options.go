@@ -32,6 +32,11 @@ func DefaultRewriteOptions() RewriteOptions {
 	return RewriteOptions{CompressStreams: true, Level: 0}
 }
 
+// PostScriptOptions controls a later PostScript write.
+// This tag has one shape: a fixed 612 by 792 box, a date-free header, and no
+// stream compression. The type is the seam for media options that come later.
+type PostScriptOptions struct{}
+
 // CompareResult is one byte or pixel comparison.
 // Equal slices use Offset -1 and an empty Reason.
 type CompareResult struct {

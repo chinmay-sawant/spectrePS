@@ -15,6 +15,18 @@ const (
 	trailerLine  = "%%EOF\n"
 )
 
+// prologText defines the short path operators the recorder emits. The long
+// names are the ones RunPostScript implements, and a bare m or S is not a
+// PostScript operator, so the program carries its own definitions the way the
+// ps2write prolog does.
+const prologText = "%%BeginProlog\n" +
+	"/m /moveto load def\n" +
+	"/l /lineto load def\n" +
+	"/S /stroke load def\n" +
+	"/f /fill load def\n" +
+	"/f* /eofill load def\n" +
+	"%%EndProlog\n"
+
 // Page is one page of PostScript operators in 72 dpi points.
 type Page struct {
 	Content []byte
@@ -26,9 +38,11 @@ type Page struct {
 type WriteOptions struct{}
 
 // Write frames pages as one date-free PostScript program.
-// The header is %!PS-Adobe-3.0 with a fixed 612 by 792 box, each page gets a
-// %%Page comment, one showpage, and the program ends with %%EOF. Write adds no
-// creation date, so two calls with the same pages return equal bytes.
+// The header is %!PS-Adobe-3.0 with a fixed 612 by 792 box, a prolog defines
+// the short path operators m, l, S, f, and f* in terms of the long operators,
+// each page gets a %%Page comment and one showpage, and the program ends with
+// %%EOF. Write adds no creation date, so two calls with the same pages return
+// equal bytes.
 // A canceled context returns ctx.Err() and a nil slice.
 // A nil context panics with "psout: nil context".
 // Empty pages return a non-nil program with zero showpage lines.
@@ -55,6 +69,7 @@ func writeHeader(buf *bytes.Buffer, count int) {
 	buf.WriteString(pagesLine)
 	buf.WriteString(strconv.Itoa(count))
 	buf.WriteByte('\n')
+	buf.WriteString(prologText)
 }
 
 func writePage(buf *bytes.Buffer, number int, content []byte) {

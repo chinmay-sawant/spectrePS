@@ -6,6 +6,7 @@ import (
 
 	"github.com/chinmay-sawant/spectrePS/internal/pdf"
 	"github.com/chinmay-sawant/spectrePS/internal/pdfout"
+	"github.com/chinmay-sawant/spectrePS/internal/psout"
 )
 
 // Document is an open PDF. file holds the parsed objects.
@@ -88,6 +89,55 @@ func rewriteLevel(ctx context.Context, file *pdf.File, level int) ([]byte, error
 		return nil, asPDFJobError(err)
 	}
 	out, err := pdfout.WriteCopy(ctx, file, pdfout.CopyOptions{Overrides: overrides})
+	if err != nil {
+		return nil, asPDFJobError(err)
+	}
+	return out, nil
+}
+
+// WritePostScript writes a date-free PostScript program from the open document.
+// The same path subset as RewritePDF level 0 is re-emitted: setrgbcolor or
+// setgray, setlinewidth, m and l, and S, f, or f*. Coordinates are 72 dpi
+// points in a fixed 612 by 792 box, with one showpage per page.
+// Text and images wait for the font and image machines, so a content operator
+// Spectre cannot emit returns undefined with its operator name, the same error
+// RewritePDF returns. A text page fails with undefined in Tj.
+// A nil document returns rangecheck. A nil context panics and a canceled
+// context returns ctx.Err().
+func (in *Instance) WritePostScript(
+	ctx context.Context,
+	doc *Document,
+	opt PostScriptOptions,
+) ([]byte, error) {
+	if ctx == nil {
+		panic("spectreps: nil context")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	_ = in
+	_ = opt
+	if doc == nil || doc.file == nil {
+		return nil, JobError{Op: "WritePostScript", Msg: "rangecheck", Filename: "", Line: 0, Column: 0}
+	}
+	return writePostScript(ctx, doc.file)
+}
+
+func writePostScript(ctx context.Context, file *pdf.File) ([]byte, error) {
+	count := file.PageCount()
+	pages := make([]psout.Page, 0, count)
+	for i := range count {
+		content, err := file.Content(i)
+		if err != nil {
+			return nil, asPDFJobError(err)
+		}
+		emitted, err := psout.Emit(ctx, content)
+		if err != nil {
+			return nil, asPDFJobError(err)
+		}
+		pages = append(pages, psout.Page{Content: emitted})
+	}
+	out, err := psout.Write(ctx, pages, psout.WriteOptions{})
 	if err != nil {
 		return nil, asPDFJobError(err)
 	}

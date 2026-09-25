@@ -58,14 +58,15 @@ func dispatch(args []string, stdout, stderr io.Writer) int {
 		return cmdMeasure(args[0], args[1:], stdout, stderr)
 	case "rewrite":
 		return cmdRewrite(args[1:], stderr)
+	case "ps":
+		return cmdPS(args[1:], stderr)
 	case "validate":
 		return cmdValidate(args[1:], stderr)
 	case "compare":
 		return cmdCompare(args[1:], stdout, stderr)
-	default:
-		usage(stderr)
-		return exitUsage
 	}
+	usage(stderr)
+	return exitUsage
 }
 
 func usage(w io.Writer) {
@@ -77,6 +78,7 @@ spectreps pdfimage [-w points] [-h points] [-r dpi] [-colorspace rgb|gray|cmyk] 
 spectreps bbox [-w points] [-h points] [-r dpi] [-pages range] file
 spectreps inkcov [-w points] [-h points] [-r dpi] [-pages range] file
 spectreps rewrite [-compress] [-level N] -o path file.pdf
+spectreps ps -o path file.pdf
 spectreps validate file
 spectreps compare bytes fileA fileB
 spectreps compare raster [-w points] [-h points] [-r dpi] [-pages range] [-o path] fileA fileB
@@ -349,6 +351,47 @@ func writeRewrite(path string, payload []byte, stderr io.Writer) int {
 		return exitIO
 	}
 	return exitOK
+}
+
+func cmdPS(args []string, stderr io.Writer) int {
+	set := newFlagSet("ps", stderr)
+	outPath := set.String("o", "", "output path")
+	rest, code := parseSet(set, args)
+	if code != 0 {
+		return code
+	}
+	if len(rest) != 1 || *outPath == "" {
+		usage(stderr)
+		return exitUsage
+	}
+	return psToFile(stderr, rest[0], *outPath)
+}
+
+// psToFile opens a PDF and writes its path subset as PostScript.
+func psToFile(stderr io.Writer, inPath, outPath string) int {
+	in, code := newInstance(stderr)
+	if code != 0 {
+		return code
+	}
+	defer in.Close()
+	src, code := readFile(inPath, stderr)
+	if code != 0 {
+		return code
+	}
+	payload, err := psBytes(in, src)
+	if err != nil {
+		return finish(stderr, err)
+	}
+	return writeRewrite(outPath, payload, stderr)
+}
+
+func psBytes(in *spectreps.Instance, src []byte) ([]byte, error) {
+	ctx := context.Background()
+	doc, err := in.OpenPDF(ctx, src)
+	if err != nil {
+		return nil, err
+	}
+	return in.WritePostScript(ctx, doc, spectreps.PostScriptOptions{})
 }
 
 func cmdValidate(args []string, stderr io.Writer) int {

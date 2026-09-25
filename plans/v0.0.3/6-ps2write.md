@@ -28,13 +28,13 @@ A new `internal/psout` recorder implements `graphics.Marker` and emits PostScrip
 
 ### 2.2 Public method and CLI
 
-- [ ] `(*Instance).WritePostScript(ctx, doc, opt)` mirrors `RewritePDF` for nil and canceled contexts and returns `undefined in Tj` on text input. `spectreps ps -o out.ps in.pdf` writes the file at mode `0o600`; a missing `-o` exits 2. Proof: `go test -count=1 ./spectreps -run TestWritePostScript` and `go test -count=1 ./internal/cli -run TestPSCommand`.
+- [x] `(*Instance).WritePostScript(ctx, doc, opt)` mirrors `RewritePDF` for nil and canceled contexts and returns `undefined in Tj` on text input. `spectreps ps -o out.ps in.pdf` writes the file at mode `0o600`; a missing `-o` exits 2. Proof: `go test -count=1 ./spectreps -run TestWritePostScript` and `go test -count=1 ./internal/cli -run TestPSCommand` exited 0 on 2026-09-25.
 
 ## Phase 3: Round trip, docs, and closure
 
 ### 3.1 Round trip
 
-- [ ] A one-page PDF with `re`/`f`, `m`/`l`/`S`, a curve, and `q`/`Q`/`cm` becomes PostScript, runs back through `RunPostScript` at 72 dpi, and compares equal under `CompareRaster`. Proof: `go test -count=1 ./spectreps -run TestPostScriptRoundTrip`.
+- [x] A one-page PDF with `re`/`f`, `m`/`l`/`S`, a curve, and `q`/`Q`/`cm` becomes PostScript, runs back through `RunPostScript` at 72 dpi, and compares equal under `CompareRaster`. Proof: `go test -count=1 ./spectreps -run TestPostScriptRoundTrip` exited 0 on 2026-09-25.
 
 ### 3.2 Docs and closure
 

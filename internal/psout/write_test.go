@@ -49,6 +49,24 @@ func checkHeader(t *testing.T, got []byte, pageCount int) {
 	if bytes.Contains(got, []byte("CreationDate")) || bytes.Contains(got, []byte("ModDate")) {
 		t.Fatal("program contains a date")
 	}
+	checkProlog(t, got)
+}
+
+// checkProlog checks the definitions that make the emitted short names run.
+func checkProlog(t *testing.T, got []byte) {
+	t.Helper()
+	defs := []string{
+		"/m /moveto load def\n",
+		"/l /lineto load def\n",
+		"/S /stroke load def\n",
+		"/f /fill load def\n",
+		"/f* /eofill load def\n",
+	}
+	for _, def := range defs {
+		if !bytes.Contains(got, []byte(def)) {
+			t.Fatalf("program lacks prolog definition %q", def)
+		}
+	}
 }
 
 func checkEmptyProgram(t *testing.T) {
