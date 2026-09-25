@@ -55,17 +55,20 @@ The released tag is v0.0.1. The v0.0.2 work adds the page summaries, JPEG raster
 | Feature | Why it waits | Next gate |
 | --- | --- | --- |
 | Images inside a PDF, `Do` | The PDF interpreter has no image XObject model. | A plan file for image XObjects. |
-| DCT, CCITT, and downsampling on rewrite | Rewrite has no image samples to resample. | `Do` support in the PDF interpreter, then `plans/v0.0.3/1-pdf-compression.md`. |
-| PDF compression levels 1 to 5 over arbitrary PDFs | Levels need text, images, and a policy. Today `rewrite` re-emits the path subset only and has one Flate switch. | `plans/v0.0.3/1-pdf-compression.md`. |
-| TIFF raster | The encoder is `golang.org/x/image/tiff`, not the standard library. | A dependency row of its own, then a plan file. |
+| DCT, CCITT, and downsampling on rewrite | Rewrite has no image samples to resample. | `Do` support in the PDF interpreter, then `plans/v0.0.3/2-pdf-compression.md` (rows 1.3 and 1.4). |
+| PDF compression levels 1 to 5 over arbitrary PDFs | Levels need text, images, and a policy. Today `rewrite` re-emits the path subset only and has one Flate switch. | `plans/v0.0.3/2-pdf-compression.md`. |
+| TIFF raster | The encoder is `golang.org/x/image/tiff`, not the standard library. The encoder supports none and Deflate only. | `plans/v0.0.3/1-quick-wins.md` (phase 2). |
 | Text extraction, `show`, `Tj` | Fonts are a separate machine from the path engine. | A new plan file after the font decision. |
 | PDF/A-1b, PDF/A-2b, PDF/A-3b creation | Needs a named level, a named policy, and metadata. The file is not a conformance certificate. | A plan file that states the level and the policy. |
 | PDF to PostScript (`ps2write` style) | It is another high-level device on the same marks. | A plan file. |
-| Gray and CMYK image PDF (`pdfimage8`, `pdfimage32` style) | Only the 24-bit RGB path exists. | A plan file on the image writer. |
+| Gray and CMYK image PDF (`pdfimage8`, `pdfimage32` style) | Only the 24-bit RGB path exists, and the conversions need a named policy. | `plans/v0.0.3/1-quick-wins.md` (phase 3). |
 | PCLm | A different image-PDF flavor. | A plan file. |
 | Spot-color separations (`tiffsep`) | No separation model. | A plan file. |
-| `gs` argv compatibility mode | The subcommands map to library methods, and a second flag grammar would fork the CLI. | A written switch map. |
-| Page selection, PDF info, linearization, output encryption | Out of the current tags. | A new plan file. |
+| `gs` argv compatibility mode | The subcommands map to library methods, and a second flag grammar would fork the CLI. | A bounded switch map in `plans/v0.0.3/1-quick-wins.md` (phase 4). |
+| Page selection for raster and PDF jobs | Out of the current tags. | `plans/v0.0.3/1-quick-wins.md` (phase 1). |
+| PDF inputs in `compare raster` | `rasterPair` sends both files through `RunPostScript`. | `plans/v0.0.3/1-quick-wins.md` (phase 1). |
+| `ink_cov` weighted ink amounts | Ghostscript prints `ink_cov` as a percent and its manual example disagrees with its source. | A written weighting model. |
+| PDF info, linearization, output encryption | Out of the current tags. | A new plan file. |
 | Full PDF 1.7 and PDF 2.0, including transparency and optional content | The current reader is a path-only subset. | A new plan file. |
 | `bind`, `save`, `restore`, `clip`, and filters other than Flate | Out of the current PostScript subset. | A new plan file. |
 | Font embedding and subsetting | Needs the font machine first. | A new plan file. |

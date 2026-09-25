@@ -9,7 +9,7 @@ The detailed contracts stay in their own files. This note is the reason those fi
 | Ghostscript behavior we measured | `documentation/ghostscript-baseline.md` |
 | Jobs Spectre takes and leaves | `documentation/covered-and-not-covered.md` |
 | Tests for the jobs Spectre takes | `documentation/test.md` |
-| Work ledger | `plans/v0.0.1/00-program.md` |
+| Work ledgers | `plans/v0.0.1/00-program.md`, `plans/v0.0.2/00-program.md`, and `plans/v0.0.3/00-program.md` |
 | Deferred checklist | `plans/v0.0.1/10-deferred.md` |
 | MIT text | `LICENSE` |
 
@@ -45,13 +45,13 @@ Each row is a small slice, not Ghostscript parity.
 
 - Interpret PostScript. The slice is the operator set in `documentation/language.md`, not LanguageLevel 3.
 - Open a PDF and rasterize pages. The slice is path operators plus Flate streams, not PDF 1.7 or PDF 2.0.
-- Rasterize to an image. Spectre writes PPM and PNG. Ghostscript also writes JPEG, TIFF, BMP, PCX, fax, and PSD.
+- Rasterize to an image. Spectre writes PPM, PNG, and JPEG. Ghostscript also writes TIFF, BMP, PCX, fax, and PSD.
 - Rewrite a PDF as a new file and compress streams with Flate.
 - Stop on the first broken-file error, the same idea as `-dPDFSTOPONERROR`.
 - A library call and a CLI over that call, the same split as `gsapi` and the `gs` binary.
 - Block `file`, `run`, `deletefile`, `renamefile`, and `filenameforall` by default. They return `invalidaccess`. That is the rough idea of SAFER.
 
-Byte compare and pixel compare are Spectre commands. Ghostscript 9.55.0 has no `compare` device, and the 10.09 device manual does not define one. Ghostscript writes images. Something else compares them. Spectre does the compare itself, on pixel buffers or on raw file bytes. PNG bytes are not the equality check, because a PNG is a compressed encoding.
+Byte compare and pixel compare are Spectre commands. Ghostscript 9.55.0 has no `compare` device, and the 10.09 device manual does not define one. Ghostscript writes images. Something else compares them. Spectre does the compare itself, on pixel buffers or on raw file bytes. PNG and JPEG bytes are not the equality check, because both are compressed encodings.
 
 ## Ghostscript jobs Spectre leaves
 
@@ -64,8 +64,8 @@ Byte compare and pixel compare are Spectre commands. Ghostscript 9.55.0 has no `
 - PDF/X creation.
 - PDF to PostScript (`pdf2ps`, `ps2write`) and EPS rewrite (`eps2write`, `ps2epsi`).
 - XPS output (`xpswrite`), DOCX output (`docxwrite`), and PCL-XL output (`pxlmono`, `pxlcolor`).
-- A page raster wrapped in a PDF (`pdfimage8`, `pdfimage24`, `pdfimage32`, PCLm).
-- Bounding box (`bbox`), ink coverage (`inkcov`), and spot-color separations (`tiffsep`).
+- A gray or CMYK page raster wrapped in a PDF (`pdfimage8`, `pdfimage32`) and PCLm output. The 24-bit RGB path landed in v0.0.2.
+- Spot-color separations (`tiffsep`). The `bbox` and `inkcov` summaries landed in v0.0.2.
 - On-screen display.
 - Page selection, PDF info (`-dPDFINFO`), linearized PDF, and output encryption.
 - Printer devices, duplex, N-up, and PJL.
@@ -84,7 +84,7 @@ Raster and rewrite are also different jobs. Raster devices paint pixels. `pdfwri
 
 ## Tests
 
-`documentation/test.md` lists one expected result per case for the jobs Spectre takes: the library boundary, the PostScript subset, the y flip, PPM and PNG, pixel compare, PDF open, Flate rewrite, `validate`, and the file-access ban. Tests call package `spectreps` or the `spectreps` binary.
+`documentation/test.md` lists one expected result per case for the jobs Spectre takes: the library boundary, the PostScript subset, the y flip, PPM, PNG, and JPEG, pixel compare, PDF open, Flate rewrite, bitmap PDF, `bbox` and `inkcov`, `validate`, and the file-access ban. Tests call package `spectreps` or the `spectreps` binary.
 
 ## Copyright
 
@@ -116,7 +116,7 @@ ISO's own text on PDF 2.0 says some elements of the document may be the subject 
 
 Ghostscript. The search did not turn up an Artifex patent that reserves "interpret PostScript," "rasterize a page," or "write a PDF."
 
-The current Spectre slice stays on paths and Flate. It leaves out fonts, JPEG, JPEG2000, LZW, and transparency. Ghostscript's own manual says `pdfwrite` ignores LZW requests. Adding a codec later is a new patent question even when a manual describes that codec.
+The current Spectre slice stays on paths, Flate, and standard-library image encoders. It leaves out fonts, JPEG2000, LZW, transparency, and reading DCT images inside a PDF. Ghostscript's own manual says `pdfwrite` ignores LZW requests. Adding a codec later is a new patent question even when a manual describes that codec.
 
 A letter or a lawsuit can still arrive. An expired patent, or a royalty-free license for a compliant PDF implementation, is why a claim about those particular Adobe patents would be weak. This note does not say every possible patent has been checked.
 

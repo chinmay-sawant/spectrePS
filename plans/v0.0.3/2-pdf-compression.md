@@ -65,6 +65,10 @@ Levels are a Spectre policy, not a Ghostscript clone. Level 1 is lossless: Flate
 
 - [ ] `documentation/cli.md`, `documentation/devices.md`, `documentation/features.md`, and `documentation/covered-and-not-covered.md` state the level table and the pass-through rule. Proof: `grep -n 'level' documentation/cli.md documentation/features.md` shows the rows.
 
+## Reference
+
+Ghostscript's `pdfwrite` presets are the nearest published analogues. Source: `VectorDevices.html` and `Resource/Init/gs_pdfwr.ps` in the Ghostscript tree. `/screen` targets 72 dpi images, `/ebook` 150, and `/printer` and `/prepress` 300. Quality comes from `QFactor`, and the presets differ on color handling: `/sRGB` for screen and ebook, `/UseDeviceIndependentColor` for printer, and `/LeaveColorUnchanged` for prepress. The rendered manual table disagrees with `gs_pdfwr.ps` in a few rows, so the source is the better reference. Spectre's levels above stay its own contract.
+
 ## Dependencies
 
 1.1 is independent and can land first. 1.2 needs either text support or the pass-through writer. 1.3 needs the image model. 1.4 to 1.6 need all of the above.
