@@ -33,6 +33,7 @@ const (
 	jpegMinQuality     = 1
 	jpegMaxQuality     = 100
 	maxRewriteLevel    = 5
+	inkPercentScale    = 100
 )
 
 // Run parses args and returns the process exit code.
@@ -293,7 +294,8 @@ func writeInk(w io.Writer, page int, img spectreps.PageImage) {
 func writeInkAmount(w io.Writer, page int, img spectreps.PageImage) {
 	ink := spectreps.MeasureInkAmount(img)
 	fmt.Fprintf(w, "Page %d\n", page)
-	fmt.Fprintf(w, "%.5f %.5f %.5f RGB\n", ink.R*100, ink.G*100, ink.B*100)
+	fmt.Fprintf(w, "%.5f %.5f %.5f RGB\n",
+		ink.R*inkPercentScale, ink.G*inkPercentScale, ink.B*inkPercentScale)
 }
 
 func cmdRewrite(args []string, stderr io.Writer) int {

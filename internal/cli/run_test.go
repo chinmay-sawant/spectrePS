@@ -17,6 +17,9 @@ import (
 	"github.com/chinmay-sawant/spectrePS/spectreps"
 )
 
+// squarePath is a 10 by 10 filled square on a 20 by 20 page.
+const squarePath = "0 0 moveto 10 0 lineto 10 10 lineto 0 10 lineto closepath fill"
+
 func callRun(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
@@ -1059,7 +1062,7 @@ func openPDFBytes(t *testing.T, payload []byte) *spectreps.Document {
 }
 
 func TestBBox(t *testing.T) {
-	square := "0 0 moveto 10 0 lineto 10 10 lineto 0 10 lineto closepath fill"
+	square := squarePath
 	white := "%%BoundingBox: 0 0 0 0\n%%HiResBoundingBox: 0 0 0 0\n"
 	marked := "%%BoundingBox: 0 0 10 10\n%%HiResBoundingBox: 0 0 10 10\n"
 
@@ -1081,7 +1084,7 @@ func TestBBox(t *testing.T) {
 }
 
 func TestInkcov(t *testing.T) {
-	square := "0 0 moveto 10 0 lineto 10 10 lineto 0 10 lineto closepath fill"
+	square := squarePath
 	white := "Page 1\n0.00000 0.00000 0.00000 RGB\n"
 	quarter := "Page 1\n0.25000 0.25000 0.25000 RGB\n"
 
@@ -1105,7 +1108,7 @@ func TestInkcov(t *testing.T) {
 }
 
 func TestInkCov(t *testing.T) {
-	square := "0 0 moveto 10 0 lineto 10 10 lineto 0 10 lineto closepath fill"
+	square := squarePath
 	cyan := "0 1 1 setrgbcolor " + square
 	white := "Page 1\n0.00000 0.00000 0.00000 RGB\n"
 	quarter := "Page 1\n25.00000 0.00000 0.00000 RGB\n"
