@@ -6,7 +6,7 @@ Add the v0.0.3 work: PDF page ranges, TIFF raster, gray and CMYK image PDF, the 
 
 ## Motivation / context
 
-- Plans: `plans/v0.0.3/00-program.md`, `plans/v0.0.3/1-quick-wins.md`, `plans/v0.0.3/2-pdf-compression.md`
+- Plans: `plans/v0.0.2/00-program.md`, `plans/v0.0.2/4-quick-wins.md`, `plans/v0.0.2/5-pdf-compression.md`
 - Issues: see **Related issues**
 
 ---
@@ -104,7 +104,7 @@ Levels 1 and 2 are slightly larger than the input because the writer rebuilds th
 
 ## Related issues
 
-- No GitHub issue exists for this work. The parent ledger is `plans/v0.0.3/00-program.md`.
+- No GitHub issue exists for this work. The parent ledger is `plans/v0.0.2/00-program.md`.
 
 ---
 

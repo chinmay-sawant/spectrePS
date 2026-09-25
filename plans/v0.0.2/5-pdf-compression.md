@@ -1,6 +1,6 @@
-# v0.0.3 - PDF compression
+# v0.0.2 - PDF compression
 
-> **Parent:** `plans/v0.0.3/00-program.md` - future ledger
+> **Parent:** `plans/v0.0.2/00-program.md` - release ledger
 > **Status:** implemented. Levels 0 to 5 landed and all rows are checked. Lint and test passed on 2026-09-25.
 > **Estimated effort:** weeks. Depends on the object pass-through writer, then the image model.
 

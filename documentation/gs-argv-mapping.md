@@ -22,7 +22,7 @@ Ghostscript picks a device with `-sDEVICE=name`. Spectre has no device flag. `sp
 
 Every other device name is rejected. That includes the grayscale and mono raster devices (`pnggray`, `pngmono`, `jpeggray`, `pgmraw`), alpha and color-space variants (`pngalpha`, `pam`, `pamcmyk32`), the TIFF family (`tiff24nc` and the rest), the bit devices (`bit`, `bitrgb`, `bitcmyk`), text devices (`txtwrite`), PostScript writers (`ps2write`, `eps2write`), and the printer devices. Spectre selects an encoder from the output path, so a device name has no place to go.
 
-> TIFF is planned in phase 2 of `plans/v0.0.3/1-quick-wins.md`. That phase adds `.tif` and `.tiff` output to `raster`. It does not add a `-sDEVICE` flag, and it is not on this branch.
+> TIFF landed in phase 2 of `plans/v0.0.2/4-quick-wins.md` as `.tif` and `.tiff` output on `raster`. It does not add a `-sDEVICE` flag.
 
 ## Output file
 
@@ -48,7 +48,7 @@ Every other device name is rejected. That includes the grayscale and mono raster
 - `-dLastPage=M` alone is `-pages 1-M`.
 - `-dFirstPage=N` alone has no exact match. `-pages N` selects one page, not N through the end.
 
-> Planned, not on this branch. `-pages A-B` is row 1.2 of `plans/v0.0.3/1-quick-wins.md` and lands on a parallel branch. Its grammar is 1-based and inclusive, a single `N` selects one page, and an omitted flag selects every page. It applies to `raster`, `bbox`, `inkcov`, `pdfimage`, and `compare raster`. A range outside the document returns `rangecheck`. For a PostScript input the run executes every page and the filter applies after it, so a failing page inside the range still fails the command. On this branch no page selection flag exists, so `-dFirstPage` and `-dLastPage` are unknown flags and exit 2.
+> Landed. `-pages A-B` is row 1.2 of `plans/v0.0.2/4-quick-wins.md`. Its grammar is 1-based and inclusive, a single `N` selects one page, and an omitted flag selects every page. It applies to `raster`, `bbox`, `inkcov`, `pdfimage`, and `compare raster`. A range outside the document returns `rangecheck`. For a PostScript input the run executes every page and the filter applies after it, so a failing page inside the range still fails the command. The binary still rejects `-dFirstPage` and `-dLastPage` as unknown flags, exit 2.
 
 ## Batch, pause, and quiet
 
@@ -87,4 +87,4 @@ None of these switches are accepted by the binary. A `gs` command line fails at 
 - `documentation/devices.md` for the pixmap, the encoders, `bbox`, and `inkcov`.
 - `documentation/covered-and-not-covered.md` for the covered jobs and the deferred list.
 - `documentation/ghostscript-baseline.md` for the device names and the SAFER default.
-- `plans/v0.0.3/1-quick-wins.md` phase 1 for `-pages`, phase 2 for TIFF.
+- `plans/v0.0.2/4-quick-wins.md` phase 1 for `-pages`, phase 2 for TIFF.

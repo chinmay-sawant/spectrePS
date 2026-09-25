@@ -9,7 +9,7 @@ The detailed contracts stay in their own files. This note is the reason those fi
 | Ghostscript behavior we measured | `documentation/ghostscript-baseline.md` |
 | Jobs Spectre takes and leaves | `documentation/covered-and-not-covered.md` |
 | Tests for the jobs Spectre takes | `documentation/test.md` |
-| Work ledgers | `plans/v0.0.1/00-program.md`, `plans/v0.0.2/00-program.md`, and `plans/v0.0.3/00-program.md` |
+| Work ledgers | `plans/v0.0.1/00-program.md` and `plans/v0.0.2/00-program.md` |
 | Deferred checklist | `plans/v0.0.1/10-deferred.md` |
 | MIT text | `LICENSE` |
 
@@ -65,10 +65,10 @@ Byte compare and pixel compare are Spectre commands. Ghostscript 9.55.0 has no `
 - PDF/X creation.
 - PDF to PostScript (`pdf2ps`, `ps2write`) and EPS rewrite (`eps2write`, `ps2epsi`).
 - XPS output (`xpswrite`), DOCX output (`docxwrite`), and PCL-XL output (`pxlmono`, `pxlcolor`).
-- PCLm output. The 24-bit RGB path landed in v0.0.2, and the gray and CMYK image PDFs landed in v0.0.3.
+- PCLm output. The 24-bit RGB path landed in v0.0.2, and the gray and CMYK image PDFs landed in v0.0.2.
 - Spot-color separations (`tiffsep`). The `bbox` and `inkcov` summaries landed in v0.0.2.
 - On-screen display.
-- PDF info (`-dPDFINFO`), linearized PDF, and output encryption. Page selection landed in v0.0.3.
+- PDF info (`-dPDFINFO`), linearized PDF, and output encryption. Page selection landed in v0.0.2.
 - Printer devices, duplex, N-up, and PJL.
 - GhostPCL (PCL and PXL input), GhostXPS, GhostPDL image inputs, and Ghostscript Office (Word, PowerPoint, Excel).
 - The bundled URW fonts.

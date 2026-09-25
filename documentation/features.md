@@ -2,7 +2,7 @@
 
 This file is the product inventory: what Spectre supports today and what waits. `documentation/covered-and-not-covered.md` maps the same ground against Ghostscript. `plans/v0.0.1/10-deferred.md` is the ledger for the work that waits, with a next gate on each row.
 
-The released tag is v0.0.1. The v0.0.2 work adds the page summaries, JPEG raster, and the bitmap PDF. The v0.0.3 quick wins add TIFF raster, page selection, PDF inputs in `compare raster`, and gray and CMYK image PDF. `spectreps version` prints `0.0.1` until a tag bumps that constant.
+The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster, page selection, PDF inputs in `compare raster`, gray and CMYK image PDF, and PDF compression levels 1 to 5. `spectreps version` prints `0.0.1` until a tag bumps that constant.
 
 ## Input
 
@@ -64,7 +64,7 @@ The released tag is v0.0.1. The v0.0.2 work adds the page summaries, JPEG raster
 | PDF to PostScript (`ps2write` style) | It is another high-level device on the same marks. | A plan file. |
 | PCLm | A different image-PDF flavor. | A plan file. |
 | Spot-color separations (`tiffsep`) | No separation model. | A plan file. |
-| `gs` argv compatibility mode | The subcommands map to library methods, and a second flag grammar would fork the CLI. | A bounded switch map in `plans/v0.0.3/1-quick-wins.md` (phase 4). |
+| Full `gs` argv grammar | The subcommands map to library methods, and a second flag grammar would fork the CLI. The bounded switch map landed. | A written proposal per switch family. |
 | `ink_cov` weighted ink amounts | Ghostscript prints `ink_cov` as a percent and its manual example disagrees with its source. | A written weighting model. |
 | PDF info, linearization, output encryption | Out of the current tags. | A new plan file. |
 | Full PDF 1.7 and PDF 2.0, including transparency and optional content | The current reader is a path-only subset. | A new plan file. |

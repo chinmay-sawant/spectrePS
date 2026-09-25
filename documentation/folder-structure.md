@@ -25,14 +25,13 @@ testdata/
 documentation/
 plans/v0.0.1/
 plans/v0.0.2/
-plans/v0.0.3/
 skills/phase-wise-checklist/SKILLS.md
 skills/unslop/SKILL.md
 skills/PR/
 scripts/
 ```
 
-`documentation/` is the prose folder for this repository. `plans/v0.0.1/`, `plans/v0.0.2/`, and `plans/v0.0.3/` are the execution ledgers. `sampledata/` holds the PDFs the compression plan measures. `skills/` holds agent instructions that already live in this repo.
+`documentation/` is the prose folder for this repository. `plans/v0.0.1/` and `plans/v0.0.2/` are the execution ledgers. `sampledata/` holds the PDFs the compression plan measures. `skills/` holds agent instructions that already live in this repo.
 
 ## Public library
 
