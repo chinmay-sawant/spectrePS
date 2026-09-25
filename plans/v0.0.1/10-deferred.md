@@ -12,22 +12,25 @@ Rows here are `[~]` on purpose. They are not a second active checklist. When one
 
 ## Executive summary
 
-Ghostscript 9.55.0 exposes hundreds of printer devices, plus PCL and XPS in sister products. Spectre's v0.0.1 release is the PostScript subset, the path-only PDF, one pixmap, Flate rewrite, validate, and byte compare. v0.0.2 added the page summaries, JPEG and TIFF raster, page ranges, gray and CMYK image PDF, the `gs` switch map, the object pass-through writer, and compression levels 1 to 5. What waits now is painting `Do`, CCITT and JPEG2000 decoding, `ink_cov` weights, text, PDF/A, PostScript output, the full `gs` grammar, and the printer languages.
+Ghostscript 9.55.0 exposes hundreds of printer devices, plus PCL and XPS in sister products. Spectre's v0.0.1 release is the PostScript subset, the path-only PDF, one pixmap, Flate rewrite, validate, and byte compare. v0.0.2 added the page summaries, JPEG and TIFF raster, page ranges, gray and CMYK image PDF, the `gs` switch map, the object pass-through writer, and compression levels 1 to 5. What waits now is painting `Do`, CCITT and JPEG2000 decoding, `ink_cov` weights, the writer container cleanup, text and fonts, PDF/A-4, PDF/UA-2, PostScript output, the full `gs` grammar, and the printer languages. Each open row has a phase file under `plans/v0.0.3/`.
 
 ## Phase 10: Deferred
 
 ### 10.1 Outputs that need an image or text model
 
-- [~] Painting `Do` and reading images into a raster. Reason: the reader decodes image XObjects, but the content interpreter still returns `undefined` for `Do`, so an image PDF cannot be rasterized by Spectre. Next gate: a plan file for the `Do` operator and the image marker seam.
-- [~] CCITT and JPEG2000 image streams. Reason: `DecodeImage` reads Flate and DCT only, so those streams copy through unchanged in the compression levels. Next gate: a CCITT or JPX decoder, then a plan file.
-- [~] `ink_cov` weighted ink amounts. Reason: Ghostscript prints `ink_cov` as a percent and its manual example disagrees with its source, so Spectre needs a named weighting model before any code. Next gate: a written model.
-- [~] Text extraction in the style of `txtwrite`, `show`, and PDF `Tj`. Reason: fonts are a separate machine from the path engine. Next gate: a new plan file. The phase 04 y-flip test has landed. Until then those operators return errors, not blank pages.
+- [~] Painting `Do` and reading images into a raster. Reason: the reader decodes image XObjects, but the content interpreter still returns `undefined` for `Do`, so an image PDF cannot be rasterized by Spectre. Detail moved to `plans/v0.0.3/5-paint-do.md`.
+- [~] CCITT image streams. Reason: `DecodeImage` reads Flate and DCT only, so those streams copy through unchanged in the compression levels. Detail moved to `plans/v0.0.3/2-ccitt-decode.md`.
+- [~] JPEG2000 image streams. Reason: the standard library and `golang.org/x/image` have no JPX decoder. Detail moved to `plans/v0.0.3/3-jpeg2000-decode.md`, behind a pure-Go conformance gate.
+- [~] `ink_cov` weighted ink amounts. Reason: Ghostscript prints `ink_cov` as a percent and its manual example disagrees with its source, so Spectre needs a named weighting model before any code. Detail moved to `plans/v0.0.3/1-ink-cov.md`.
+- [~] Compression writer container cleanup. Reason: `WriteCopy` copies the source `/Type /XRef` and `/Type /ObjStm` containers as dead weight and writes plain objects, so levels 1 and 2 grow already-optimized files by about 3%. Detail moved to `plans/v0.0.3/4-writer-cleanup.md`.
+- [~] Text extraction in the style of `txtwrite`, `show`, and PDF `Tj`. Reason: fonts are a separate machine from the path engine. Detail moved to `plans/v0.0.3/9-text-and-fonts.md`. Until then those operators return errors, not blank pages.
 
 ### 10.2 PDF jobs and variants
 
-- [~] PDF/A-1b, PDF/A-2b, PDF/A-3b creation. Reason: needs output intents, metadata, and a finished rewrite. Creating the file is not a conformance certificate, and `PDFACompatibilityPolicy` 0 in Ghostscript can attach PDF/A metadata to a non-compliant file. Spectre will not copy that ambiguity. Next gate: a new plan file that states which PDF/A level and which policy.
-- [~] PDF to PostScript via a `ps2write` style device. Reason: it is another high-level device on the same marks. Next gate: a new plan file.
-- [~] Full `gs` argv grammar. Reason: the subcommands map to library methods, and a second flag grammar would fork the CLI. A bounded switch map landed in v0.0.2 (`plans/v0.0.2/4-quick-wins.md`, phase 4); the full grammar stays out. Next gate: a written proposal per switch family.
+- [~] PDF/A-4 creation, with the refusal policy. Reason: needs output intents, metadata, and a finished rewrite. Creating the file is not a conformance certificate, and `PDFACompatibilityPolicy` 0 in Ghostscript can attach PDF/A metadata to a non-compliant file. Spectre will not copy that ambiguity. Detail moved to `plans/v0.0.3/8-pdfa4.md`.
+- [~] PDF/UA-2 preservation and preflight. Reason: tag generation needs the text and font machine, and the reader has no structure tree model. Detail moved to `plans/v0.0.3/10-pdfua2.md`.
+- [~] PDF to PostScript via a `ps2write` style device. Reason: it is another high-level device on the same marks. Detail moved to `plans/v0.0.3/6-ps2write.md`.
+- [~] Full `gs` argv grammar. Reason: the subcommands map to library methods, and a second flag grammar would fork the CLI. A bounded switch map landed in v0.0.2 (`plans/v0.0.2/4-quick-wins.md`, phase 4). Detail moved to `plans/v0.0.3/7-gs-argv.md`.
 
 ### 10.3 Out of product
 

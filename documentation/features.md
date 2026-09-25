@@ -57,15 +57,18 @@ The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster
 
 | Feature | Why it waits | Next gate |
 | --- | --- | --- |
-| Painting `Do` and reading images into a raster | The reader decodes image XObjects, but the content interpreter still returns `undefined` for `Do`. | A plan file for the `Do` operator and the image marker seam. |
-| CCITT and JPEG2000 image streams on rewrite | `DecodeImage` reads Flate and DCT only, so those streams copy through unchanged. | A CCITT or JPX decoder. |
-| Text extraction, `show`, `Tj` | Fonts are a separate machine from the path engine. | A new plan file after the font decision. |
-| PDF/A-1b, PDF/A-2b, PDF/A-3b creation | Needs a named level, a named policy, and metadata. The file is not a conformance certificate. | A plan file that states the level and the policy. |
-| PDF to PostScript (`ps2write` style) | It is another high-level device on the same marks. | A plan file. |
+| Painting `Do` and reading images into a raster | The reader decodes image XObjects, but the content interpreter still returns `undefined` for `Do`. | `plans/v0.0.3/5-paint-do.md`. |
+| CCITT image streams on rewrite | `DecodeImage` reads Flate and DCT only, so those streams copy through unchanged. | `plans/v0.0.3/2-ccitt-decode.md`. |
+| JPEG2000 image streams on rewrite | The standard library and `golang.org/x/image` have no JPX decoder. | `plans/v0.0.3/3-jpeg2000-decode.md`. |
+| Text extraction, `show`, `Tj` | Fonts are a separate machine from the path engine. | `plans/v0.0.3/9-text-and-fonts.md`. |
+| PDF/A-4 creation | Needs a named level, a refusal policy, and metadata. The file is not a conformance certificate. | `plans/v0.0.3/8-pdfa4.md`. |
+| PDF/UA-2 preservation and preflight | Tag generation needs the text and font machine, and the reader has no structure tree model. | `plans/v0.0.3/10-pdfua2.md`. |
+| PDF to PostScript (`ps2write` style) | It is another high-level device on the same marks. | `plans/v0.0.3/6-ps2write.md`. |
+| Compression writer container cleanup | `WriteCopy` copies the dead `/XRef` and `/ObjStm` containers and grows already-optimized files by about 3%. | `plans/v0.0.3/4-writer-cleanup.md`. |
 | PCLm | A different image-PDF flavor. | A plan file. |
 | Spot-color separations (`tiffsep`) | No separation model. | A plan file. |
-| Full `gs` argv grammar | The subcommands map to library methods, and a second flag grammar would fork the CLI. The bounded switch map landed. | A written proposal per switch family. |
-| `ink_cov` weighted ink amounts | Ghostscript prints `ink_cov` as a percent and its manual example disagrees with its source. | A written weighting model. |
+| Full `gs` argv grammar | The subcommands map to library methods, and a second flag grammar would fork the CLI. The bounded switch map landed. | `plans/v0.0.3/7-gs-argv.md`. |
+| `ink_cov` weighted ink amounts | Ghostscript prints `ink_cov` as a percent and its manual example disagrees with its source. | `plans/v0.0.3/1-ink-cov.md`. |
 | PDF info, linearization, output encryption | Out of the current tags. | A new plan file. |
 | Full PDF 1.7 and PDF 2.0, including transparency and optional content | The current reader is a path-only subset. | A new plan file. |
 | `bind`, `save`, `restore`, `clip`, and filters other than Flate | Out of the current PostScript subset. | A new plan file. |

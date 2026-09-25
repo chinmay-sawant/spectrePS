@@ -1,0 +1,111 @@
+# v0.0.3 - Text and fonts
+
+> **Parent:** `plans/v0.0.3/00-program.md` - program ledger
+> **Status:** not started.
+> **Estimated effort:** about six weeks across four phases. Type1 and a full Type0 path are extra.
+
+---
+
+## Overview
+
+PostScript `show` and PDF `Tj`, `TJ`, `'`, and `"` return `undefined` today. The scanner throws text payloads away, the runner has no text state or resources, and there is no font model. This phase builds the machine: metrics, encodings, painting, positioning, and extraction.
+
+## Executive summary
+
+One glyph source serves both front ends: advances in 1/1000 em, outlines, encoding lookup, and Unicode. The standard 14 widths come from generated AFM tables; embedded TrueType and OpenType go through `golang.org/x/image/font/sfnt`; Type1 and bare CFF are their own scope. Painting and extraction are separate sinks on the same text machine. Text pixels will never byte-match Ghostscript, because hinting and antialiasing differ, so text tests compare shapes and advances, not `CompareRaster` against `gs`.
+
+## Phase 1: Model
+
+### 1.1 Written model
+
+- [ ] `documentation/fonts.md` names the metrics source and license, the standard-14 painting policy (substitute outlines or `invalidfont`), the Type1 and CFF scope, the Type0 scope, and the exclusions. Proof: the file exists and `make lint` passes, since this row is documentation-only.
+
+### 1.2 Standard 14 widths
+
+- [ ] Generated Go tables hold the AFM widths for the standard 14. Proof: `go test -count=1 ./internal/font -run TestStandard14Widths` (Helvetica `A` is 667, space 278; Courier is 600).
+
+### 1.3 Encodings and glyph names
+
+- [ ] Standard, WinAnsi, and MacRoman tables plus Adobe glyph list names. Proof: `go test -count=1 ./internal/font -run TestEncodingTables` and `TestAGLNames`.
+
+## Phase 2: Font resources
+
+### 2.1 Resource lookup and the text seam
+
+- [ ] `File.PageResources` and a font lookup by page and name, plus a `TextOptions` seam on `Paint` that carries the font source and the sink. Proof: `go test -count=1 ./internal/pdf -run TestFontResource`.
+
+### 2.2 Simple fonts
+
+- [ ] A simple font dictionary reads `/Widths`, `/FirstChar`, `/MissingWidth`, `/FontDescriptor`, and `/BaseFont` with the standard-14 fallback, and `/Encoding` with `/Differences`. Proof: `go test -count=1 ./internal/pdf -run TestSimpleFont`.
+
+### 2.3 ToUnicode
+
+- [ ] `bfchar` and `bfrange` CMaps override the encoding for extraction. Proof: `go test -count=1 ./internal/pdf -run TestToUnicode`.
+
+### 2.4 Embedded TrueType and OpenType
+
+- [ ] `/FontFile2` and `/FontFile3` OpenType parse through `sfnt`, mapping character codes to glyph IDs and advances. Proof: `go test -count=1 ./internal/pdf -run TestTrueTypeGlyph`.
+
+### 2.5 Type0 Identity-H
+
+- [ ] A Type0 font with Identity-H and a `CIDToGIDMap` maps two-byte codes to glyphs. Proof: `go test -count=1 ./internal/pdf -run TestIdentityHText`.
+
+### 2.6 Rewrite stays gated
+
+- [ ] Level 0 still returns `undefined` on text, so rewrite does not silently outline text. Proof: `go test -count=1 ./internal/pdfout -run TestRewriteTextUndefined`.
+
+## Phase 3: Painting and positioning
+
+### 3.1 Text state
+
+- [ ] `BT`, `ET`, `Tf`, `Td`, `TD`, `Tm`, `T*`, `Tc`, `Tw`, `Tz`, `TL`, and `Ts` maintain the text state, saved and restored by `q` and `Q`. Proof: `go test -count=1 ./internal/pdf -run TestTextState`.
+
+### 3.2 Tj outlines
+
+- [ ] `Tj` transforms glyph outlines through the text rendering matrix and blends coverage into the pixmap. Proof: `go test -count=1 ./internal/pdf -run TestTjGlyphPixels` against a checked-in PPM fixture.
+
+### 3.3 Standard 14 painting
+
+- [ ] Standard-14 painting follows the policy from 1.1. Proof: `go test -count=1 ./internal/pdf -run TestStandard14Paint`.
+
+### 3.4 Advances
+
+- [ ] `TJ` numbers, `'`, and `"` position the next glyph with the width and the character and word spacing. Proof: `go test -count=1 ./internal/pdf -run TestTJAdvance` and `TestQuoteShow`.
+
+### 3.5 PostScript show
+
+- [ ] `findfont`, `scalefont`, `setfont`, and `show` drive the same text machine from the PostScript front end. Proof: `go test -count=1 ./internal/ps -run TestShowPS`.
+
+### 3.6 Type1, optional
+
+- [ ] `/FontFile` Type1 charstrings and `seac` decode. Proof: `go test -count=1 ./internal/pdf -run TestType1Glyph`. This row is dropped to a later tag if 1.1 defers Type1.
+
+## Phase 4: Extraction
+
+### 4.1 Glyph sink
+
+- [ ] The sink records each positioned glyph with its code, Unicode, advance, and bounding box. Proof: `go test -count=1 ./internal/pdf -run TestTextSink`.
+
+### 4.2 Layout
+
+- [ ] Fragments sort by Y then X, merge close runs, insert spaces, and write UTF-8 with CRLF per line, following the `txtwrite` default. Proof: `go test -count=1 ./internal/pdf -run TestExtractLayout`.
+
+### 4.3 Public method and CLI
+
+- [ ] `spectreps.ExtractText` and a CLI command return the text, with a code-point fallback for fonts without `ToUnicode`. Proof: `go test -count=1 ./spectreps -run TestExtractTextGolden` against a two-line fixture.
+
+## Phase 5: Docs and closure
+
+### 5.1 Docs and closure
+
+- [ ] `documentation/language.md`, `devices.md`, `features.md`, `covered-and-not-covered.md`, and `cli.md` state the supported operators, the extraction command, and the pixel-parity caveat, and the deferred row moves to 10.4. Proof: `grep -n 'ExtractText' documentation/public-api.md`.
+- [ ] `make lint` and `make test` pass. Outcomes recorded on the day.
+
+## Dependencies
+
+`golang.org/x/image/font/sfnt` and `x/image/vector`, already in the module. The PostScript front end shares the text machine.
+
+## Not in this plan
+
+- Hinting and font programs, subsetting or writing fonts, Type3, vertical writing, color and variable fonts, and OCR.
+- Pixel parity with Ghostscript on text pages.
