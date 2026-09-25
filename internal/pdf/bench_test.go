@@ -38,7 +38,7 @@ func benchClassicPDF() []byte {
 	doc := newDoc()
 	doc.object("<< /Type /Catalog /Pages 2 0 R >>")
 	doc.object("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
-	doc.object("<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>")
+	doc.object(pageBody)
 	doc.object(streamBody("/Filter /FlateDecode", benchFlate(benchContent())))
 	return doc.classic("")
 }
@@ -51,7 +51,7 @@ func benchXRefStreamPDF() []byte {
 		fmt.Sprintf("/Type /ObjStm /N 2 /First %d /Filter /FlateDecode", first),
 		benchFlate(plain),
 	)
-	page := "<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>"
+	page := pageBody
 	content := streamBody("", benchContent())
 
 	doc := newDoc()

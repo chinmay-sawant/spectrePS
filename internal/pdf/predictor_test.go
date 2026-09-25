@@ -157,7 +157,7 @@ func predictedXRefPDF(t *testing.T) []byte {
 		"/Type /ObjStm /N 2 /First %d /Filter /FlateDecode "+
 			"/DecodeParms << /Predictor 2 /Columns %d >>", first, len(plain)),
 		flateRaw(t, tiffPredictRows(plain, 1, len(plain))))
-	page := "<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>"
+	page := pageBody
 	content := lineMarks
 	contentBody := streamBody(fmt.Sprintf(
 		"/Filter /FlateDecode /DecodeParms << /Predictor 10 /Columns %d >>", len(content)),

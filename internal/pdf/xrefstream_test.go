@@ -42,7 +42,7 @@ func buildXRefStream(t *testing.T) []byte {
 		fmt.Sprintf("/Type /ObjStm /N 2 /First %d /Filter /FlateDecode", first),
 		flateRaw(t, plain),
 	)
-	page := "<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>"
+	page := pageBody
 	content := streamBody("", []byte(lineMarks))
 
 	doc := newDoc()

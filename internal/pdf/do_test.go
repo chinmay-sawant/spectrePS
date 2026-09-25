@@ -151,7 +151,7 @@ func inheritedDoPage(t *testing.T, content, resources string, bodies ...string) 
 	doc := newDoc()
 	doc.object("<< /Type /Catalog /Pages 2 0 R >>")
 	doc.object("<< /Type /Pages /Kids [3 0 R] /Count 1 /Resources " + resources + " >>")
-	doc.object("<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>")
+	doc.object(pageBody)
 	doc.object(streamBody("", []byte(content)))
 	for _, body := range bodies {
 		doc.object(body)

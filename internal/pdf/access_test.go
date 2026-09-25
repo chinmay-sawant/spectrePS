@@ -45,7 +45,7 @@ func checkPackedAccess(t *testing.T) {
 		t.Fatal("compressed object returned raw bytes")
 	}
 	checkCatalogValue(t, file, idCatalog)
-	wantRawObject(t, file, streamPage, "<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>")
+	wantRawObject(t, file, streamPage, pageBody)
 	checkMissingAccess(t, file)
 }
 

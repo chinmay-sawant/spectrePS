@@ -58,7 +58,7 @@ func textPageTrailer(t *testing.T, marks, extra string) []byte {
 	doc := newDoc()
 	doc.object("<< /Type /Catalog /Pages 2 0 R >>")
 	doc.object("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
-	doc.object("<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>")
+	doc.object(pageBody)
 	doc.object(streamBody("", []byte(marks)))
 	return doc.classic(extra)
 }
@@ -68,7 +68,7 @@ func filteredPage(t *testing.T, dict string, raw []byte) []byte {
 	doc := newDoc()
 	doc.object("<< /Type /Catalog /Pages 2 0 R >>")
 	doc.object("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
-	doc.object("<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>")
+	doc.object(pageBody)
 	doc.object(streamBody(dict, raw))
 	return doc.classic("")
 }
