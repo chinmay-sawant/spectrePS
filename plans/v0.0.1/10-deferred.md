@@ -18,7 +18,7 @@ Ghostscript 9.55.0 exposes hundreds of printer devices, plus PCL and XPS in sist
 
 ### 10.1 Outputs that need an image or text model
 
-- [~] Text extraction in the style of `txtwrite`, `show`, and PDF `Tj`. Reason: fonts are a separate machine from the path engine. Detail moved to `plans/v0.0.3/9-text-and-fonts.md`. Until then those operators return errors, not blank pages.
+- [~] Type 1 charstrings and `seac`. Reason: `documentation/fonts.md` defers Type 1 and bare CFF, so the font model reads TrueType and OpenType through `sfnt` only. Deferred in v0.0.3 (`plans/v0.0.3/9-text-and-fonts.md`, row 3.6).
 
 ### 10.2 PDF jobs and variants
 
@@ -49,6 +49,7 @@ Ghostscript 9.55.0 exposes hundreds of printer devices, plus PCL and XPS in sist
 - [x] Full `gs` argv grammar. Landed in v0.0.3 (`plans/v0.0.3/7-gs-argv.md`).
 - [x] PDF/A-4 creation, with the refusal policy. Landed in v0.0.3 (`plans/v0.0.3/8-pdfa4.md`). The claim is a profile preflight, not a certificate.
 - [x] PDF/UA-2 preservation and preflight. Landed in v0.0.3 (`plans/v0.0.3/10-pdfua2.md`). Tag generation stays out of the ledger.
+- [x] Text extraction in the style of `txtwrite`, `show`, and PDF `Tj`. Landed in v0.0.3 (`plans/v0.0.3/9-text-and-fonts.md`). Text pixels never byte-match Ghostscript; extraction compares text and geometry.
 
 ## Dependencies
 

@@ -1,7 +1,7 @@
 # v0.0.3 - Deferred work
 
 > **Parent:** `plans/v0.0.1/10-deferred.md` - deferred rows whose next gate has landed
-> **Status:** plan open. No phase is started.
+> **Status:** complete on 2026-09-25. Phases 1 to 10 landed; phase 9 row 3.6 (Type 1) went back to the deferred list, and phase 4 row 1.2 stays open with measured numbers.
 > **Estimated effort:** days for phases 1 to 6, weeks for phases 7 to 10.
 
 ---
