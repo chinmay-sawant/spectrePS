@@ -19,8 +19,12 @@ type CopySource interface {
 
 // CopyOptions holds complete replacement object bodies keyed by object number.
 // An override wins over the source body and is written as given.
+// PackObjects writes PDF 1.5: non-stream bodies go into a Flate /Type /ObjStm
+// and a /Type /XRef stream carries the rows and the trailer. The /ID digest
+// does not change, so it stays independent of packing.
 type CopyOptions struct {
-	Overrides map[int][]byte
+	Overrides   map[int][]byte
+	PackObjects bool
 }
 
 // The dead container objects of a source file. A classic copy writes neither,
@@ -59,6 +63,9 @@ func WriteCopy(ctx context.Context, src CopySource, opt CopyOptions) ([]byte, er
 	objects, err := collectCopy(src, opt)
 	if err != nil {
 		return nil, err
+	}
+	if opt.PackObjects {
+		return buildPackedCopyFile(src.RootNum(), objects)
 	}
 	return buildCopyFile(src.RootNum(), objects), nil
 }
