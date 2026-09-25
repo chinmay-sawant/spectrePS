@@ -4,7 +4,7 @@ Spectre PS is a Go library and CLI for the jobs Ghostscript is used for. It read
 
 The command is `spectreps`. The library import path is `github.com/chinmay-sawant/spectrePS/spectreps`, package name `spectreps`. The command calls that package through `internal/cli`, and an external importer calls the same functions.
 
-v0.0.1 is the first release: the PostScript subset, the path-only PDF, PPM and PNG raster, Flate rewrite, validate, and byte and pixel compare. The v0.0.2 work adds `bbox`, `inkcov`, JPEG raster, and bitmap PDF. `spectreps version` prints `0.0.1` until a tag bumps that constant.
+v0.0.1 is the first release: the PostScript subset, the path-only PDF, PPM and PNG raster, Flate rewrite, validate, and byte and pixel compare. v0.0.2 added `bbox`, `inkcov`, JPEG raster, and bitmap PDF. v0.0.3 adds TIFF raster, page ranges, gray and CMYK image PDF, and PDF compression levels 1 to 5. `spectreps version` prints `0.0.1` until a tag bumps that constant.
 
 ## Build
 
@@ -51,16 +51,16 @@ Page 1
 | Command | Job |
 | --- | --- |
 | `spectreps run` | Execute a PostScript program and paint its pages. |
-| `spectreps raster` | Write PPM, PNG, or JPEG from each page. |
-| `spectreps pdfimage` | Wrap each painted page in a new PDF as one 24-bit RGB image. |
+| `spectreps raster` | Write PPM, PNG, JPEG, or TIFF from the selected pages. |
+| `spectreps pdfimage` | Wrap each painted page in a new PDF as one RGB, gray, or CMYK image. |
 | `spectreps bbox` | Print the painted box in points. |
 | `spectreps inkcov` | Print the RGB mark coverage fractions. |
-| `spectreps rewrite` | Write a new PDF from a path-only PDF, with optional Flate. |
+| `spectreps rewrite` | Write a new PDF, with optional Flate and compression levels 1 to 5. |
 | `spectreps validate` | Stop on the first interpreter error. |
 | `spectreps compare bytes` | Compare two files byte by byte. |
 | `spectreps compare raster` | Rasterize two inputs and compare the pixels. |
 
-`rewrite` takes a PDF whose content uses the path subset. The image PDF from `pdfimage` carries `Do`, which Spectre does not interpret yet, so it is not a `rewrite` input.
+`rewrite -level 0` takes a PDF whose content uses the path subset. Levels 1 to 5 use the pass-through writer, so text, fonts, and images survive. The image PDF from `pdfimage` carries `Do`, which Spectre does not interpret yet, so it is not a `rewrite` input at level 0.
 
 ## Documentation
 
@@ -78,7 +78,7 @@ Page 1
 | [test.md](documentation/test.md) | The tests each job needs. |
 | [development.md](documentation/development.md) | Make targets and the phase checklist rule. |
 
-The work ledgers are [plans/v0.0.1/00-program.md](plans/v0.0.1/00-program.md) and [plans/v0.0.2/00-program.md](plans/v0.0.2/00-program.md). The v0.0.1 release note is [plans/v0.0.1/PR/release-v0.0.1.md](plans/v0.0.1/PR/release-v0.0.1.md), and deferred work is [plans/v0.0.1/10-deferred.md](plans/v0.0.1/10-deferred.md).
+The work ledgers are [plans/v0.0.1/00-program.md](plans/v0.0.1/00-program.md), [plans/v0.0.2/00-program.md](plans/v0.0.2/00-program.md), and [plans/v0.0.3/00-program.md](plans/v0.0.3/00-program.md). The v0.0.1 release note is [plans/v0.0.1/PR/release-v0.0.1.md](plans/v0.0.1/PR/release-v0.0.1.md), and deferred work is [plans/v0.0.1/10-deferred.md](plans/v0.0.1/10-deferred.md).
 
 ## License
 

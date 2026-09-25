@@ -1,7 +1,7 @@
 # v0.0.3 - Quick wins
 
 > **Parent:** `plans/v0.0.3/00-program.md` - future ledger
-> **Status:** proposed. No row is active. The deferred rows in `plans/v0.0.1/10-deferred.md` point here.
+> **Status:** implemented. All rows are checked. Lint and test passed on 2026-09-25.
 > **Estimated effort:** days per phase. Phase 4 is a document.
 
 ---

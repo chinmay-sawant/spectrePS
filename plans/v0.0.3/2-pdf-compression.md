@@ -1,7 +1,7 @@
 # v0.0.3 - PDF compression
 
 > **Parent:** `plans/v0.0.3/00-program.md` - future ledger
-> **Status:** proposed. No row is active. The deferred row in `plans/v0.0.1/10-deferred.md` points here.
+> **Status:** implemented. Levels 0 to 5 landed and all rows are checked. Lint and test passed on 2026-09-25.
 > **Estimated effort:** weeks. Depends on the object pass-through writer, then the image model.
 
 ---
