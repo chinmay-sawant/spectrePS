@@ -7,7 +7,7 @@ The released tag is v0.0.1. The v0.0.2 work adds the page summaries, JPEG raster
 ## Input
 
 - PostScript source over the subset in `documentation/language.md`. Tokens, three stacks, procedures, dictionaries, arrays, strings, control flow, math, matrix operators, and the path and paint operators all run.
-- PDF path content. Classic xref tables and xref streams open. Object streams supply objects a type 2 xref row names. Content streams decode through Flate, and the page content operators `m l c h re S s f f* n q Q w RG rg g G` paint through the same graphics engine as PostScript.
+- PDF path content. Classic xref tables and xref streams open. Object streams supply objects a type 2 xref row names. Content streams decode through Flate, and the page content operators `m l c h re S s f f* n q Q cm w RG rg g G` paint through the same graphics engine as PostScript. `cm` composes a six-number matrix into the CTM, path points transform through it before the device scale, and the stroke width scales by it. `q` and `Q` save and restore it.
 - A PostScript header such as `%!PS-Adobe-3.0` is optional. It scans as a comment.
 - An encrypted PDF returns `invalidaccess`. A PDF with an unknown stream filter returns `undefined`. A page that uses `Tj`, `TJ`, `'`, `"`, or `Do` fails with that operator name. The page is not a blank success.
 - The page count is the number of page leaves in the tree, not the trailer `/Count`.

@@ -62,7 +62,6 @@ func TestPaintUndefined(t *testing.T) {
 		{src: "[ (Hi) 20 ] TJ", opName: "TJ"},
 		{src: "<4869> Tj", opName: "Tj"},
 		{src: "<< /Im /X >> Do", opName: "Do"},
-		{src: "cm", opName: "cm"},
 	}
 	for _, tt := range cases {
 		t.Run(tt.opName, func(t *testing.T) {
@@ -137,6 +136,8 @@ func TestPaintStackUnderflow(t *testing.T) {
 		{src: "m", opName: "m"},
 		{src: "0 m", opName: "m"},
 		{src: "re", opName: "re"},
+		{src: "cm", opName: "cm"},
+		{src: "1 2 3 4 5 cm", opName: "cm"},
 		{src: "w", opName: "w"},
 		{src: "rg", opName: "rg"},
 		{src: "G", opName: "G"},
@@ -181,6 +182,50 @@ func TestPaintRestore(t *testing.T) {
 			t.Fatal(err)
 		}
 		wantPixel(t, shown(t, pixmap), 0, 15, 0, 0, 0)
+	})
+}
+
+func TestCTM(t *testing.T) {
+	t.Run("translate", func(t *testing.T) {
+		pixmap := graphics.NewPixmap(pageSide, pageSide)
+		err := Paint(t.Context(), []byte("1 0 0 1 3 4 cm 1 0 0 rg 0 0 5 5 re f"), pixmap, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		img := shown(t, pixmap)
+		wantPixel(t, img, 5, 13, whiteByte, 0, 0)
+		wantPixel(t, img, 10, 13, whiteByte, whiteByte, whiteByte)
+	})
+	t.Run("scale", func(t *testing.T) {
+		pixmap := graphics.NewPixmap(pageSide, pageSide)
+		err := Paint(t.Context(), []byte("2 0 0 2 0 0 cm 1 0 0 rg 0 0 5 5 re f"), pixmap, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		img := shown(t, pixmap)
+		wantPixel(t, img, 5, 15, whiteByte, 0, 0)
+		wantPixel(t, img, 15, 15, whiteByte, whiteByte, whiteByte)
+	})
+	t.Run("stroke width", func(t *testing.T) {
+		pixmap := graphics.NewPixmap(pageSide, pageSide)
+		err := Paint(t.Context(), []byte("4 0 0 4 0 0 cm 0 0 m 5 0 l S"), pixmap, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		img := shown(t, pixmap)
+		wantPixel(t, img, 5, 18, 0, 0, 0)
+		wantPixel(t, img, 5, 17, whiteByte, whiteByte, whiteByte)
+	})
+	t.Run("restore", func(t *testing.T) {
+		pixmap := graphics.NewPixmap(pageSide, pageSide)
+		err := Paint(t.Context(), []byte("q 1 0 0 1 10 0 cm Q 0 0 m 10 0 l S"), pixmap, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		img := shown(t, pixmap)
+		bottom := img.Height - 1
+		wantPixel(t, img, 5, bottom, 0, 0, 0)
+		wantPixel(t, img, 15, bottom, whiteByte, whiteByte, whiteByte)
 	})
 }
 

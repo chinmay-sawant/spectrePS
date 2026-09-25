@@ -91,6 +91,67 @@ func TestRewritePixels(t *testing.T) {
 	})
 }
 
+func TestCTM(t *testing.T) {
+	in := newInst(t)
+	opt := spectreps.RunOptions{PageWidthPt: 20, PageHeightPt: 20, ResolutionDPI: 72}
+	cases := []struct {
+		name    string
+		content string
+		black   [2]int
+		white   [2]int
+	}{
+		{
+			name:    "translate",
+			content: "1 0 0 1 10 0 cm 0 0 m 10 0 l S",
+			black:   [2]int{12, 0},
+			white:   [2]int{8, 0},
+		},
+		{
+			name:    "scale",
+			content: "2 0 0 2 0 0 cm 0 0 m 5 0 l S",
+			black:   [2]int{5, 0},
+			white:   [2]int{12, 0},
+		},
+		{
+			name:    "stroke-width",
+			content: "4 0 0 4 0 0 cm 0 0 m 5 0 l S",
+			black:   [2]int{5, 1},
+			white:   [2]int{5, 2},
+		},
+		{
+			name:    "restore",
+			content: "q 1 0 0 1 10 0 cm Q 0 0 m 10 0 l S",
+			black:   [2]int{5, 0},
+			white:   [2]int{15, 0},
+		},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, err := in.OpenPDF(t.Context(), onePagePDF(t, tt.content))
+			if err != nil {
+				t.Fatal(err)
+			}
+			img, err := in.RasterizePage(t.Context(), doc, 0, opt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !pixelBlack(img, tt.black[0], tt.black[1]) {
+				t.Fatalf("pixel %v is not black", tt.black)
+			}
+			if !ctmWhitePixel(img, tt.white[0], tt.white[1]) {
+				t.Fatalf("pixel %v is not white", tt.white)
+			}
+			assertRewritePixels(t, in, opt, tt.content, spectreps.DefaultRewriteOptions())
+		})
+	}
+}
+
+func ctmWhitePixel(img spectreps.PageImage, x, yFromBottom int) bool {
+	row := img.Height - 1 - yFromBottom
+	i := row*img.Stride + x*3
+	return img.Pixels[i] == 255 && img.Pixels[i+1] == 255 && img.Pixels[i+2] == 255
+}
+
 func TestRewriteStable(t *testing.T) {
 	in := newInst(t)
 	src := onePagePDF(t, "0 0 m 10 0 l S")
