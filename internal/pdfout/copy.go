@@ -21,11 +21,24 @@ type CopySource interface {
 // An override wins over the source body and is written as given.
 type CopyOptions struct {
 	Overrides map[int][]byte
+	// AppendObjects holds complete bodies written after the highest in-use
+	// source object number, in order. The body at index 0 is object
+	// ObjectCount()+1.
+	AppendObjects [][]byte
+	// CatalogOverride replaces the copied catalog body when it is non-nil and
+	// the source root number is in use. Every other object is copied unchanged.
+	CatalogOverride []byte
+	// PDFA selects the %PDF-2.0 header with a binary marker above byte 127.
+	// The trailer keeps /ID and writes no /Encrypt.
+	PDFA bool
 }
 
 // WriteCopy builds a classic PDF 1.4 file from every in-use source object.
 // An object uses the override when present, then the stored source bytes, then
 // pdf.SerializeValue. A free or missing number stays free.
+// AppendObjects are written after the source numbers, and CatalogOverride
+// replaces the root body when it is set.
+// The header is PDF 1.4, or PDF 2.0 with a binary marker when PDFA is set.
 // The trailer uses /Root from src and /ID as the SHA-256 of the written bodies.
 // Two calls on the same source return equal bytes, and the file carries no
 // /Info and no dates.
@@ -42,7 +55,19 @@ func WriteCopy(ctx context.Context, src CopySource, opt CopyOptions) ([]byte, er
 	if err != nil {
 		return nil, err
 	}
-	return buildCopyFile(src.RootNum(), objects), nil
+	objects = applyCopyExtras(src, opt, objects)
+	return buildCopyFile(src.RootNum(), objects, headerFor(opt.PDFA)), nil
+}
+
+// applyCopyExtras returns objects with the catalog override applied and the
+// appended bodies at the end. A root number that is not an in-use source
+// object leaves the copied catalog alone.
+func applyCopyExtras(src CopySource, opt CopyOptions, objects [][]byte) [][]byte {
+	root := src.RootNum()
+	if opt.CatalogOverride != nil && root > 0 && root < len(objects) {
+		objects[root] = opt.CatalogOverride
+	}
+	return append(objects, opt.AppendObjects...)
 }
 
 // collectCopy returns one body per object number. Index 0 is unused, and a nil
@@ -76,9 +101,9 @@ func copyBody(src CopySource, opt CopyOptions, num int) ([]byte, error) {
 	return pdf.SerializeValue(val), nil
 }
 
-func buildCopyFile(root int, objects [][]byte) []byte {
+func buildCopyFile(root int, objects [][]byte, header string) []byte {
 	var buf bytes.Buffer
-	buf.WriteString(headerLine)
+	buf.WriteString(header)
 	offsets := make([]int, len(objects))
 	written := make([][]byte, 0, len(objects))
 	for num := 1; num < len(objects); num++ {

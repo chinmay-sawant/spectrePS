@@ -26,19 +26,19 @@ PDF/A-4 base is the default claim, with 4f offered only when the input already c
 
 ### 2.1 Header and marker
 
-- [ ] Both writers emit `%PDF-2.0` with a binary marker above byte 127 when the PDF/A option is set, keeping the `/ID` and no `/Encrypt`. Proof: `go test -count=1 ./internal/pdfout -run TestPDFA4Header`.
+- [x] Both writers emit `%PDF-2.0` with a binary marker above byte 127 when the PDF/A option is set, keeping the `/ID` and no `/Encrypt`. Proof: `go test -count=1 ./internal/pdfout -run TestPDFA4Header`. 2026-09-25: pass.
 
 ### 2.2 XMP packet
 
-- [ ] A static UTF-8 XMP packet with `pdfaid:part=4`, `pdfaid:rev=2020`, and the `F` letter for 4f, with no dates. Proof: `go test -count=1 ./internal/pdfa -run TestXMPPacket`.
+- [x] A static UTF-8 XMP packet with `pdfaid:part=4`, `pdfaid:rev=2020`, and the `F` letter for 4f, with no dates. Proof: `go test -count=1 ./internal/pdfa -run TestXMPPacket`. 2026-09-25: pass.
 
 ### 2.3 Output intent and ICC
 
-- [ ] `internal/pdfa` generates a minimal D50 sRGB matrix-shaper ICC profile and writes one `/S /GTS_PDFA1` output intent with `DestOutputProfile`, no `DestOutputProfileRef`. Proof: `go test -count=1 ./internal/pdfa -run 'TestICCProfile|TestOutputIntent'`.
+- [x] `internal/pdfa` generates a minimal D50 sRGB matrix-shaper ICC profile and writes one `/S /GTS_PDFA1` output intent with `DestOutputProfile`, no `DestOutputProfileRef`. Proof: `go test -count=1 ./internal/pdfa -run 'TestICCProfile|TestOutputIntent'`. 2026-09-25: pass. The generated profile also opens in lcms through Pillow with the right color space and description.
 
 ### 2.4 Append objects
 
-- [ ] `CopyOptions` gains extra object bodies and a catalog override, so `/Metadata` and `/OutputIntents` attach to the copied catalog without changing existing entries. Proof: `go test -count=1 ./internal/pdfout -run TestCopyAppend`.
+- [x] `CopyOptions` gains extra object bodies and a catalog override, so `/Metadata` and `/OutputIntents` attach to the copied catalog without changing existing entries. Proof: `go test -count=1 ./internal/pdfout -run TestCopyAppend`. 2026-09-25: pass.
 
 ## Phase 3: Preflight
 
