@@ -75,9 +75,7 @@ Interface changes:
 
 ### 5.1 Machine checks
 
-- [ ] Checks cover `/Marked true`, `/StructTreeRoot`, one `Document` in the pdf2 namespace, `/Lang` syntax, `DisplayDocTitle`, `pdfuaid` values, `dc:title`, role-map resolution, and MCID coverage. Proof: `go test -count=1 ./internal/pdfa -run TestUA2Preflight`, with one conforming and one failing fixture per check.
-
-  Waits on phase 8: the checks live in `internal/pdfa` beside the metadata writer, which is concurrent work in another worktree. The structure model they read is on this branch.
+- [x] Checks cover `/Marked true`, `/StructTreeRoot`, one `Document` in the pdf2 namespace, `/Lang` syntax, `DisplayDocTitle`, `pdfuaid` values, `dc:title`, role-map resolution, and MCID coverage. `PreflightUA2` returns `Error: /ua2-<rule> in PDFUA`: `ua2-marked`, `ua2-structtree`, `ua2-document`, `ua2-lang`, `ua2-displaydoctitle`, `ua2-pdfuaid`, `ua2-title`, `ua2-rolemap`, and `ua2-mcid`. The PDF/A preflight and the UA-2 preflight are separate requests and do not fight: the test proves an LZW stream and a non-embedded font pass the UA-2 request while the PDF/A request refuses them. Proof: `go test -count=1 ./internal/pdfa -run TestUA2Preflight` exited 0 on 2026-09-25, with one conforming fixture and one failing fixture per rule.
 
 ### 5.2 veraPDF outcomes
 
