@@ -38,6 +38,7 @@ const (
 	bitsImage = 8
 
 	filterFlate     = "FlateDecode"
+	filterLZW       = "LZWDecode"
 	filterDCT       = "DCTDecode"
 	filterCCITT     = "CCITTFaxDecode"
 	subtypeImage    = "Image"
@@ -162,8 +163,8 @@ func flateOverride(val pdf.Value, stored []byte) []byte {
 	return pdf.SerializeValue(pdf.StreamVal(dict, stored))
 }
 
-// flateImages re-encodes Flate and CCITT image streams and Flates raw image
-// streams without resampling.
+// flateImages re-encodes Flate, LZW, and CCITT image streams and Flates raw
+// image streams without resampling.
 func flateImages(file *pdf.File, overrides map[int][]byte) error {
 	nums, err := file.ImageObjectNums()
 	if err != nil {
@@ -192,7 +193,7 @@ func flateImageObject(file *pdf.File, num int, overrides map[int][]byte) error {
 	if !hasFilter {
 		return flateRawImage(val, num, overrides)
 	}
-	if filter != filterFlate && filter != filterCCITT {
+	if filter != filterFlate && filter != filterCCITT && filter != filterLZW {
 		return nil
 	}
 	return reflateImage(file, val, num, overrides)
@@ -209,10 +210,10 @@ func flateRawImage(val pdf.Value, num int, overrides map[int][]byte) error {
 	return nil
 }
 
-// reflateImage decodes a Flate or CCITT image and writes it back as lossless
-// Flate RGB.
+// reflateImage decodes a Flate, LZW, or CCITT image and writes it back as
+// lossless Flate RGB.
 func reflateImage(file *pdf.File, val pdf.Value, num int, overrides map[int][]byte) error {
-	pic, err := file.DecodeImage(num)
+	pic, err := decodeLevelImage(file, val, num)
 	if err != nil {
 		// An image Spectre cannot decode is copied unchanged.
 		return nil //nolint:nilerr // pass-through is the documented policy
@@ -269,7 +270,7 @@ func writeDCTImage(
 	policy levelImage,
 	overrides map[int][]byte,
 ) error {
-	pic, err := file.DecodeImage(num)
+	pic, err := decodeLevelImage(file, val, num)
 	if err != nil {
 		// An image Spectre cannot decode is copied unchanged.
 		return nil //nolint:nilerr // pass-through is the documented policy
@@ -339,6 +340,16 @@ func imageFilter(val pdf.Value) (string, bool) {
 func imageSubtype(val pdf.Value) bool {
 	name, ok := val.NameEntry(keySubtype)
 	return ok && name == subtypeImage
+}
+
+// decodeLevelImage decodes one image for the level writer. The reader has no
+// LZW image branch, so an LZW stream goes through pdf.DecodeLZWImageValue.
+// Every other stream takes the regular file.DecodeImage path.
+func decodeLevelImage(file *pdf.File, val pdf.Value, num int) (image.Image, error) {
+	if filter, ok := imageFilter(val); ok && filter == filterLZW {
+		return pdf.DecodeLZWImageValue(val)
+	}
+	return file.DecodeImage(num)
 }
 
 // streamDict copies a stream dictionary so an override can edit its entries.

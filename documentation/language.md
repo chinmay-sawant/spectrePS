@@ -125,4 +125,4 @@ A default letter page at 72 dpi is 612 by 792 pixels. A letter page at 300 dpi i
 
 ## Out of this tag
 
-Images, `clip`, `save`, `restore`, `bind`, filters, and file I/O. `bind` is omitted on purpose, so a name inside a procedure sees the definition from execution time. A test must redefine a name after building a procedure and observe the new value.
+Images, `clip`, `save`, `restore`, `bind`, PostScript filters, and file I/O. PDF stream filters are a different syntax and are in `documentation/devices.md`. `bind` is omitted on purpose, so a name inside a procedure sees the definition from execution time. A test must redefine a name after building a procedure and observe the new value.

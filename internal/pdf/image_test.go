@@ -151,7 +151,7 @@ func TestImageXObjectUnsupported(t *testing.T) {
 			name: "predictor",
 			dict: "/Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB " +
 				"/BitsPerComponent 8 /Filter /FlateDecode " +
-				"/DecodeParms << /Predictor 12 >>",
+				"/DecodeParms << /Predictor 3 >>",
 			raw: flateRaw(t, rgbPixels()),
 			op:  opPredictor,
 		},

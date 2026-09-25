@@ -76,6 +76,25 @@ type Ink struct {
     B float64
 }
 
+type PDFPageSize struct {
+    Width  float64
+    Height float64
+}
+
+type PDFFontInfo struct {
+    Name     string
+    Embedded bool
+}
+
+type PDFInfo struct {
+    Version   string
+    Pages     int
+    PageSizes []PDFPageSize
+    Tagged    bool
+    Fonts     []PDFFontInfo
+    Images    int
+}
+
 var ErrNotImplemented = errors.New("spectreps: not implemented")
 
 type JobError struct {
@@ -102,6 +121,7 @@ func (in *Instance) RunPostScript(ctx context.Context, src []byte, opt RunOption
 func (in *Instance) OpenPDF(ctx context.Context, src []byte) (*Document, error)
 func (doc *Document) PageCount() int // page leaves, 0 when doc is nil
 func (doc *Document) Tagged() bool   // structure tree or /MarkInfo /Marked true, false when doc is nil
+func (doc *Document) Info() (PDFInfo, error)
 func (in *Instance) RasterizePage(ctx context.Context, doc *Document, pageIndex int, opt RunOptions) (PageImage, error)
 func (in *Instance) ExtractText(ctx context.Context, doc *Document, pageIndex int) (string, error)
 func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOptions) ([]byte, error)
@@ -163,6 +183,8 @@ A cancelled `ctx` returns `ctx.Err()` and no partial success. `nil` context is a
 `ImagePDF` writes a new PDF with one 24-bit RGB Flate image per `PageImage`. `dpi` is the resolution the pages were painted at, and zero or less selects 72. The content stream paints `/Im0 Do` and the page resources carry the XObject, so `RasterizePage` of the reopened file matches the source `PageImage` under `CompareRaster`. The output is not `pdfwrite`.
 
 `ImagePDF` calls `ImagePDFColor` with `ImageColorRGB`, so its bytes do not change. `ImageColorGray` writes one 8-bit sample per pixel with `/DeviceGray`. `ImageColorCMYK` writes four 8-bit samples per pixel with `/DeviceCMYK`. Both use `/Filter /FlateDecode`. The conversion formulas and the pure red example are in `documentation/devices.md`.
+
+`Document.Info` reads the document summary behind `spectreps info`. It resolves objects and writes nothing. `Version` is the `%PDF-` header version, `Pages` is the page tree leaf count, and `PageSizes` holds one resolved `/MediaBox` per page in points, inherited from the nearest `/Pages` ancestor and defaulting to 612 by 792. `Tagged` is the same flag as `Document.Tagged`. `Fonts` lists every in-use `/Type /Font` dictionary except CIDFont descendants, sorted by name, and `Embedded` is true when the descriptor carries `/FontFile`, `/FontFile2`, or `/FontFile3`, when the font is Type 3, or when every descendant of a Type0 font carries a program. `Images` counts the in-use image XObjects. A nil document returns a `JobError` with `Op` `Info` and `Msg` `rangecheck`; a malformed `/MediaBox` returns `Error: /syntaxerror in Info`. The command's lines are in `documentation/cli.md`.
 
 `DefaultRewriteOptions` turns stream compression on at level 0. The zero `RewriteOptions` leaves it off, so a test can ask for uncompressed streams on purpose. The CLI uses `DefaultRewriteOptions` when no flag is given.
 

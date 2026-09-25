@@ -71,18 +71,38 @@ $ gs -q -dNOPAUSE -dBATCH -sDEVICE=ink_cov -g20x20 -r72 -o- half-cyan.ps
 
 The first file fills a quarter page with 100 percent cyan. The second fills a whole page with a 50 percent cyan tint, which the CMYK8 device stores as byte 127, so the printed value is `127/255 * 100`. A full black page prints `100.00000` on K. Spectre follows the source: it scales the amount by 100 and keeps the same five decimals. The suffix is `RGB`, not `CMYK OK`, because the Spectre pixmap is RGB.
 
+## Stream filters
+
+`internal/pdf/filter.go` decodes one stage, and `LZWDecode` sits in `internal/pdf/lzw.go`. One decoded stream is capped at 32 MiB.
+
+| Filter | Behavior |
+| --- | --- |
+| `FlateDecode` | zlib, the wrapper around `compress/flate`. Predictors 2 and 10 through 15 apply. |
+| `LZWDecode` | 9 to 12 bit MSB-first codes, the clear and EOD markers, the KwKwK case, and `/EarlyChange` 0 or 1. Predictors apply. |
+| `ASCIIHexDecode` | Pairs of hex digits, whitespace ignored, and a greater-than sign ends the data. An odd final digit pads with 0. |
+| `ASCII85Decode` | `z` is four zero bytes and `~>` ends the data. A leading `<~` is accepted, and the final partial group writes n-1 bytes for n characters. |
+| `RunLengthDecode` | A length of 0 through 127 copies the next length+1 bytes, 129 through 255 repeats the next byte 257-length times, and 128 ends the data. |
+
+An empty filter name returns the bytes unchanged. A `/Filter` array decodes each stage in order, and each stage takes its own `/DecodeParms` entry. An unknown filter name returns `undefined` with that name, malformed data returns `syntaxerror` with the filter name, and a decoded stream past 32 MiB returns `limitcheck` with the filter name.
+
+The reader does not decode `JBIG2Decode`, so `Decode` returns `undefined in JBIG2Decode`. The PDF/A preflight accepts the name because it is in the ISO 32000-2 filter table. That disagreement is deliberate: the preflight checks names, and the reader has no JBIG2 decoder. The PDF/A preflight still refuses a chain that names `LZWDecode`, because PDF/A disallows the filter even though the reader can decode it.
+
+Predictors apply to xref streams, object streams, content streams, and image streams, because all four go through the same decoder. Predictor 2 is the TIFF horizontal differencing predictor, and its samples follow `/Colors`, `/BitsPerComponent`, and `/Columns`. Predictors 10 through 15 are the PNG predictors. Every PNG-predicted row begins with an algorithm tag byte that selects that row's algorithm, so `/Predictor 12` and `/Predictor 15` read the same per-row tags and may mix algorithms (ISO 32000-1 7.4.4.4). A `/Predictor` value other than 1, 2, and 10 through 15 returns `undefined` with the `Predictor` op name.
+
 ## Image XObjects
 
 The reader walks the xref for in-use objects whose dictionary has `/Subtype /Image`. `ImageObjectNums` returns their object numbers in ascending order. `DecodeImage` returns an `image.Image` or an error. It never returns a blank image for a failed decode.
 
 Four stream forms decode:
 
-- `/FlateDecode` with `/DeviceRGB` or `/DeviceGray` at 8 bits per component, through the same zlib path as content streams. A predictor above 1 is rejected.
+- `/FlateDecode` with `/DeviceRGB` or `/DeviceGray` at 8 bits per component, through the same zlib path as content streams. The `/DecodeParms` predictor applies.
 - `/DCTDecode` through `image/jpeg`.
 - `/CCITTFaxDecode` with `/DeviceGray` at 1 bit per component, through `golang.org/x/image/ccitt`. `/K < 0` is Group 4, `/K == 0` with `/EndOfLine true` is Group 3, and `/K > 0` is undefined. `/Columns` and `/Rows` default to `/Width` and `/Height`, `/BlackIs1` inverts the samples, and `/EncodedByteAlign` byte-aligns the codes. `Columns * Rows` above the 32 MiB decoded cap returns `limitcheck` before allocation.
 - `/JPXDecode` through `github.com/mrjoshuak/go-jpeg2000`, a pure-Go decoder. `/ColorSpace` and `/BitsPerComponent` are optional and ignored for JPX: the codestream carries the color and the precision, so the branch runs before the shared parameter check. A header that declares more decoded sample bytes than the 32 MiB Flate cap returns `limitcheck` before the decoder allocates.
 
 Any other filter, color space, or bit depth returns `undefined`, as does a Flate stream whose byte count does not match width by height by components. JPEG is lossy, so decoded pixels are not a byte oracle for the source; a JPEG2000 stream may be lossless or lossy. A failed decode returns `syntaxerror` or `limitcheck`, never a blank image.
+
+An LZW image decodes through `DecodeLZWImageValue` for the level 2 writer. `DecodeImage` itself still returns `undefined in LZWDecode`, because its table is the four forms above.
 
 ## Painting images
 
@@ -112,12 +132,12 @@ The level table:
 | --- | --- | --- | --- |
 | 0 | Path subset | re-emitted, Flate when `CompressStreams` is true | unchanged; a painted image is `undefined in Do` |
 | 1 | Light | Flate every uncompressed stream | unchanged |
-| 2 | Balanced | Flate | Flate, raw, and CCITT image streams re-encoded losslessly, no resample |
+| 2 | Balanced | Flate | Flate, raw, LZW, and CCITT image streams re-encoded losslessly, no resample |
 | 3 | Medium | Flate | re-encoded as DCT, longest side capped at 1754 px, quality 80 |
 | 4 | Strong | Flate | re-encoded as DCT, longest side capped at 1123 px, quality 60 |
 | 5 | Hard | Flate | re-encoded as DCT, longest side capped at 842 px, quality 40 |
 
-An image at or below its cap keeps its size. An image Spectre cannot decode, and an image with an `/SMask`, is copied unchanged. Level 2 re-encodes Flate, raw, and CCITT streams, so DCT and JPEG2000 streams copy through. Levels 3 through 5 decode DCT, CCITT, and JPEG2000 streams and re-encode them as DCT with the same caps and qualities. A level above 0 ignores `CompressStreams`. Every page reaches the output with the same page count and boxes, because the writer copies the page tree.
+An image at or below its cap keeps its size. An image Spectre cannot decode, and an image with an `/SMask`, is copied unchanged. Level 2 re-encodes Flate, raw, LZW, and CCITT streams, so DCT and JPEG2000 streams copy through. Levels 3 through 5 decode DCT, CCITT, JPEG2000, and LZW streams and re-encode them as DCT with the same caps and qualities. A level above 0 ignores `CompressStreams`. Every page reaches the output with the same page count and boxes, because the writer copies the page tree.
 
 The image helpers are three functions in `internal/pdfout`. `ScaleImage` takes any `image.Image` and returns RGBA resampled with the CatmullRom kernel from `golang.org/x/image/draw`; width and height below 1 clamp to 1. `EncodeDCT` wraps `image/jpeg` with the quality clamped to 1 through 100, and `EncodeFlateRGB` writes tightly packed RGB rows, top row first, inside zlib. All three are deterministic, so the same input returns the same bytes. Levels 3 through 5 call `ScaleImage` and `EncodeDCT`, and level 2 calls `EncodeFlateRGB`.
 
@@ -246,7 +266,7 @@ Phase 06 reads:
 
 - A header starting with `%PDF-`.
 - Classic xref tables, then xref streams in a following row of the same phase.
-- Flate-decoded content streams via `compress/flate`.
+- Content streams through the stream filters in this file: Flate, LZW, ASCII85, ASCIIHex, and RunLength, with predictors 2 and 10 through 15.
 - Page content operators `m l c h re S s f f* n q Q cm w RG rg g G Do BT ET Tf Td TD Tm T* Tc Tw Tz TL Ts Tj TJ ' "`.
 
 Those operators map to the same path and color operations as `moveto` `lineto` `curveto` `closepath` `stroke` `fill` `eofill` `gsave` `grestore` `concat` `setlinewidth` `setrgbcolor` `setgray`.

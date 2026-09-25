@@ -10,7 +10,7 @@ func TestPDFReject(t *testing.T) {
 	rejectTj(t)
 	rejectDo(t)
 	rejectEncrypt(t)
-	rejectLZW(t)
+	badLZW(t)
 }
 
 func rejectTj(t *testing.T) {
@@ -36,14 +36,16 @@ func rejectEncrypt(t *testing.T) {
 	wantJob(t, err, opEncrypt, errAccess)
 }
 
-func rejectLZW(t *testing.T) {
+// badLZW proves a malformed LZW stream fails as a decode error with the
+// filter name, not as an unknown filter.
+func badLZW(t *testing.T) {
 	t.Helper()
 	src := filteredPage(t, "/Filter /LZWDecode", []byte("hi"))
 	file, err := Open(t.Context(), src)
 	if err == nil {
 		_, err = file.Content(0)
 	}
-	wantJob(t, err, "LZWDecode", "undefined")
+	wantJob(t, err, opLZW, errSyntax)
 }
 
 func textPage(t *testing.T, marks string) []byte {
