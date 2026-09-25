@@ -42,6 +42,8 @@ The output is not a copy of the input xref, and it is not expected to match `pdf
 
 This tag compresses content streams. It does not downsample images, and it does not DCT-encode them. Those are image-model features and they are deferred.
 
+The image side of the compression levels is three helpers in `internal/pdfout`. `ScaleImage` takes any `image.Image` and returns RGBA resampled with the CatmullRom kernel from `golang.org/x/image/draw`; width and height below 1 clamp to 1. `EncodeDCT` wraps `image/jpeg` with the quality clamped to 1 through 100, and `EncodeFlateRGB` writes tightly packed RGB rows, top row first, inside zlib. All three are deterministic, so the same input returns the same bytes. `spectreps rewrite` does not call them until the level wiring lands.
+
 ## Bitmap PDF
 
 `ImagePDF` wraps each `PageImage` in one PDF page. The image is 24-bit RGB, 8 bits per component, `/ColorSpace /DeviceRGB`, `/Filter /FlateDecode`. The stored stream is the tightly packed RGB rows, so stride padding is dropped. `/MediaBox` is `[0 0 width*72/dpi height*72/dpi]` points, and a `dpi` of zero or less selects 72.
