@@ -37,19 +37,19 @@ Interface changes:
 
 ### 2.1 Parse the tree
 
-- [ ] `internal/pdf` parses `/MarkInfo`, `/StructTreeRoot`, `/K`, `/S`, `/P`, `/Pg`, `/MCID`, `/Alt`, `/ActualText`, `/Lang`, `/Namespaces`, `/RoleMap`, `/RoleMapNS`, and `/ParentTree` into typed values with cycle and depth caps. Proof: `go test -count=1 ./internal/pdf -run TestStructTreeParse`.
+- [x] `internal/pdf` parses `/MarkInfo`, `/StructTreeRoot`, `/K`, `/S`, `/P`, `/Pg`, `/MCID`, `/Alt`, `/ActualText`, `/Lang`, `/Namespaces`, `/RoleMap`, `/RoleMapNS`, and `/ParentTree` into typed values with cycle and depth caps. The model is `internal/pdf/structtree.go`; `/StructTreeRoot` without `/ParentTree` leaves the lookup empty, and a cycle or a depth past 64 is `limitcheck`. Proof: `go test -count=1 ./internal/pdf -run TestStructTreeParse` exited 0 on 2026-09-25.
 
 ### 2.2 Parent tree
 
-- [ ] MCID-to-StructElem lookup works both ways through `/ParentTree`, and a missing parent is a `JobError`. Proof: `go test -count=1 ./internal/pdf -run TestParentTree`.
+- [x] MCID-to-StructElem lookup works both ways through `/ParentTree`, and a missing parent is a `JobError`. `Lookup` reads `(page, MCID)` and `Key` reads the element; a `/ParentTree` entry keyed by the page object number or by the page `/StructParents` value both resolve. A `/K` claim with no agreeing entry is `undefined in ParentTree`. Proof: `go test -count=1 ./internal/pdf -run TestParentTree` exited 0 on 2026-09-25.
 
 ### 2.3 Role map
 
-- [ ] A custom type resolves to a standard type through `/RoleMap` and `/RoleMapNS`; same-namespace mappings, cycles, and unmapped custom types are errors. Proof: `go test -count=1 ./internal/pdf -run TestRoleMap`.
+- [x] A custom type resolves to a standard type through `/RoleMap` and `/RoleMapNS`; same-namespace mappings, cycles, and unmapped custom types are errors. A chain resolves hop by hop, a target in the source namespace or an identity default mapping is `syntaxerror in RoleMap`, a revisited pair or a chain past 32 is `limitcheck in RoleMap`, and a type with no mapping is `undefined in RoleMap`. Proof: `go test -count=1 ./internal/pdf -run TestRoleMap` exited 0 on 2026-09-25.
 
 ### 2.4 Font check
 
-- [ ] The font check is dictionary-level only: `/ToUnicode`, a standard encoding for simple fonts, or `/ActualText` covering the run. No glyph decoding. Proof: `go test -count=1 ./internal/pdf -run TestTaggedFontCheck`.
+- [x] The font check is dictionary-level only: `/ToUnicode`, a standard encoding for simple fonts, or `/ActualText` covering the run. No glyph decoding. `TaggedFontOK` reads the font dictionary, and `TaggedTextOK` walks `/ActualText` on the element and its ancestors. Proof: `go test -count=1 ./internal/pdf -run TestTaggedFontCheck` exited 0 on 2026-09-25.
 
 ## Phase 3: Pass-through and refusal
 
