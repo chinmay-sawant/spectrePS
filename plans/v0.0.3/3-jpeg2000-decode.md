@@ -26,11 +26,11 @@ For JPX, `/ColorSpace` is optional and ignored; the codestream carries the color
 
 ### 2.1 JPX branch
 
-- [ ] `DecodeImage` branches on `/JPXDecode` before the `/BitsPerComponent` and `/ColorSpace` checks, decodes through `jpeg2000.Decode`, and returns the decoded `image.Image`. A decode failure returns `syntaxerror`, never a blank image. The 32 MiB cap still applies. Proof: `go test -count=1 ./internal/pdf -run TestImageXObjectJPX`.
+- [x] `DecodeImage` branches on `/JPXDecode` before the `/BitsPerComponent` and `/ColorSpace` checks, decodes through `jpeg2000.Decode`, and returns the decoded `image.Image`. A decode failure returns `syntaxerror`, never a blank image. The 32 MiB cap still applies. Proof: `go test -count=1 ./internal/pdf -run TestImageXObjectJPX` exited 0 on 2026-09-25. The RGB codestream, gray container, bare dictionary, filter array, malformed, and size-limit subtests all passed.
 
 ### 2.2 Fixtures and reject matrix
 
-- [ ] One `.j2k` and one `.jp2` fixture made with `opj_compress` are checked in with the command and SHA-256 recorded. Cases: RGB, gray, no `/ColorSpace`, `/Filter [/JPXDecode]`, malformed, and an unsupported profile that copies through. Proof: the same test run.
+- [x] One `.j2k` and one `.jp2` fixture are checked in under `internal/pdf/testdata/` with the generation command and SHA-256 recorded in `testdata/README.md`. `opj_compress` is not installed, so Pillow 12.3.0 with OpenJPEG 2.5.4 wrote both. Cases: RGB, gray, no `/ColorSpace`, `/Filter [/JPXDecode]`, malformed, and an undecodable stream that copies through. Proof: the same `TestImageXObjectJPX` run exited 0 on 2026-09-25 for the decode cases, and `go test -count=1 ./internal/pdfout -run TestLevelJPXImage` exited 0 on 2026-09-25 for the copy-through case.
 
 ## Phase 3: Rewrite, docs, and closure
 
