@@ -60,7 +60,7 @@ The `gs` argv item is a written switch map, not code.
 
 ### 4.1 Written proposal
 
-- [ ] A proposal maps the `gs` switches the current subcommands can already express (`-sDEVICE`, `-sOutputFile`, `-r`, `-g`, `-dFirstPage`, `-dLastPage`, `-dBATCH`, `-dNOPAUSE`, `-q`) onto commands and flags, and names the switches that stay rejected. `documentation/cli.md` links it. Proof: the proposal file exists and the link resolves. This phase is document-only, so it skips lint and test.
+- [x] `documentation/gs-argv-mapping.md` maps the `gs` switches the current subcommands can already express (`-sDEVICE`, `-sOutputFile`, `-r`, `-g`, `-dFirstPage`, `-dLastPage`, `-dBATCH`, `-dNOPAUSE`, `-q`) onto commands and flags, and names the switches that stay rejected. `documentation/cli.md` links it. This phase is document-only, so it skips lint and test. Proof (2026-09-25): `test -f documentation/gs-argv-mapping.md` exits 0, and `grep -n 'gs-argv-mapping.md' documentation/cli.md` prints line 5 with the linked sentence.
 
 ## Phase 5: Closure
 
