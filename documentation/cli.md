@@ -57,7 +57,10 @@ Any other `-colorspace` value exits 2. `rgb` keeps the 24-bit RGB bytes from ear
 | Flag | Meaning | Default |
 | --- | --- | --- |
 | `-o` | Output PDF path | required |
-| `-compress` | Flate content streams | true |
+| `-compress` | Flate content streams at level 0 | true |
+| `-level` | Compression level, 0 through 5 | 0 |
+
+`-level 0` re-emits the path subset and keeps `-compress` as the Flate switch. `-level 1` through `-level 5` use the pass-through writer, so text, fonts, and content Spectre cannot interpret are copied. A level above 0 Flates content streams and ignores `-compress`. The image policy per level is in `documentation/devices.md`. Any other value exits 2.
 
 `validate` takes one input and writes errors to stderr. It has no output file.
 
@@ -91,7 +94,7 @@ Page 1
 
 The three fractions are RGB occupancy with five digits after the point. They are not CMYK, and the line does not end in `CMYK OK`.
 
-`rewrite` writes one PDF.
+`rewrite` writes one PDF. The compression levels are in `documentation/devices.md`.
 
 `pdfimage` writes one PDF with one image page per input page. `-colorspace` selects 24-bit RGB, 8-bit DeviceGray, or 32-bit DeviceCMYK image streams, and `rgb` is the default. The input is a PostScript file or a PDF. A PDF input paints every page with `RasterizePage`, and any other input uses `RunPostScript`. The `-o` path is required and does not use `%d`. `-r 0` writes 72 dpi.
 

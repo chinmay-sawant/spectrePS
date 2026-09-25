@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"testing"
 
 	"github.com/chinmay-sawant/spectrePS/spectreps"
@@ -50,7 +52,7 @@ func TestRasterizePage(t *testing.T) {
 	for _, pageIndex := range []int{-1, 1} {
 		img, pageErr := in.RasterizePage(t.Context(), doc, pageIndex, opt)
 		var job spectreps.JobError
-		if !errors.As(pageErr, &job) || job.Msg != "rangecheck" {
+		if !errors.As(pageErr, &job) || job.Msg != rangecheckMsg {
 			t.Fatalf("page %d error = %v", pageIndex, pageErr)
 		}
 		requireZeroPageImage(t, img)
@@ -186,6 +188,93 @@ func TestRewriteStable(t *testing.T) {
 	if out != nil {
 		t.Fatalf("RewritePDF() bytes = %#v, want nil", out)
 	}
+}
+
+// rangecheckMsg is the JobError message for an out-of-range index.
+const rangecheckMsg = "rangecheck"
+
+func TestRewriteLevelsStable(t *testing.T) {
+	in := newInst(t)
+	src := textImagePDF(t)
+	doc, err := in.OpenPDF(t.Context(), src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for level := 1; level <= 5; level++ {
+		checkLevelStable(t, in, doc, level)
+	}
+	t.Run("out of range", func(t *testing.T) {
+		out, err := in.RewritePDF(t.Context(), doc, spectreps.RewriteOptions{Level: 6})
+		var job spectreps.JobError
+		if !errors.As(err, &job) || job.Msg != rangecheckMsg || job.Op != "RewritePDF" {
+			t.Fatalf("RewritePDF() error = %v, want %s in RewritePDF", err, rangecheckMsg)
+		}
+		if out != nil {
+			t.Fatalf("RewritePDF() bytes = %#v, want nil", out)
+		}
+	})
+}
+
+func checkLevelStable(t *testing.T, in *spectreps.Instance, doc *spectreps.Document, level int) {
+	t.Helper()
+	opt := spectreps.RewriteOptions{Level: level}
+	out := rewritePair(t, in, doc, opt)
+	if !bytes.HasPrefix(out, []byte("%PDF-")) {
+		t.Fatalf("level %d: missing %%PDF- prefix", level)
+	}
+	if bytes.Contains(out, []byte("CreationDate")) || bytes.Contains(out, []byte("ModDate")) {
+		t.Fatalf("level %d contains a date", level)
+	}
+	opened, err := in.OpenPDF(t.Context(), out)
+	if err != nil {
+		t.Fatalf("level %d: %v", level, err)
+	}
+	if opened.PageCount() != 1 {
+		t.Fatalf("level %d: PageCount = %d, want 1", level, opened.PageCount())
+	}
+}
+
+// textImagePDF is one page with a text stream and a DCT image XObject.
+func textImagePDF(t *testing.T) []byte {
+	t.Helper()
+	content := "BT /F1 12 Tf 5 5 Td (Hi) Tj ET\nq 20 0 0 20 0 0 cm /Im0 Do Q"
+	objects := [][]byte{
+		[]byte("<< /Type /Catalog /Pages 2 0 R >>"),
+		[]byte("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+		[]byte("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 20 20] /Contents 4 0 R " +
+			"/Resources << /Font << /F1 6 0 R >> /XObject << /Im0 5 0 R >> >> >>"),
+		plainStream(t, content),
+		dctImageObject(t, 32, 24),
+		[]byte("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
+	}
+	return classicXref(t, objects)
+}
+
+func dctImageObject(t *testing.T, width, height int) []byte {
+	t.Helper()
+	pic := image.NewRGBA(image.Rect(0, 0, width, height))
+	for y := range height {
+		for x := range width {
+			at := pic.PixOffset(x, y)
+			pic.Pix[at] = byte(x * 7)
+			pic.Pix[at+1] = byte(y * 11)
+			pic.Pix[at+2] = byte((x + y) * 3)
+			pic.Pix[at+3] = 255
+		}
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, pic, &jpeg.Options{Quality: 85}); err != nil {
+		t.Fatal(err)
+	}
+	head := fmt.Sprintf("<< /Type /XObject /Subtype /Image /Width %d /Height %d "+
+		"/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length %d >>\nstream\n",
+		width, height, buf.Len())
+	return append(append([]byte(head), buf.Bytes()...), []byte("\nendstream")...)
+}
+
+func plainStream(t *testing.T, content string) []byte {
+	t.Helper()
+	return []byte(fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content))
 }
 
 func assertRewritePixels(

@@ -14,7 +14,7 @@ func TestObjectAccess(t *testing.T) {
 
 func checkClassicAccess(t *testing.T) {
 	t.Helper()
-	file := mustOpen(t, classicLine(t, lineMarks))
+	file := mustOpen(t, classicLine(t))
 	if file.ObjectCount() != idContent {
 		t.Fatalf("ObjectCount = %d, want %d", file.ObjectCount(), idContent)
 	}

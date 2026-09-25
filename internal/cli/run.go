@@ -32,6 +32,7 @@ const (
 	jpegDefaultQuality = 75
 	jpegMinQuality     = 1
 	jpegMaxQuality     = 100
+	maxRewriteLevel    = 5
 )
 
 // Run parses args and returns the process exit code.
@@ -75,7 +76,7 @@ spectreps raster [-w points] [-h points] [-r dpi] [-jpegq quality]
 spectreps pdfimage [-w points] [-h points] [-r dpi] [-colorspace rgb|gray|cmyk] [-pages range] -o path file
 spectreps bbox [-w points] [-h points] [-r dpi] [-pages range] file
 spectreps inkcov [-w points] [-h points] [-r dpi] [-pages range] file
-spectreps rewrite [-compress] -o path file.pdf
+spectreps rewrite [-compress] [-level N] -o path file.pdf
 spectreps validate file
 spectreps compare bytes fileA fileB
 spectreps compare raster [-w points] [-h points] [-r dpi] [-pages range] [-o path] fileA fileB
@@ -287,23 +288,30 @@ func writeInk(w io.Writer, page int, img spectreps.PageImage) {
 func cmdRewrite(args []string, stderr io.Writer) int {
 	set := newFlagSet("rewrite", stderr)
 	outPath := set.String("o", "", "output path")
-	compress := set.Bool("compress", true, "flate content streams")
+	compress := set.Bool("compress", true, "flate content streams at level 0")
+	level := set.Int("level", 0, "compression level, 0 through 5")
 	rest, code := parseSet(set, args)
 	if code != 0 {
 		return code
+	}
+	if *level < 0 || *level > maxRewriteLevel {
+		fmt.Fprintf(stderr, "spectreps: -level wants 0 through 5, got %d\n", *level)
+		return exitUsage
 	}
 	if len(rest) != 1 || *outPath == "" {
 		usage(stderr)
 		return exitUsage
 	}
-	return rewriteToFile(stderr, rest[0], *outPath, rewriteOptions(*compress))
+	return rewriteToFile(stderr, rest[0], *outPath, rewriteOptions(*level, *compress))
 }
 
-func rewriteOptions(compress bool) spectreps.RewriteOptions {
-	if compress {
-		return spectreps.DefaultRewriteOptions()
+// rewriteOptions maps the flags. An explicit level above 0 wins. Level 0 keeps
+// the -compress switch as the Flate option.
+func rewriteOptions(level int, compress bool) spectreps.RewriteOptions {
+	if level > 0 {
+		return spectreps.RewriteOptions{CompressStreams: true, Level: level}
 	}
-	return spectreps.RewriteOptions{CompressStreams: false}
+	return spectreps.RewriteOptions{CompressStreams: compress, Level: 0}
 }
 
 func rewriteToFile(stderr io.Writer, inPath, outPath string, opt spectreps.RewriteOptions) int {

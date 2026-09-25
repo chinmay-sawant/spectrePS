@@ -24,7 +24,7 @@ const (
 
 func TestClassicXref(t *testing.T) {
 	// /Count is 2 and /Pages nests another /Pages. The walk still finds one leaf.
-	src := classicLine(t, lineMarks)
+	src := classicLine(t)
 	file := mustOpen(t, src)
 	if file.PageCount() != 1 {
 		t.Fatalf("pages %d", file.PageCount())
@@ -121,14 +121,14 @@ func flateRaw(t *testing.T, plain []byte) []byte {
 	return buf.Bytes()
 }
 
-func classicLine(t *testing.T, marks string) []byte {
+func classicLine(t *testing.T) []byte {
 	t.Helper()
 	doc := newDoc()
 	catalog := doc.object("<< /Type /Catalog /Pages 2 0 R >>")
 	pages := doc.object("<< /Type /Pages /Kids [3 0 R] /Count 2 >>")
 	nested := doc.object("<< /Type /Pages /Kids [4 0 R] /Count 2 >>")
 	page := doc.object("<< /Type /Page /Parent 3 0 R /Contents 5 0 R >>")
-	raw := flateRaw(t, []byte(marks))
+	raw := flateRaw(t, []byte(lineMarks))
 	content := doc.object(streamBody("/Filter /FlateDecode", raw))
 	if catalog != idCatalog || pages != idPages || nested != idNested || page != idPage || content != idContent {
 		t.Fatal("object ids")
