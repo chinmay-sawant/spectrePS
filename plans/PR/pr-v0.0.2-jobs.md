@@ -152,5 +152,5 @@ sample.pdf: PDF document, version 1.4, 1 pages
 | --- | ---: | ---: | ---: |
 | `.go` | 9 | 1285 | 34 |
 | `.md` | 17 | 548 | 33 |
-| `.pdf` | 2 | Binary | Binary |
-| **Total** | **28** | **1833** | **67** |
+| `.pdf` | 3 | Binary | Binary |
+| **Total** | **29** | **1833** | **67** |
