@@ -90,6 +90,7 @@ Omit ` at file:line:col` when the position is unknown. `Op` is the operator name
 func (in *Instance) RunPostScript(ctx context.Context, src []byte, opt RunOptions) ([]PageImage, error)
 func (in *Instance) OpenPDF(ctx context.Context, src []byte) (*Document, error)
 func (doc *Document) PageCount() int // page leaves, 0 when doc is nil
+func (doc *Document) Tagged() bool   // structure tree or /MarkInfo /Marked true, false when doc is nil
 func (in *Instance) RasterizePage(ctx context.Context, doc *Document, pageIndex int, opt RunOptions) (PageImage, error)
 func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOptions) ([]byte, error)
 func (in *Instance) ImagePDF(ctx context.Context, pages []PageImage, dpi float64) ([]byte, error)
@@ -143,3 +144,5 @@ A cancelled `ctx` returns `ctx.Err()` and no partial success. `nil` context is a
 `DefaultRewriteOptions` turns stream compression on at level 0. The zero `RewriteOptions` leaves it off, so a test can ask for uncompressed streams on purpose. The CLI uses `DefaultRewriteOptions` when no flag is given.
 
 `RewriteOptions.Level` selects the writer. Level 0 re-emits the path subset and keeps `CompressStreams` as the Flate switch. Levels 1 through 5 use the pass-through writer: content Spectre cannot interpret is copied, level 1 Flates uncompressed content streams, level 2 re-encodes Flate and raw image streams losslessly, and levels 3 through 5 re-encode images as DCT with a longest-side cap. A level outside 0 through 5 returns `rangecheck`. The caps and qualities are in `documentation/devices.md`.
+
+`RewritePDF` at level 0 refuses a tagged document with `Error: /tagged in RewritePDF`, because the path-only writer cannot keep the tree. Levels 1 through 5 keep the tags and the source header version. `Document.Tagged` reads the catalog `/StructTreeRoot` or a true `/MarkInfo /Marked`. The claim for this work is preflight only, never certification.

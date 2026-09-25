@@ -15,6 +15,7 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 - Report the painted box in points and the RGB mark coverage of a page, in the style of `bbox` and `inkcov`. Spectre's coverage is RGB occupancy, not a CMYK report.
 - Wrap each painted page in a new PDF as one image, in the style of `pdfimage24`, `pdfimage8`, and `pdfimage32`. Spectre uses Flate image streams and the RGB, gray, and CMYK spaces.
 - Rewrite a PDF as a new file, compress streams, and re-encode images. Spectre Flates content, re-encodes Flate and raw image streams losslessly at level 2, and DCT-encodes images with a longest-side cap at levels 3 through 5. CCITT and JPEG2000 streams copy unchanged.
+- Preserve an existing PDF/UA-2 structure tree through a pass-through rewrite, and refuse to strip tags in a generated file. Levels 1 through 5 keep `/StructTreeRoot`, MCIDs, `/Alt`, `/ActualText`, and `/Lang`; level 0 and `pdfimage` return `/tagged` instead.
 - Stop on the first broken-file error, the same idea as `-dPDFSTOPONERROR`.
 - A library call and a CLI over that call, the same split as `gsapi` and the `gs` binary.
 - Block file write, rename, and delete by default, which is the rough idea of SAFER.
@@ -27,6 +28,7 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 - Images inside a PDF on the reading side. `Do` still returns `undefined`, and rewrite copies CCITT and JPEG2000 image streams unchanged.
 - Font embedding and subsetting.
 - PDF/A-1b, PDF/A-2b, and PDF/A-3b creation.
+- PDF/UA-2 conformance checking, certification, tag generation, reading order, and role assignment. Spectre preflights a machine-checkable subset and says preflight only.
 - PDF/X creation.
 - PDF to PostScript (`pdf2ps`, `ps2write`) and EPS rewrite (`eps2write`, `ps2epsi`).
 - XPS output (`xpswrite`), DOCX output (`docxwrite`), and PCL-XL output (`pxlmono`, `pxlcolor`).

@@ -71,20 +71,28 @@ Interface changes:
 
 - [ ] Catalog `/Metadata`, `pdfuaid`, `dc:title`, `/Lang`, `/MarkInfo`, and `/ViewerPreferences` are read and written. A `pdfuaid` claim is never written unless the source carried it or an explicit opt-in follows a passing preflight. Proof: `go test -count=1 ./internal/pdfa -run TestUA2Metadata`.
 
+  Waits on phase 8: the metadata reader and writer live in `internal/pdfa`, which is concurrent work in another worktree.
+
 ## Phase 5: Validation, docs, and closure
 
 ### 5.1 Machine checks
 
 - [ ] Checks cover `/Marked true`, `/StructTreeRoot`, one `Document` in the pdf2 namespace, `/Lang` syntax, `DisplayDocTitle`, `pdfuaid` values, `dc:title`, role-map resolution, and MCID coverage. Proof: `go test -count=1 ./internal/pdfa -run TestUA2Preflight`, with one conforming and one failing fixture per check.
 
+  Waits on phase 8: the checks live in `internal/pdfa` beside the metadata writer, which is concurrent work in another worktree. The structure model they read is on this branch.
+
 ### 5.2 veraPDF outcomes
 
 - [ ] `verapdf --flavour ua2 --format json` outcomes are recorded on the rows for the fixtures. veraPDF is a proof tool, never a build or runtime dependency. Proof: the recorded command and outcome.
+
+  Waits on 5.1: there are no preflight fixtures to run veraPDF over yet.
 
 ### 5.3 Docs and closure
 
 - [ ] `documentation/features.md`, `covered-and-not-covered.md`, `devices.md`, and `cli.md` state the preserve-and-preflight scope and the claim wording, and the new deferred row moves to 10.4. Proof: `grep -n 'PDF/UA-2' documentation/features.md`.
 - [ ] `make lint` and `make test` pass. Outcomes recorded on the day.
+
+  Waits on phase 8 and phase 9: the closure statement needs the preflight surface from `internal/pdfa` and the tag-generation boundary from the font machine.
 
 ## Dependencies
 

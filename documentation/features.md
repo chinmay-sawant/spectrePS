@@ -31,6 +31,7 @@ The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster
 
 - `spectreps rewrite -level 0` writes a new PDF from a path-only PDF. Content streams carry the same path subset. `-compress` selects Flate content streams and defaults to true. Bytes are stable across two calls, and the file carries no wall-clock date. A missing `-level` selects 0.
 - `spectreps rewrite -level 1` through `-level 5` use the pass-through writer, so text, fonts, and content Spectre cannot interpret are copied. Level 1 Flates uncompressed content streams. Level 2 also re-encodes Flate and raw image streams losslessly, with no resample. Levels 3 through 5 also re-encode images as DCT with a longest-side cap and a quality. The caps and qualities are the table in `documentation/devices.md`.
+- A PDF/UA-2 input keeps its structure at levels 1 through 5. The pass-through writer copies `/StructTreeRoot`, the parent tree, MCIDs, `/Alt`, `/ActualText`, and `/Lang`, and a PDF 2.0 input keeps its header block, binary marker included, so it does not leave as a 1.4 shell. `-level 0` and `spectreps pdfimage` refuse a tagged input with `Error: /tagged` instead, because neither writer can keep the tree. The claim for this work is preflight only, and it is not a certification.
 - `spectreps pdfimage` wraps each painted page in a new PDF as one image XObject, 8 bits per component, `/Filter /FlateDecode`. `-colorspace rgb|gray|cmyk` picks `/DeviceRGB` at 24 bits, `/DeviceGray` at 8 bits, or `/DeviceCMYK` at 32 bits, and defaults to `rgb`. `/MediaBox` comes from the pixel size and the paint dpi. A `.pdf` input paints the selected pages with `RasterizePage`; any other input uses `RunPostScript`. Bytes are stable, and the trailer `/ID` is the SHA-256 of the image streams.
 - The bitmap PDF says nothing about `Do` on the reading side. Spectre still returns `undefined` for `Do`, so it cannot rasterize its own image PDF yet.
 
@@ -38,7 +39,7 @@ The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster
 
 - `spectreps compare bytes` compares two files byte by byte and prints `mismatch byte N` or `mismatch length N` on a mismatch. Exit 0 when equal, exit 1 on a mismatch.
 - `spectreps compare raster` rasterizes both inputs with one `RunOptions` value and compares the pixmaps with `CompareRaster`. A `.pdf` input opens with `OpenPDF` and `RasterizePage`, and `-pages` applies to both sides. It prints `mismatch pixel N` or `mismatch width` or `mismatch height`.
-- `spectreps validate` runs the interpreter in stop-on-first-error mode. A bad xref, a bad stream, an encrypted file, or an unsupported operator fails the command with that error. It does not claim PDF/A conformance.
+- `spectreps validate` runs the interpreter in stop-on-first-error mode. A bad xref, a bad stream, an encrypted file, or an unsupported operator fails the command with that error. It does not claim PDF/A conformance. The PDF/UA-2 machine checks are not wired into `validate` yet. The structure tree model, the parent-tree lookup, the role maps, and the dictionary-level font check are in `internal/pdf`; the preflight lands with `internal/pdfa` in phase 5.
 
 ## Library and CLI
 
@@ -62,7 +63,7 @@ The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster
 | JPEG2000 image streams on rewrite | The standard library and `golang.org/x/image` have no JPX decoder. | `plans/v0.0.3/3-jpeg2000-decode.md`. |
 | Text extraction, `show`, `Tj` | Fonts are a separate machine from the path engine. | `plans/v0.0.3/9-text-and-fonts.md`. |
 | PDF/A-4 creation | Needs a named level, a refusal policy, and metadata. The file is not a conformance certificate. | `plans/v0.0.3/8-pdfa4.md`. |
-| PDF/UA-2 preservation and preflight | Tag generation needs the text and font machine, and the reader has no structure tree model. | `plans/v0.0.3/10-pdfua2.md`. |
+| PDF/UA-2 preservation and preflight | Tag generation needs the text and font machine from phase 9. The reader now has the structure tree model, and preservation plus preflight land in phase 10. The claim is preflight only. | `plans/v0.0.3/10-pdfua2.md`. |
 | PDF to PostScript (`ps2write` style) | It is another high-level device on the same marks. | `plans/v0.0.3/6-ps2write.md`. |
 | Compression writer container cleanup | `WriteCopy` copies the dead `/XRef` and `/ObjStm` containers and grows already-optimized files by about 3%. | `plans/v0.0.3/4-writer-cleanup.md`. |
 | PCLm | A different image-PDF flavor. | A plan file. |
