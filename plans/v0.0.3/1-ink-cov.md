@@ -1,7 +1,7 @@
 # v0.0.3 - Weighted ink coverage
 
 > **Parent:** `plans/v0.0.3/00-program.md` - program ledger
-> **Status:** not started.
+> **Status:** implemented. Lint and test passed on 2026-09-25.
 > **Estimated effort:** 1 day
 
 ---
@@ -40,8 +40,8 @@ The weighted amount is the continuous refinement of occupancy: the mean compleme
 
 ### 3.2 Closure
 
-- [ ] `make lint` passes. Outcome recorded on the day.
-- [ ] `make test` passes. Outcome recorded on the day.
+- [x] `make lint` passes. Outcome on 2026-09-25: exit 0. `gofmt -l .` printed nothing, `golangci-lint run ./...` exited 0, and `size-check` reported 0 over-limit files.
+- [x] `make test` passes. Outcome on 2026-09-25: exit 0 with `go test -p 24 ./...`, and `go test -count=1 -p 4 ./...` exited 0 on the same tree. The six test packages passed: `internal/cli`, `internal/graphics`, `internal/pdf`, `internal/pdfout`, `internal/ps`, and `spectreps`. `cmd/spectreps` and `internal/engine` have no test files.
 
 ## Dependencies
 
