@@ -19,13 +19,35 @@ type CopySource interface {
 
 // CopyOptions holds complete replacement object bodies keyed by object number.
 // An override wins over the source body and is written as given.
+// PackObjects writes PDF 1.5: non-stream bodies go into a Flate /Type /ObjStm
+// and a /Type /XRef stream carries the rows and the trailer. The /ID digest
+// does not change, so it stays independent of packing.
 type CopyOptions struct {
-	Overrides map[int][]byte
+	Overrides   map[int][]byte
+	PackObjects bool
+}
+
+// The dead container objects of a source file. A classic copy writes neither,
+// so their object numbers become free xref rows.
+const (
+	keyContainerType = "Type"
+	containerXRef    = "XRef"
+	containerObjStm  = "ObjStm"
+)
+
+// isContainer reports whether val is a /Type /XRef or /Type /ObjStm object.
+func isContainer(val pdf.Value) bool {
+	name, ok := val.NameEntry(keyContainerType)
+	if !ok {
+		return false
+	}
+	return name == containerXRef || name == containerObjStm
 }
 
 // WriteCopy builds a classic PDF 1.4 file from every in-use source object.
 // An object uses the override when present, then the stored source bytes, then
-// pdf.SerializeValue. A free or missing number stays free.
+// pdf.SerializeValue. A free or missing number stays free. A source /Type
+// /XRef or /Type /ObjStm container is not copied, so its number stays free.
 // The trailer uses /Root from src and /ID as the SHA-256 of the written bodies.
 // Two calls on the same source return equal bytes, and the file carries no
 // /Info and no dates.
@@ -41,6 +63,9 @@ func WriteCopy(ctx context.Context, src CopySource, opt CopyOptions) ([]byte, er
 	objects, err := collectCopy(src, opt)
 	if err != nil {
 		return nil, err
+	}
+	if opt.PackObjects {
+		return buildPackedCopyFile(src.RootNum(), objects)
 	}
 	return buildCopyFile(src.RootNum(), objects), nil
 }
@@ -59,18 +84,24 @@ func collectCopy(src CopySource, opt CopyOptions) ([][]byte, error) {
 	return objects, nil
 }
 
+// copyBody returns the body for one object number, or nil for a free number.
+// An override wins and is written as given. A source /Type /XRef or /Type
+// /ObjStm container is skipped: the copy writes a classic xref instead.
 func copyBody(src CopySource, opt CopyOptions, num int) ([]byte, error) {
 	if body, ok := opt.Overrides[num]; ok {
 		return body, nil
 	}
-	if body, ok := src.RawObject(num); ok {
-		return body, nil
-	}
-	val, ok, err := src.ObjectValue(num)
+	val, found, err := src.ObjectValue(num)
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
+	if found && isContainer(val) {
+		return nil, nil
+	}
+	if body, ok := src.RawObject(num); ok {
+		return body, nil
+	}
+	if !found {
 		return nil, nil
 	}
 	return pdf.SerializeValue(val), nil
