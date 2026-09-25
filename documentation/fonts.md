@@ -54,15 +54,21 @@ The policy is `invalidfont`. Spectre ships no substitute outlines for the standa
 
 A document that needs standard 14 pixels embeds its own font program. A `/FontFile2` stream or an OpenType `/FontFile3` stream is then the outline source, even when `/BaseFont` names a standard 14 font. Phase 3.3 proves this policy.
 
+## Extraction
+
+The show operators deliver each positioned glyph to the `TextOptions.Sink` seam. A record has the character code, the Unicode string, the advance in device pixels, and a device box built from the advance and the nominal ascent and descent of the text size, so no outline program is needed. `File.ExtractText` lays the records out: lines sort top to bottom, glyphs on one baseline sort left to right, a gap wider than a quarter of the box height inserts a space, and every line ends with CRLF. When `/ToUnicode` and the encoding name both miss, a printable code point stands for itself.
+
+Extraction is compared as text and geometry. Text pixels never byte-match Ghostscript, because hinting and antialiasing differ, so no test uses `CompareRaster` against `gs` on a text page.
+
 ## Type 1 and CFF scope
 
-Type 1 font programs under `/FontFile` are deferred to a later tag. Phase 3.6 covers charstrings and `seac` and is dropped when this row defers Type 1. Until then a Type 1 font still contributes advances from `/Widths` or from the standard 14 fallback, still extracts through its encoding and ToUnicode, and returns `invalidfont` when painted.
+Type 1 font programs under `/FontFile` are dropped to a later tag. Row 3.6 covers charstrings and `seac` and does not run in this ledger; the integrator moves it to `plans/v0.0.1/10-deferred.md`. A Type 1 font still contributes advances from `/Widths` or from the standard 14 fallback, still extracts through its encoding and ToUnicode, and returns `invalidfont` when painted.
 
 Bare CFF is also out of this ledger: `/FontFile3` with `/Subtype /Type1C` or `/Subtype /CIDFontType0C`. CFF that arrives inside an OpenType wrapper, `/FontFile3` with `/Subtype /OpenType`, parses through `golang.org/x/image/font/sfnt` like `/FontFile2`, so that outline source is in scope.
 
 ## Type 0 scope
 
-Identity-H only. The target is a `/Type0` font with `/Encoding /Identity-H`, two-byte character codes, a CIDFontType2 descendant, and a `/CIDToGIDMap`. Advances come from the descendant `/W` array and `/DW`, or from the embedded sfnt program. Phase 2.5 lands the mapping.
+Identity-H only. The target is a `/Type0` font with `/Encoding /Identity-H`, two-byte character codes, a CIDFontType2 descendant, and a `/CIDToGIDMap`. Advances come from the descendant `/W` array and `/DW`, or from the embedded sfnt program.
 
 Out of scope: predefined CMaps other than Identity-H, embedded CMap streams, Identity-V, vertical metrics with `/W2`, and CIDFontType0 CFF CID fonts.
 

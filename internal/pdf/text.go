@@ -26,12 +26,22 @@ const (
 	percentScale   = 100
 	fixedShift     = 64
 	maxAlpha       = 255
+	boxAscent      = 0.75
+	boxDescent     = 0.25
 )
 
 // GlyphSink receives each positioned glyph the text machine shows.
 type GlyphSink interface {
 	// Glyph receives one shown character code.
 	Glyph(g Glyph)
+}
+
+// Box is one device-space rectangle, origin at the lower left.
+type Box struct {
+	MinX float64
+	MinY float64
+	MaxX float64
+	MaxY float64
 }
 
 // Glyph is one shown character.
@@ -46,6 +56,10 @@ type Glyph struct {
 	// X and Y are the device-space glyph origin in pixels.
 	X float64
 	Y float64
+	// Box is the device-space advance box. Its vertical extent is the
+	// nominal ascent and descent of the text size, so building it never
+	// needs an outline program.
+	Box Box
 }
 
 // TextOptions carries the text seam for one content run.
@@ -367,10 +381,34 @@ func (run *runner) showCode(opName string, fnt *Font, code uint32) error {
 	if run.sink != nil {
 		unicode, _ := fnt.Unicode(code)
 		posX, posY := run.textDeviceMatrix().Apply(0, 0)
-		run.sink.Glyph(Glyph{Code: code, Unicode: unicode, Advance: advance, X: posX, Y: posY})
+		run.sink.Glyph(Glyph{
+			Code:    code,
+			Unicode: unicode,
+			Advance: advance,
+			X:       posX,
+			Y:       posY,
+			Box:     run.glyphBox(advance),
+		})
 	}
 	run.offsetText(advance)
 	return nil
+}
+
+// glyphBox is the device advance box of one glyph: the baseline origin to the
+// advanced origin horizontally, and the nominal ascent and descent of the text
+// size vertically. The text matrix and the CTM rotate and translate it.
+func (run *runner) glyphBox(advance float64) Box {
+	device := run.textDeviceMatrix()
+	originX, originY := device.Apply(0, 0)
+	nextX, nextY := device.Apply(advance, 0)
+	ascentX, ascentY := run.glyphMatrix().Apply(0, boxAscent)
+	descentX, descentY := run.glyphMatrix().Apply(0, -boxDescent)
+	return Box{
+		MinX: math.Min(math.Min(originX, nextX), math.Min(ascentX, descentX)),
+		MinY: math.Min(math.Min(originY, nextY), math.Min(ascentY, descentY)),
+		MaxX: math.Max(math.Max(originX, nextX), math.Max(ascentX, descentX)),
+		MaxY: math.Max(math.Max(originY, nextY), math.Max(ascentY, descentY)),
+	}
 }
 
 func (run *runner) offsetText(tx float64) {

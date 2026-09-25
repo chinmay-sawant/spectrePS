@@ -226,6 +226,46 @@ func checkDQuote(t *testing.T) {
 	}
 }
 
+// TestTextSink proves the sink records each positioned glyph with its code,
+// Unicode, advance, and device bounding box, without an outline program.
+func TestTextSink(t *testing.T) {
+	t.Parallel()
+	checkSinkGlyphs(t)
+	checkSinkTranslate(t)
+}
+
+func checkSinkGlyphs(t *testing.T) {
+	t.Helper()
+	run := textRunner(t)
+	log := &glyphLog{}
+	run.sink = log
+	playContent(t, run, "BT /F1 12 Tf 10 20 Td (A A) Tj ET")
+	if len(log.glyphs) != 3 {
+		t.Fatalf("glyphs = %d, want 3", len(log.glyphs))
+	}
+	checkGlyph(t, log, 0, 'A', "A", 667.0/1000*12, 10, 20)
+	checkGlyphBox(t, log.glyphs[0].Box, 10, 17, 10+667.0/1000*12, 29)
+	checkGlyph(t, log, 1, ' ', " ", 278.0/1000*12, 10+667.0/1000*12, 20)
+	checkGlyph(t, log, 2, 'A', "A", 667.0/1000*12, 10+667.0/1000*12+278.0/1000*12, 20)
+}
+
+func checkSinkTranslate(t *testing.T) {
+	t.Helper()
+	run := textRunner(t)
+	log := &glyphLog{}
+	run.sink = log
+	playContent(t, run, "q 1 0 0 1 5 7 cm BT /F1 12 Tf 0 0 Td (A) Tj ET Q")
+	checkGlyph(t, log, 0, 'A', "A", 667.0/1000*12, 5, 7)
+	checkGlyphBox(t, log.glyphs[0].Box, 5, 4, 5+667.0/1000*12, 16)
+}
+
+func checkGlyphBox(t *testing.T, box Box, minX, minY, maxX, maxY float64) {
+	t.Helper()
+	if !near(box.MinX, minX) || !near(box.MinY, minY) || !near(box.MaxX, maxX) || !near(box.MaxY, maxY) {
+		t.Fatalf("box = %+v, want [%v %v %v %v]", box, minX, minY, maxX, maxY)
+	}
+}
+
 // TestTjGlyphPixels paints one embedded glyph and compares the page with a
 // checked-in PPM fixture. The translated page proves the rendering matrix.
 func TestTjGlyphPixels(t *testing.T) {

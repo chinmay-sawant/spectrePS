@@ -103,6 +103,7 @@ func (in *Instance) OpenPDF(ctx context.Context, src []byte) (*Document, error)
 func (doc *Document) PageCount() int // page leaves, 0 when doc is nil
 func (doc *Document) Tagged() bool   // structure tree or /MarkInfo /Marked true, false when doc is nil
 func (in *Instance) RasterizePage(ctx context.Context, doc *Document, pageIndex int, opt RunOptions) (PageImage, error)
+func (in *Instance) ExtractText(ctx context.Context, doc *Document, pageIndex int) (string, error)
 func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOptions) ([]byte, error)
 func (in *Instance) WritePostScript(ctx context.Context, doc *Document, opt PostScriptOptions) ([]byte, error)
 func (in *Instance) ImagePDF(ctx context.Context, pages []PageImage, dpi float64) ([]byte, error)
@@ -155,7 +156,9 @@ func MeasureInkAmount(img PageImage) Ink
 
 A cancelled `ctx` returns `ctx.Err()` and no partial success. `nil` context is a programming error and panics. The CLI always passes a real context.
 
-`pageIndex` is zero-based. A negative index or an index past the last page returns `rangecheck`.
+`pageIndex` is zero-based for `RasterizePage` and `ExtractText`. A negative index or an index past the last page returns `rangecheck`.
+
+`ExtractText` returns the text of one page. Lines run top to bottom and left to right, each line ends with CRLF, and a font with neither `/ToUnicode` nor a named encoding falls back to the code point. The text comes from the same glyph sink as the show operators, so a standard 14 font extracts without an outline program. The output is not compared with Ghostscript `txtwrite`: text pixels never byte-match, because hinting and antialiasing differ, so the oracle is text and geometry.
 
 `ImagePDF` writes a new PDF with one 24-bit RGB Flate image per `PageImage`. `dpi` is the resolution the pages were painted at, and zero or less selects 72. The content stream paints `/Im0 Do` and the page resources carry the XObject, so `RasterizePage` of the reopened file matches the source `PageImage` under `CompareRaster`. The output is not `pdfwrite`.
 
@@ -167,4 +170,4 @@ A cancelled `ctx` returns `ctx.Err()` and no partial success. `nil` context is a
 
 `RewriteOptions.PDFA` appends a PDF/A-4 claim. `PDFA4` is the base claim and `PDFA4F` is the embedded-file claim. A claim uses the pass-through writer at the selected level, runs the profile preflight, and returns a `JobError` with `Op` `PDFA` and the failed rule in `Msg` when the input carries a known violation. The claim is a profile preflight, not a certificate. The rules and the writer changes are in `documentation/devices.md`.
 
-`WritePostScript` writes one date-free PostScript program from a path-only document. The marks match `RewritePDF` level 0: `setrgbcolor` or `setgray`, `setlinewidth`, `m` and `l`, and `S`, `f`, or `f*` in 72 dpi points. A prolog defines the short names in terms of the long operators, each page ends in `showpage`, and the header carries a fixed 612 by 792 box. Two calls return equal bytes. Text and images wait for the font and image machines, so a content operator Spectre cannot emit returns `undefined` with its operator name; a text page returns `undefined in Tj`. A nil document returns `rangecheck`. The zero `PostScriptOptions` is the only supported shape in this tag; media options wait.
+`WritePostScript` writes one date-free PostScript program from a path-only document. The marks match `RewritePDF` level 0: `setrgbcolor` or `setgray`, `setlinewidth`, `m` and `l`, and `S`, `f`, or `f*` in 72 dpi points. A prolog defines the short names in terms of the long operators, each page ends in `showpage`, and the header carries a fixed 612 by 792 box. Two calls return equal bytes. Text and images are not emitted, so a content operator Spectre cannot emit returns `undefined` with its operator name; a text page returns `undefined in Tj`. A nil document returns `rangecheck`. The zero `PostScriptOptions` is the only supported shape in this tag; media options wait.

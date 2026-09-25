@@ -2,7 +2,7 @@
 
 These are the tests for the jobs in `documentation/covered-and-not-covered.md`. Each bullet is one case. The expected result is the contract in `documentation/language.md`, `documentation/devices.md`, `documentation/cli.md`, and `documentation/public-api.md`.
 
-Tests call package `spectreps` or the `spectreps` binary. They do not run `/usr/bin/gs`. Fixtures are Spectre output, checked in under `testdata/` when the first raster or PDF case lands. PNG file bytes are not an equality oracle. The oracle is `PageImage`, or a PPM raw body when the header is part of the case.
+Tests call package `spectreps` or the `spectreps` binary. They do not run `/usr/bin/gs`. Fixtures are Spectre output, checked in under `testdata/` when the first raster or PDF case lands. PNG file bytes are not an equality oracle. The oracle is `PageImage`, or a PPM raw body when the header is part of the case. Text extraction is not a raster test either: the oracle is the text and the geometry, because text pixels never byte-match Ghostscript.
 
 External tests use `package spectreps_test`, so they only see the exported API.
 
@@ -15,7 +15,7 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - Unknown command, unknown flag, and a missing input file exit 2.
 - A missing input path that the program tries to read exits 3.
 - `raster` and `rewrite` without `-o` exit 2, including while the job itself is still `ErrNotImplemented`.
-- A cancelled context passed to `RunPostScript`, `OpenPDF`, `RasterizePage`, `RewritePDF`, or `ImagePDF` returns `ctx.Err()` and no partial success.
+- A cancelled context passed to `RunPostScript`, `OpenPDF`, `RasterizePage`, `ExtractText`, `RewritePDF`, or `ImagePDF` returns `ctx.Err()` and no partial success.
 
 ## PostScript subset
 
@@ -26,7 +26,7 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - `div` pushes a real. Division by zero is `undefinedresult`. Integer overflow on `add` is `rangecheck`. `copy` with a non-integer top operand is `typecheck`.
 - `eq` treats int 1 and real 1.0 as equal. `eq` on two distinct arrays with the same elements is false. `eq` on the same array object is true.
 - Dictionary `forall` walks entries in insertion order.
-- `def` into `systemdict` is `invalidaccess`. `def` into `userdict` succeeds. `end` when only `systemdict` remains is `dictstackunderflow`. `]` with no mark is `unmatchedmark`. `exit` outside a loop is `invalidexit`. `show` is `undefined`.
+- `def` into `systemdict` is `invalidaccess`. `def` into `userdict` succeeds. `end` when only `systemdict` remains is `dictstackunderflow`. `]` with no mark is `unmatchedmark`. `exit` outside a loop is `invalidexit`. `save` is `undefined`.
 - Operand stack past 8192 is `stackoverflow`. Execution stack past 500, dictionary stack past 20, and procedure nesting past 128 are `limitcheck`.
 - `for` with a zero increment is `rangecheck`.
 
@@ -74,10 +74,20 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - A fixture that uses an xref stream and a Flate object stream opens, and the page count is right.
 - Content operators `m l c h re S s f f* n q Q cm w RG rg g G` paint through the same device as the PostScript path operators. A one-page path PDF and the PostScript program of the same marks compare equal with `CompareRaster`.
 - `Do` resolves a name in the page's `/XObject` resources, requires `/Subtype /Image`, decodes the image once per name, and stamps it into the unit square through the CTM and the paint scale. `/Resources` on a `/Pages` ancestor is inherited. A missing name, a non-image subtype, an image with an `/SMask`, and a decode error each return `JobError` with `Do` and `undefined`. The rejected page is not a blank success.
-- `Tj`, `TJ`, `'`, and `"` each return `JobError` with the operator name filled in.
 - An encrypted file returns `invalidaccess`. An unknown stream filter returns `undefined`. A truncated xref returns `JobError`.
 - `RasterizePage` with a negative index, or an index past the last page, returns `rangecheck`.
 - `spectreps raster -o out.ppm in.pdf` writes the P6 file for a path-only fixture.
+
+## Text and extraction
+
+- `BT`, `ET`, `Tf`, `Td`, `TD`, `Tm`, `T*`, `Tc`, `Tw`, `Tz`, `TL`, and `Ts` maintain the text state. `q` and `Q` save and restore it, and `BT` resets the text matrices. `Q` does not restore the matrices, which are not part of the graphics state.
+- A simple font reads `/Widths`, `/FirstChar`, `/MissingWidth`, `/FontDescriptor`, and `/BaseFont`, with the standard 14 metrics as the fallback when `/Widths` is absent. `/Encoding` with `/Differences` renames codes, and a `bfchar` or `bfrange` CMap overrides the encoding and the glyph list.
+- A `/FontFile2` or OpenType `/FontFile3` program maps a code through the program's glyph names and then its cmap. `/Widths` wins for the advance and the program advance is the fallback. A Type0 Identity-H font maps two-byte codes through `/CIDToGIDMap`, with `/W` and `/DW` for the advances. The embedded-font fixture is a synthetic program built in the test helper, so no third-party font bytes are checked in.
+- `Tj`, `TJ`, `'`, and `"` deliver each positioned glyph to the sink with its code, Unicode, advance, and device box. TJ numbers, `'`, and `"` move the next glyph with the widths and the character and word spacing.
+- Painting a standard 14 glyph, a Type 1 `/FontFile`, or a bare CFF stream returns `invalidfont` and leaves the page white, while the sink still records the advance and Unicode. Embedded outlines blend coverage through `x/image/vector`; a checked-in PPM locks the result and a translated glyph moves the marked box.
+- `File.ExtractText` and `spectreps.ExtractText` sort by Y then X, merge close runs, insert a space for a gap wider than a quarter box, end every line with CRLF, and fall back to the code point. A two-line fixture locks `Hello\r\nWorld\r\n` and a symbolic font locks `AB\r\n`. A bad page index is `rangecheck`.
+- `spectreps text [-pages range] file.pdf` prints the selected pages to stdout. The command accepts no other option, and `-pages` follows the shared grammar.
+- PostScript `findfont`, `scalefont`, `setfont`, and `show` resolve the standard 14 names. `show` advances the current point, needs a current point, and returns `invalidfont` on a pixmap because the standard 14 have no outline program.
 
 ## PDF rewrite
 

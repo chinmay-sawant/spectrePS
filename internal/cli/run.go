@@ -64,6 +64,8 @@ func dispatch(args []string, stdout, stderr io.Writer) int {
 		return cmdPS(args[1:], stderr)
 	case "validate":
 		return cmdValidate(args[1:], stderr)
+	case "text":
+		return cmdText(args[1:], stdout, stderr)
 	case "compare":
 		return cmdCompare(args[1:], stdout, stderr)
 	case "gs":
@@ -85,6 +87,7 @@ spectreps ink_cov [-w points] [-h points] [-r dpi] [-pages range] file
 spectreps rewrite [-compress] [-level N] [-pdfa 4|4f] -o path file.pdf
 spectreps ps -o path file.pdf
 spectreps validate file
+spectreps text [-pages range] file.pdf
 spectreps compare bytes fileA fileB
 spectreps compare raster [-w points] [-h points] [-r dpi] [-pages range] [-o path] fileA fileB
 spectreps gs [-sDEVICE=name] [-sOutputFile=path] [switches] file
