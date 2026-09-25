@@ -26,7 +26,7 @@ The weighted amount is the continuous refinement of occupancy: the mean compleme
 
 ### 2.1 MeasureInkAmount
 
-- [ ] `spectreps.MeasureInkAmount(img PageImage) Ink` returns the mean per-channel complement over `Width * Height`, stride padding ignored, and a zero image returns the zero `Ink`. Proof: `go test -count=1 ./spectreps -run TestMeasureInkAmount` covers white, cyan, red, one black pixel in four, byte-128 gray, stride padding, and an empty image.
+- [x] `spectreps.MeasureInkAmount(img PageImage) Ink` returns the mean per-channel complement over `Width * Height`, stride padding ignored, and a zero image returns the zero `Ink`. Proof: `go test -count=1 ./spectreps -run TestMeasureInkAmount` exited 0 on 2026-09-25, and the full `go test -count=1 ./spectreps` exited 0 on the same day.
 
 ### 2.2 ink_cov command
 

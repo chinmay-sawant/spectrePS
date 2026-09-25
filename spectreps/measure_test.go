@@ -87,6 +87,64 @@ func TestMeasureInk(t *testing.T) {
 	}
 }
 
+func TestMeasureInkAmount(t *testing.T) {
+	gray := 127.0 / 255.0
+	cases := []struct {
+		name string
+		img  spectreps.PageImage
+		want spectreps.Ink
+	}{
+		{
+			name: "white page",
+			img:  blankImage(2, 2, 6),
+			want: spectreps.Ink{},
+		},
+		{
+			name: "empty image",
+			img:  spectreps.PageImage{},
+			want: spectreps.Ink{},
+		},
+		{
+			name: "cyan page",
+			img:  withPixel(1, 1, 3, 0, 0, 0, 255, 255),
+			want: spectreps.Ink{R: 1, G: 0, B: 0},
+		},
+		{
+			name: "red page",
+			img:  withPixel(1, 1, 3, 0, 0, 255, 0, 0),
+			want: spectreps.Ink{R: 0, G: 1, B: 1},
+		},
+		{
+			name: "one black pixel of four",
+			img:  withPixel(2, 2, 6, 1, 1, 0, 0, 0),
+			want: spectreps.Ink{R: 0.25, G: 0.25, B: 0.25},
+		},
+		{
+			name: "byte-128 gray page",
+			img:  withGray(2, 1, 6, 128),
+			want: spectreps.Ink{R: gray, G: gray, B: gray},
+		},
+		{
+			name: "stride padding is ignored",
+			img:  blankImage(1, 1, 5),
+			want: spectreps.Ink{},
+		},
+		{
+			name: "one black pixel of four with stride padding",
+			img:  withPixel(2, 2, 8, 1, 1, 0, 0, 0),
+			want: spectreps.Ink{R: 0.25, G: 0.25, B: 0.25},
+		},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			got := spectreps.MeasureInkAmount(tt.img)
+			if got != tt.want {
+				t.Fatalf("MeasureInkAmount = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
 // blankImage is a white image with stride padding left at zero, so a scan that
 // reads padding as pixels reports a marked page.
 func blankImage(width, height, stride int) spectreps.PageImage {
@@ -107,6 +165,21 @@ func blankImage(width, height, stride int) spectreps.PageImage {
 
 func boxOf(minX, minY, maxX, maxY float64) spectreps.Box {
 	return spectreps.Box{MinX: minX, MinY: minY, MaxX: maxX, MaxY: maxY}
+}
+
+// withGray fills the width by height corner with one gray byte per channel.
+func withGray(width, height, stride int, value byte) spectreps.PageImage {
+	img := blankImage(width, height, stride)
+	for row := range height {
+		base := row * stride
+		for col := range width {
+			i := base + col*3
+			img.Pixels[i] = value
+			img.Pixels[i+1] = value
+			img.Pixels[i+2] = value
+		}
+	}
+	return img
 }
 
 func withPixel(width, height, stride, x, y int, red, green, blue byte) spectreps.PageImage {
