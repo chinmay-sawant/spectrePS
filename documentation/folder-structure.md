@@ -22,6 +22,7 @@ internal/pdfa/
 internal/pdfout/
 internal/ps/
 internal/psout/
+internal/validation/
 spectreps/
 sampledata/
 documentation/
@@ -67,9 +68,11 @@ The test files use `package spectreps_test`. Another module imports `github.com/
 
 ## Private code
 
-`internal/engine` holds the session and file byte compare. `internal/ps` is the PostScript interpreter, `internal/graphics` the device, matrix, and pixmap layer, `internal/pdf` the PDF reader, `internal/pdfout` the PDF writers, `internal/pdfa` the PDF/A and PDF/UA-2 metadata and preflight, `internal/font` the font metrics, encodings, and glyph-name tables, `internal/psout` the PDF-to-PostScript writer, and `internal/cli` the command layer. Add a directory when its first `.go` file or fixture is real. Do not add `pkg/`, `api/`, `util/`, or empty placeholder packages.
+`internal/engine` holds the session and file byte compare. `internal/ps` is the PostScript interpreter, `internal/graphics` the device, matrix, and pixmap layer, `internal/pdf` the PDF reader, `internal/pdfout` the PDF writers, `internal/pdfa` the PDF/A and PDF/UA-2 metadata and preflight, `internal/font` the font metrics, encodings, and glyph-name tables, `internal/psout` the PDF-to-PostScript writer, `internal/validation` the validation corpus manifest reader and checker, and `internal/cli` the command layer. Add a directory when its first `.go` file or fixture is real. Do not add `pkg/`, `api/`, `util/`, or empty placeholder packages.
 
 `sampledata/` holds the fixtures and samples. Scenario folders (`compress/`, `pdfa/`, `pdfua2/`) hold the PDFs the plans measure. `sampledata/fixtures/` holds the unit-test inputs and expected PPM bytes. Golden files are written by the test that first locks a case, then checked in. They are not copied from Ghostscript output. Matching Ghostscript byte for byte is not a success criterion.
+
+`sampledata/validation/` is the validation corpus. One subfolder per feature area holds real PDF and PostScript files, and every file has a row in `sampledata/validation/manifest.tsv` that records its pinned source, license, SHA-256, feature, and expected verdict. Files at or under 1 MiB are committed. Larger files and whole suites live under the gitignored `sampledata/validation/external/` and are fetched by `go run internal/validation/gen.go -fetch-external`. Every corpus test is named `TestValidation<Area>`, so `go test -count=1 ./... -run TestValidation` runs the group.
 
 Package `spectreps` calls `internal/engine`, `internal/ps`, `internal/graphics`, `internal/pdf`, and `internal/pdfout`. `internal/cli` stays on the public library, which is the same boundary an external program has.
 

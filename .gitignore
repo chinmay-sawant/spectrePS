@@ -6,4 +6,6 @@ coverage.out
 /vendor/
 # veraPDF is a local proof tool, not a dependency.
 /verapdf/
+# sampledata/validation/external/ holds fetched, non-committed corpus files.
+/sampledata/validation/external/
 .DS_Store
