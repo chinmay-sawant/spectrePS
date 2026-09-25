@@ -69,9 +69,7 @@ Interface changes:
 
 ### 4.1 Read and write metadata
 
-- [ ] Catalog `/Metadata`, `pdfuaid`, `dc:title`, `/Lang`, `/MarkInfo`, and `/ViewerPreferences` are read and written. A `pdfuaid` claim is never written unless the source carried it or an explicit opt-in follows a passing preflight. Proof: `go test -count=1 ./internal/pdfa -run TestUA2Metadata`.
-
-  Waits on phase 8: the metadata reader and writer live in `internal/pdfa`, which is concurrent work in another worktree.
+- [x] Catalog `/Metadata`, `pdfuaid`, `dc:title`, `/Lang`, `/MarkInfo`, and `/ViewerPreferences` are read and written. `ReadUA2` reads the XMP packet and the catalog entries. `UA2Write` keeps the source claim and adds `pdfuaid:part 2` and `pdfuaid:rev 2024` only when the caller opted in after a passing preflight, so a claim is never written from nothing. `UA2XMP`, `UA2ExtraObjects`, and `UA2Catalog` produce the stream and the catalog, and the test round-trips them through `pdfout.WriteCopy`. Proof: `go test -count=1 ./internal/pdfa -run TestUA2Metadata` exited 0 on 2026-09-25.
 
 ## Phase 5: Validation, docs, and closure
 
