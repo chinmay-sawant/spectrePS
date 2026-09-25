@@ -48,7 +48,7 @@ Each row is a small slice, not Ghostscript parity.
 - Rasterize to an image. Spectre writes PPM, PNG, JPEG, and TIFF (none or Deflate). Ghostscript also writes BMP, PCX, fax, and PSD.
 - Select pages with `-pages`, in the style of `-dFirstPage` and `-dLastPage`. `raster`, `bbox`, `inkcov`, `pdfimage`, and `compare raster` take the flag, and a `%d` output path numbers the emitted pages from 1.
 - Rewrite a PDF as a new file and compress streams with Flate.
-- Paint and extract PDF text, in the style of `txtwrite` and `ps2ascii`. Spectre paints embedded TrueType and OpenType outlines and the standard 14 advances, and extraction writes UTF-8 with CRLF lines.
+- Paint and extract PDF text, in the style of `txtwrite` and `ps2ascii`. Spectre paints embedded TrueType, OpenType, and Type 1 outlines and the standard 14 advances, and extraction writes UTF-8 with CRLF lines.
 - Stop on the first broken-file error, the same idea as `-dPDFSTOPONERROR`.
 - A library call and a CLI over that call, the same split as `gsapi` and the `gs` binary.
 - Block `file`, `run`, `deletefile`, `renamefile`, and `filenameforall` by default. They return `invalidaccess`. That is the rough idea of SAFER.
@@ -59,7 +59,7 @@ Byte compare and pixel compare are Spectre commands. Ghostscript 9.55.0 has no `
 
 - Full PostScript LanguageLevel 3, including filters other than Flate, `%pipe%`, and `%disk`.
 - Full PDF 1.7 and PDF 2.0, including transparency, optional content, encryption, and passwords.
-- OCR (`pdfocr`, Tesseract). Font programs beyond the subset in `documentation/fonts.md`: Type 1 `/FontFile`, bare CFF, Type 3, vertical writing, color fonts, and variable fonts.
+- OCR (`pdfocr`, Tesseract). Font programs beyond the subset in `documentation/fonts.md`: bare CFF, Type 3, vertical writing, color fonts, and variable fonts.
 - Font embedding and subsetting.
 - PDF/A-1b, PDF/A-2b, PDF/A-3b, and PDF/A-4e creation. The PDF/A-4 and 4f claim landed as a rewrite option with a profile preflight.
 - PDF/X creation.

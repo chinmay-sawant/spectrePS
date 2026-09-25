@@ -52,17 +52,29 @@ Advances, encodings, and extraction work for the standard 14 without an embedded
 
 The policy is `invalidfont`. Spectre ships no substitute outlines for the standard 14 and does not look up host fonts, so painting a glyph from a font with no outline source returns `invalidfont`. That is what Ghostscript returns when it has no substitute font for a non-embedded font. It keeps output independent of the machine and keeps the pixel path free of font programs, which this tag excludes.
 
-A document that needs standard 14 pixels embeds its own font program. A `/FontFile2` stream or an OpenType `/FontFile3` stream is then the outline source, even when `/BaseFont` names a standard 14 font. Phase 3.3 proves this policy.
+A document that needs standard 14 pixels embeds its own font program. A PFA or PFB `/FontFile` stream, a `/FontFile2` stream, or an OpenType `/FontFile3` stream is then the outline source, even when `/BaseFont` names a standard 14 font. Phase 3.3 proves this policy.
+
+## Type 1 scope
+
+A simple `/Subtype /Type1` font reads its program from `/FontFile`. `font.LoadType1` in `internal/font` decodes it. The decoder takes PFA and PFB containers, prefers the stream's `/Length1`, `/Length2`, and `/Length3`, and falls back to the `eexec` and `cleartomark` markers. Hex and binary eexec sections both decode with the fixed seed 55665, and the trailer is dropped. A truncated or undecryptable program returns an error from the decoder; the PDF layer then loads the font dictionary with no outline source, and painting its glyphs returns `invalidfont`.
+
+The private dictionary supplies `/lenIV` (0 and 4 are the values in use), `/Subrs`, and `/CharStrings`. Charstrings decrypt with the fixed seed 4330. The interpreter covers `hsbw` and `sbw`, the moveto, lineto, and curveto families, `closepath`, `callsubr` and `return` with direct and negative indexes, `div`, `endchar`, and the hint operators, which it parses and drops. The first stack-clearing operator yields the advance. `seac` resolves `bchar` and `achar` through StandardEncoding, takes the base width, and offsets the accent by `adx + sbx - asb`, the rule fontTools applies in `op_seac`. A base charstring that is itself a `seac` is malformed. OtherSubrs 0, 1, and 2 implement flex, which emits the two flex curves and leaves the final point for the following `pop`. OtherSubr 3 executes the hint replacement Subr that the `n 3 callothersubr pop callsubr` sequence names. Entries 14 through 18 are the Multiple Master blend operators. An unknown entry pops its arguments and keeps the stack balanced. Caps bound the operand stack, the call depth, the Subrs and CharStrings counts, and the outline points; a malformed program returns an error and paints nothing.
+
+A symbolic Type 1 font with no PDF `/Encoding` starts from the program's built-in `/Encoding`, including the common `256 array ... dup <code> /<name> put` loop. `/BaseEncoding` and `/Differences` still apply on top, and `Font.Unicode` resolves the name through the encoding before the extraction code-point fallback. A code whose name is missing from `/CharStrings` paints `invalidfont`.
+
+Widths follow this order: `/Widths`, then standard 14 metrics, then the charstring `hsbw` or `sbw` width, then `/MissingWidth`, then 0. `/MMType1` keeps its PDF widths and paints `invalidfont`; no instance program is read in this tag.
+
+Out of Type 1 scope: hinting and hint replacement applied to the outline, font writing and subsetting, `Type1C` under `/FontFile3`, and `CIDFontType0C`.
 
 ## Extraction
 
-The show operators deliver each positioned glyph to the `TextOptions.Sink` seam. A record has the character code, the Unicode string, the advance in device pixels, and a device box built from the advance and the nominal ascent and descent of the text size, so no outline program is needed. `File.ExtractText` lays the records out: lines sort top to bottom, glyphs on one baseline sort left to right, a gap wider than a quarter of the box height inserts a space, and every line ends with CRLF. When `/ToUnicode` and the encoding name both miss, a printable code point stands for itself.
+The show operators deliver each positioned glyph to the `TextOptions.Sink` seam. A record has the character code, the Unicode string, the advance in device pixels, and a device box built from the advance and the nominal ascent and descent of the text size, so no outline program is needed. `File.ExtractText` lays the records out: lines sort top to bottom, glyphs on one baseline sort left to right, a gap wider than a quarter of the box height inserts a space, and every line ends with CRLF. When `/ToUnicode`, the PDF encoding, and the built-in encoding of a symbolic font all miss, a printable code point stands for itself.
 
 Extraction is compared as text and geometry. Text pixels never byte-match Ghostscript, because hinting and antialiasing differ, so no test uses `CompareRaster` against `gs` on a text page.
 
 ## Type 1 and CFF scope
 
-Type 1 font programs under `/FontFile` are dropped to a later tag. Row 3.6 covers charstrings and `seac` and does not run in this ledger; the integrator moves it to `plans/v0.0.1/10-deferred.md`. A Type 1 font still contributes advances from `/Widths` or from the standard 14 fallback, still extracts through its encoding and ToUnicode, and returns `invalidfont` when painted.
+A simple `/Subtype /Type1` font reads a PFA or PFB program from `/FontFile`. The supported subset is the section above. `Type1C` and `CIDFontType0C` under `/FontFile3` stay out.
 
 Bare CFF is also out of this ledger: `/FontFile3` with `/Subtype /Type1C` or `/Subtype /CIDFontType0C`. CFF that arrives inside an OpenType wrapper, `/FontFile3` with `/Subtype /OpenType`, parses through `golang.org/x/image/font/sfnt` like `/FontFile2`, so that outline source is in scope.
 

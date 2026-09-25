@@ -35,6 +35,8 @@ const (
 	keyFont            = "Font"
 
 	subtypeType0        = "Type0"
+	subtypeType1        = "Type1"
+	subtypeMMType1      = "MMType1"
 	subtypeCIDFontType2 = "CIDFontType2"
 	subtypeOpenType     = "OpenType"
 	subtypeIdentity     = "Identity"
@@ -45,6 +47,10 @@ const (
 	cidMask             = 0xFFFF
 	cidPairLen          = 2
 	cidRangeLen         = 3
+
+	keyLength1 = "Length1"
+	keyLength2 = "Length2"
+	keyLength3 = "Length3"
 )
 
 // Font is one loaded /Font resource. A simple font reads /Widths, /Encoding,
@@ -72,6 +78,12 @@ type Font struct {
 	toUnicode map[uint32]string
 	program   *sfnt.Font
 	gidNames  map[string]sfnt.GlyphIndex
+
+	// type1 is the decoded /FontFile program of a simple Type 1 font.
+	// builtinEncoding is the program's built-in encoding, used for a
+	// symbolic font before the PDF encoding.
+	type1           *font.Type1Font
+	builtinEncoding [256]string
 }
 
 // loadFont reads one resolved font dictionary. A dictionary that is not a
@@ -82,20 +94,22 @@ func (file *File) loadFont(val Value) (*Font, error) {
 		return nil, NewError(opFont, errType)
 	}
 	out := &Font{
-		subtype:      "",
-		baseFont:     "",
-		identity:     false,
-		metrics:      nil,
-		widths:       nil,
-		hasWidths:    false,
-		missingWidth: 0,
-		encoding:     [256]string{},
-		cidToGID:     nil,
-		cidWidths:    nil,
-		defaultWidth: defaultCIDWidth,
-		toUnicode:    nil,
-		program:      nil,
-		gidNames:     nil,
+		subtype:         "",
+		baseFont:        "",
+		identity:        false,
+		metrics:         nil,
+		widths:          nil,
+		hasWidths:       false,
+		missingWidth:    0,
+		encoding:        [256]string{},
+		cidToGID:        nil,
+		cidWidths:       nil,
+		defaultWidth:    defaultCIDWidth,
+		toUnicode:       nil,
+		program:         nil,
+		gidNames:        nil,
+		type1:           nil,
+		builtinEncoding: [256]string{},
 	}
 	out.subtype, _ = val.NameEntry(keySubtype)
 	out.baseFont, _ = val.NameEntry(keyBaseFont)
@@ -110,12 +124,15 @@ func (file *File) loadFont(val Value) (*Font, error) {
 		if err != nil {
 			return nil, err
 		}
+		file.loadProgram(out, desc)
 	} else {
+		// The Type 1 built-in encoding feeds loadEncoding, so the
+		// program loads before the simple font entries.
+		file.loadProgram(out, desc)
 		if err := file.loadSimple(out, val, desc); err != nil {
 			return nil, err
 		}
 	}
-	file.loadProgram(out, desc)
 	file.loadToUnicode(out, val)
 	return out, nil
 }
@@ -155,11 +172,15 @@ func (f *Font) loadWidths(val, desc Value) {
 }
 
 // loadEncoding builds the code-to-glyph-name table from /Encoding and
-// /Differences.
+// /Differences. A symbolic Type 1 font with no /Encoding starts from the
+// program's built-in encoding.
 func (file *File) loadEncoding(out *Font, val, desc Value) error {
-	out.encoding = out.defaultEncoding(desc)
 	entry, ok := val.ValueEntry(keyEncoding)
 	if !ok || entry.Kind == KindNull {
+		out.encoding = out.defaultEncoding(desc)
+		if out.symbolic(desc) && out.type1 != nil {
+			out.encoding = out.builtinEncoding
+		}
 		return nil
 	}
 	entry, err := file.deref(entry)
@@ -183,14 +204,22 @@ func (file *File) loadEncoding(out *Font, val, desc Value) error {
 	return applyDifferences(&out.encoding, diffs)
 }
 
+// symbolic reports whether the font dictionary marks the font symbolic. A
+// symbolic font may use its built-in encoding, and the standard 14 Symbol and
+// ZapfDingbats fonts are symbolic by name.
+func (f *Font) symbolic(desc Value) bool {
+	if f.baseFont == "Symbol" || f.baseFont == "ZapfDingbats" {
+		return true
+	}
+	flags, ok := desc.IntEntry(keyFlags)
+	return ok && flags&symbolicFontFlag != 0
+}
+
 // defaultEncoding is StandardEncoding for a nonsymbolic font and the empty
 // built-in table for a symbolic one. The built-in tables of Symbol and
 // ZapfDingbats are out of this ledger.
 func (f *Font) defaultEncoding(desc Value) [256]string {
-	if f.baseFont == "Symbol" || f.baseFont == "ZapfDingbats" {
-		return [256]string{}
-	}
-	if flags, ok := desc.IntEntry(keyFlags); ok && flags&symbolicFontFlag != 0 {
+	if f.symbolic(desc) {
 		return [256]string{}
 	}
 	return font.EncodingStandard.GlyphNames()
@@ -349,12 +378,21 @@ func (file *File) loadCIDToGID(out *Font, kid Value) error {
 	return nil
 }
 
-// loadProgram reads /FontFile2 and an OpenType /FontFile3. Type 1 programs
-// under /FontFile are deferred by documentation/fonts.md, so they load with
-// no outline source.
+// loadProgram reads /FontFile for a simple Type 1 font, then /FontFile2 and
+// an OpenType /FontFile3. A /MMType1 font keeps its PDF widths and paints
+// with no outline source. A missing or broken program still loads the font.
 func (file *File) loadProgram(out *Font, desc Value) {
-	if desc.Kind != KindDict {
+	if desc.Kind != KindDict || out.subtype == subtypeMMType1 {
 		return
+	}
+	if out.subtype == subtypeType1 {
+		if program := file.parseType1Program(desc); program != nil {
+			out.type1 = program
+			if out.symbolic(desc) {
+				out.builtinEncoding = program.Encoding
+			}
+			return
+		}
 	}
 	for _, key := range []string{keyFontFile2, keyFontFile3} {
 		program := file.parseProgram(desc, key)
@@ -365,6 +403,35 @@ func (file *File) loadProgram(out *Font, desc Value) {
 		out.gidNames = glyphNames(program)
 		return
 	}
+}
+
+// parseType1Program decodes the /FontFile stream with its /Length1, /Length2,
+// and /Length3 entries. A missing stream, a stream that is not a stream, and
+// a decode error all return nil.
+func (file *File) parseType1Program(desc Value) *font.Type1Font {
+	entry, ok := desc.ValueEntry(keyFontFile)
+	if !ok || entry.Kind == KindNull {
+		return nil
+	}
+	stream, err := file.deref(entry)
+	if err != nil || stream.Kind != KindStream {
+		return nil
+	}
+	body, err := decodeStream(stream)
+	if err != nil {
+		return nil
+	}
+	var lengths [3]int
+	for index, key := range []string{keyLength1, keyLength2, keyLength3} {
+		if value, ok := stream.IntEntry(key); ok {
+			lengths[index] = value
+		}
+	}
+	program, err := font.LoadType1(body, lengths)
+	if err != nil {
+		return nil
+	}
+	return program
 }
 
 // parseProgram decodes one font file stream and parses it through sfnt. A
@@ -487,8 +554,10 @@ func (f *Font) metricWidth(code uint32) (float64, bool) {
 }
 
 // Unicode returns the Unicode string for a character code. /ToUnicode wins.
-// A simple font without one maps the code through its encoding and the Adobe
-// Glyph List.
+// A simple font without one maps the resolved glyph name, through the PDF
+// encoding and the built-in encoding of a symbolic font, with the Adobe Glyph
+// List. A name the list does not carry leaves the code-point fallback to the
+// extraction layer.
 func (f *Font) Unicode(code uint32) (string, bool) {
 	if f == nil {
 		return "", false
@@ -501,6 +570,9 @@ func (f *Font) Unicode(code uint32) (string, bool) {
 	}
 	name := f.encoding[byte(code)]
 	if name == "" {
+		name = f.builtinEncoding[byte(code)]
+	}
+	if name == "" {
 		return "", false
 	}
 	return font.AGLUnicode(name)
@@ -512,18 +584,19 @@ func (f *Font) twoByteCodes() bool {
 }
 
 // paintSource reports whether the font can produce an outline for a code.
-// Identity-H and a parsed program are required; Type 1, bare CFF, and any
-// other Type0 encoding are out of this ledger.
+// Identity-H and a parsed program or Type 1 font are required; bare CFF and
+// any other Type0 encoding are out of this ledger.
 func (f *Font) paintSource() bool {
-	if f == nil || f.program == nil {
+	if f == nil || (f.program == nil && f.type1 == nil) {
 		return false
 	}
 	return !f.twoByteCodes() || f.identity
 }
 
-// glyphIndex maps a character code to a glyph index in the embedded program.
+// glyphIndex maps a character code to a glyph index in the embedded sfnt
+// program.
 func (f *Font) glyphIndex(code uint32) (sfnt.GlyphIndex, bool) {
-	if !f.paintSource() {
+	if !f.paintSource() || f.program == nil {
 		return 0, false
 	}
 	if f.twoByteCodes() {
@@ -556,8 +629,12 @@ func (f *Font) glyphIndex(code uint32) (sfnt.GlyphIndex, bool) {
 const outlinePPEM = 64
 
 // outline loads the glyph segments at outlinePPEM. The segments have Y
-// growing down.
+// growing down. A Type 1 font interprets its charstring and converts the
+// result to the same shape.
 func (f *Font) outline(code uint32) (sfnt.Segments, bool) {
+	if f.type1 != nil && !f.twoByteCodes() {
+		return f.type1Outline(code)
+	}
 	gid, ok := f.glyphIndex(code)
 	if !ok {
 		return nil, false
@@ -573,6 +650,12 @@ func (f *Font) outline(code uint32) (sfnt.Segments, bool) {
 // programAdvance returns the glyph advance from the embedded program in
 // 1/1000 em. It is the fallback for a font without /Widths.
 func (f *Font) programAdvance(code uint32) (float64, bool) {
+	if f.type1 != nil && !f.twoByteCodes() {
+		return f.type1Advance(code)
+	}
+	if f.program == nil {
+		return 0, false
+	}
 	gid, ok := f.glyphIndex(code)
 	if !ok {
 		return 0, false

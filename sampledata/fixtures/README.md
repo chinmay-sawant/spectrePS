@@ -47,6 +47,16 @@ from a checked-in font file.
 
 SHA-256: `text-tj.ppm` `f42fa88995735407f44c5146d579bdf53d0b1332c63a7f0628a85cf70037357a`
 
+# Type 1 fixture
+
+`type1-tj.ppm` is the same page with the synthetic Type 1 `A` from the
+`SynthType1` program that `internal/type1synth` builds in Go. Running
+`UPDATE_FIXTURES=1 go test ./internal/pdf -run TestType1Paint` rewrites it.
+The Type 1 pixels equal the TrueType pixels, so the two files are identical
+and share one SHA-256.
+
+SHA-256: `type1-tj.ppm` `f42fa88995735407f44c5146d579bdf53d0b1332c63a7f0628a85cf70037357a`
+
 # CCITT fixtures
 
 `ccitt-g4.bin` and `ccitt-g3.bin` are raw strip bytes, not TIFF containers.

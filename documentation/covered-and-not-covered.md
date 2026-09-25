@@ -16,7 +16,7 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 - Wrap each painted page in a new PDF as one image, in the style of `pdfimage24`, `pdfimage8`, and `pdfimage32`. Spectre uses Flate image streams and the RGB, gray, and CMYK spaces.
 - Rewrite a PDF as a new file, compress streams, and re-encode images. Spectre Flates content, re-encodes Flate, raw, and CCITT image streams losslessly at level 2, and DCT-encodes images with a longest-side cap at levels 3 through 5. Levels 3 through 5 also decode JPEG2000 streams and re-encode them as DCT.
 - Rewrite a path-only PDF as PostScript, in the style of `pdf2ps` and `ps2write`. Spectre writes the points operators, not glyphs or image data, so text, fonts, and images are not written.
-- Paint and extract PDF text, in the style of `txtwrite` and `ps2ascii`. Spectre paints embedded TrueType and OpenType outlines and the standard 14 advances, and `spectreps text` writes UTF-8 with one CRLF per line and a code-point fallback. Type 1, bare CFF, Type 3, vertical writing, color fonts, and variable fonts are out of this tag, and OCR is out.
+- Paint and extract PDF text, in the style of `txtwrite` and `ps2ascii`. Spectre paints embedded TrueType, OpenType, and Type 1 outlines and the standard 14 advances, and `spectreps text` writes UTF-8 with one CRLF per line and a code-point fallback. Bare CFF, Type 3, vertical writing, color fonts, and variable fonts are out of this tag, and OCR is out.
 - Write a PDF/A-4 claim, in the style of `-dPDFA` policy 2. `-pdfa 4` claims the base profile and `-pdfa 4f` claims the embedded-file profile. Spectre appends a static XMP packet and an sRGB output intent, and the profile preflight refuses a known violation instead of keeping the claim. The result is a claim, not a certificate.
 - Preserve an existing PDF/UA-2 structure tree through a pass-through rewrite, preflight the machine-checkable subset, and refuse to strip tags in a generated file. Levels 1 through 5 keep `/StructTreeRoot`, MCIDs, `/Alt`, `/ActualText`, and `/Lang`; level 0 and `pdfimage` return `/tagged` instead. The UA-2 preflight reports `Error: /ua2-<rule> in PDFUA`, and a `pdfuaid` claim is written only when the source carried one or an opt-in followed a passing preflight.
 - Stop on the first broken-file error, the same idea as `-dPDFSTOPONERROR`.
@@ -27,7 +27,7 @@ Work that is explicitly deferred, with the reason and the next gate, stays in `p
 
 - Full PostScript LanguageLevel 3, including filters other than Flate, `%pipe%`, and `%disk`.
 - Full PDF 1.7 and PDF 2.0, including transparency, optional content, encryption, and passwords.
-- OCR (`pdfocr`, Tesseract). Font programs beyond the subset in `documentation/fonts.md`: Type 1 `/FontFile`, bare CFF, Type 3, vertical writing, color fonts, and variable fonts.
+- OCR (`pdfocr`, Tesseract). Font programs beyond the subset in `documentation/fonts.md`: bare CFF, Type 3, vertical writing, color fonts, and variable fonts.
 - Images inside a PDF on the reading side beyond `Do` on `/Subtype /Image`. `Do` paints RGB and gray image XObjects. `/SMask`, `/Mask`, `/ImageMask`, and `/Decode` arrays are refused, not approximated. Rewrite decodes CCITT G4 and G3 and JPEG2000 image streams: level 2 re-encodes CCITT losslessly as Flate, and levels 3 through 5 re-encode both as DCT.
 - Font embedding and subsetting.
 - PDF/A-1, PDF/A-2, PDF/A-3, and PDF/A-4e creation. Spectre writes a PDF/A-4 or 4f claim only. It does not embed missing fonts or convert color, and it produces no certificate.
