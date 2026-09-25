@@ -109,6 +109,14 @@ An image at or below its cap keeps its size. An image Spectre cannot decode, and
 
 The image helpers are three functions in `internal/pdfout`. `ScaleImage` takes any `image.Image` and returns RGBA resampled with the CatmullRom kernel from `golang.org/x/image/draw`; width and height below 1 clamp to 1. `EncodeDCT` wraps `image/jpeg` with the quality clamped to 1 through 100, and `EncodeFlateRGB` writes tightly packed RGB rows, top row first, inside zlib. All three are deterministic, so the same input returns the same bytes. Levels 3 through 5 call `ScaleImage` and `EncodeDCT`, and level 2 calls `EncodeFlateRGB`.
 
+## PostScript output
+
+`WritePostScript` builds a date-free PostScript program from drawing operations on a `Document`. It borrows `pdf.Paint`, so each page carries the same path subset as `RewritePDF` level 0, re-emitted as `setrgbcolor` or `setgray`, `setlinewidth`, `m` and `l`, and `S`, `f`, or `f*`. Coordinates are 72 dpi points.
+
+The program starts with `%!PS-Adobe-3.0` and a fixed `%%BoundingBox: 0 0 612 792`. A prolog defines the short path names in terms of `moveto`, `lineto`, `stroke`, `fill`, and `eofill`, because a bare `m` or `S` is not a PostScript operator. Each page gets a `%%Page` comment and one `showpage`, and the program ends with `%%EOF`. There is no creation date, and two calls on the same document return equal buffers, so `CompareFiles` is the proof.
+
+The PDF painter flattens `c` into straight segments before the recorder sees it, so the writer emits what `pdf.Paint` gives and never writes `curveto`. Text and images wait for the font and image machines: `Tj` returns `undefined in Tj`. The proof is a round trip: a PDF page with `re`/`f`, `m`/`l`/`S`, a curve, and `q`/`Q`/`cm` becomes PostScript, runs back through `RunPostScript` at 72 dpi, and matches under `CompareRaster`.
+
 ## Bitmap PDF
 
 `ImagePDF` wraps each `PageImage` in one PDF page. The default image is 24-bit RGB, 8 bits per component, `/ColorSpace /DeviceRGB`, `/Filter /FlateDecode`. `ImagePDFColor` also writes DeviceGray and DeviceCMYK. The stored stream is the tightly packed rows, so stride padding is dropped. `/MediaBox` is `[0 0 width*72/dpi height*72/dpi]` points, and a `dpi` of zero or less selects 72.
