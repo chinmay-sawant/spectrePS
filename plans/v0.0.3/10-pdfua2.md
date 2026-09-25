@@ -59,7 +59,7 @@ Interface changes:
 
 ### 3.2 Generated writers refuse tagged input
 
-- [ ] Level 0, `Write`, `WriteImages`, and `ImagePDF` return a clear `JobError` on a tagged input instead of stripping tags. A silent downgrade stays a bug. Proof: `go test -count=1 ./spectreps -run TestRewriteRefusesTagged`.
+- [x] Level 0, `Write`, `WriteImages`, and `ImagePDF` return a clear `JobError` on a tagged input instead of stripping tags. `RewritePDF` level 0 returns `Error: /tagged in RewritePDF`, and `pdfimage` returns `Error: /tagged in ImagePDF` before it rasterizes a tagged PDF. `Write` and `WriteImages` take page and image values and never see a source document, so the refusal sits at the source-aware entry points. A silent downgrade stays a bug. Proof: `go test -count=1 ./spectreps -run TestRewriteRefusesTagged` exited 0 on 2026-09-25, and `go test -count=1 ./internal/cli -run TestPDFImageRefusesTagged` covers the command.
 
 ### 3.3 Container version
 

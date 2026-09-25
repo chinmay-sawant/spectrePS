@@ -194,7 +194,7 @@ func cmdPDFImage(args []string, stderr io.Writer) int {
 	if code != 0 {
 		return code
 	}
-	pages, err := pageImages(in, path, src, opt, *sel)
+	pages, err := pageImagesPolicy(in, path, src, opt, *sel, true)
 	if err != nil {
 		return finish(stderr, err)
 	}
