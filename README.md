@@ -1,10 +1,10 @@
 # Spectre PS
 
-Spectre PS is a Go library and CLI for the jobs Ghostscript is used for. It reads a PostScript subset and a path-only PDF subset, paints pages to RGB pixels, writes new PDFs, reports interpreter errors, and compares bytes. It does not link or start Ghostscript.
+Spectre PS is a Go library and CLI for the jobs Ghostscript is used for. It reads a PostScript subset and a PDF subset, paints pages to RGB pixels, writes new PDFs and PostScript, reports interpreter errors, extracts text, and compares bytes or pixels. It does not link or start Ghostscript.
 
 The command is `spectreps`. The library import path is `github.com/chinmay-sawant/spectrePS/spectreps`, package name `spectreps`. The command calls that package through `internal/cli`, and an external importer calls the same functions.
 
-v0.0.1 is the first release: the PostScript subset, the path-only PDF, PPM and PNG raster, Flate rewrite, validate, and byte and pixel compare. v0.0.2 adds `bbox`, `inkcov`, JPEG and TIFF raster, page ranges, gray and CMYK image PDF, and PDF compression levels 1 to 5. `spectreps version` prints `0.0.2`.
+v0.0.1 is the first release: the PostScript subset, the path-only PDF, PPM and PNG raster, Flate rewrite, validate, and byte and pixel compare. v0.0.2 adds `bbox`, `inkcov`, JPEG and TIFF raster, page ranges, gray and CMYK image PDF, and PDF compression levels 1 to 5. v0.0.3 adds weighted `ink_cov`, CCITT and JPEG2000 decode, painting `Do`, `spectreps ps`, the `spectreps gs` argv mode, the PDF/A-4 and PDF/UA-2 preflights, and the font and text machine with `spectreps text`. `spectreps version` prints `0.0.3`.
 
 ## Build
 
@@ -55,12 +55,16 @@ Page 1
 | `spectreps pdfimage` | Wrap each painted page in a new PDF as one RGB, gray, or CMYK image. |
 | `spectreps bbox` | Print the painted box in points. |
 | `spectreps inkcov` | Print the RGB mark coverage fractions. |
-| `spectreps rewrite` | Write a new PDF, with optional Flate and compression levels 1 to 5. |
+| `spectreps ink_cov` | Print the weighted RGB ink amounts as percentages. |
+| `spectreps rewrite` | Write a new PDF, with optional Flate, compression levels 1 to 5, and a PDF/A-4 claim. |
+| `spectreps ps` | Write a path-only PDF as date-free PostScript. |
+| `spectreps text` | Print the extracted text of the selected pages. |
+| `spectreps gs` | Run an allowlisted `gs` argv against the subcommands above. |
 | `spectreps validate` | Stop on the first interpreter error. |
 | `spectreps compare bytes` | Compare two files byte by byte. |
 | `spectreps compare raster` | Rasterize two inputs and compare the pixels. |
 
-`rewrite -level 0` takes a PDF whose content uses the path subset. Levels 1 to 5 use the pass-through writer, so text, fonts, and images survive. The image PDF from `pdfimage` carries `Do`, which Spectre does not interpret yet, so it is not a `rewrite` input at level 0.
+`rewrite -level 0` takes a PDF whose content uses the path subset. A page that paints an image is refused with `undefined in Do` instead of dropping the image. Levels 1 to 5 use the pass-through writer, so text, fonts, and images survive, and Spectre can rasterize the `pdfimage` output through `Do`.
 
 ## Documentation
 
@@ -76,9 +80,11 @@ Page 1
 | [covered-and-not-covered.md](documentation/covered-and-not-covered.md) | Which Ghostscript jobs Spectre takes. |
 | [features.md](documentation/features.md) | The feature inventory: what works now, and what waits. |
 | [test.md](documentation/test.md) | The tests each job needs. |
+| [fonts.md](documentation/fonts.md) | Font metrics, encodings, and the text scope. |
+| [gs-argv-grammar.md](documentation/gs-argv-grammar.md) | The `spectreps gs` allowlist. |
 | [development.md](documentation/development.md) | Make targets and the phase checklist rule. |
 
-The work ledgers are [plans/v0.0.1/00-program.md](plans/v0.0.1/00-program.md) and [plans/v0.0.2/00-program.md](plans/v0.0.2/00-program.md). The v0.0.1 release note is [plans/v0.0.1/PR/release-v0.0.1.md](plans/v0.0.1/PR/release-v0.0.1.md), and deferred work is [plans/v0.0.1/10-deferred.md](plans/v0.0.1/10-deferred.md).
+The work ledgers are [plans/v0.0.1/00-program.md](plans/v0.0.1/00-program.md), [plans/v0.0.2/00-program.md](plans/v0.0.2/00-program.md), and [plans/v0.0.3/00-program.md](plans/v0.0.3/00-program.md). The release notes are [plans/v0.0.1/PR/release-v0.0.1.md](plans/v0.0.1/PR/release-v0.0.1.md), [plans/v0.0.2/PR/release-v0.0.2.md](plans/v0.0.2/PR/release-v0.0.2.md), and [plans/v0.0.3/PR/release-v0.0.3.md](plans/v0.0.3/PR/release-v0.0.3.md), and deferred work is [plans/v0.0.1/10-deferred.md](plans/v0.0.1/10-deferred.md).
 
 ## License
 

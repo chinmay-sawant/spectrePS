@@ -14,7 +14,7 @@
 | `make tidy` | `go mod tidy` |
 | `make clean` | remove `bin/` |
 
-`make build` compiles `./cmd/spectreps` to `bin/spectreps`. The public library is `spectreps/`. Private code is `internal/cli`, `internal/engine`, `internal/ps`, `internal/graphics`, `internal/pdf`, and `internal/pdfout`. The module root has no `.go` files.
+`make build` compiles `./cmd/spectreps` to `bin/spectreps`. The public library is `spectreps/`. Private code is `internal/cli`, `internal/engine`, `internal/ps`, `internal/graphics`, `internal/pdf`, `internal/pdfout`, `internal/pdfa`, `internal/font`, and `internal/psout`. The module root has no `.go` files.
 
 `make lint` and `make test` are the gates for a phase that changes Go code. Record both commands and their outcomes in the phase file before marking that phase complete. A documentation-only change does not run them. The rule comes from `skills/phase-wise-checklist/SKILLS.md`.
 
@@ -22,13 +22,13 @@
 
 ## Checklist
 
-`plans/v0.0.1/00-program.md` is the map. Each other file in that directory is the ledger for one phase. Check a row only after the proof in the row has been run on the current tree. `[~]` means deferred, and the only deferred list is `plans/v0.0.1/10-deferred.md`.
+`plans/v0.0.1/00-program.md`, `plans/v0.0.2/00-program.md`, and `plans/v0.0.3/00-program.md` are the maps. Each other file in those directories is the ledger for one phase. Check a row only after the proof in the row has been run on the current tree. `[~]` means deferred, and the deferred lists are `plans/v0.0.1/10-deferred.md` with `plans/v0.0.3/10-pdfua2.md` for the tag-level rows.
 
 When a tag ships, append the `make lint` and `make test` transcript to `plans/v0.0.1/09-release-records.md`. Dev-loop runs and the tag run are both recorded there if they differ. A green dev loop is not a substitute for the tag line.
 
 ## Dependencies
 
-The module started with no third-party requirements. `golang.org/x/image v0.46.0` is the first: it supplies `tiff.Encode` for raster `.tif` and `.tiff` output. Flate, PNG, JPEG, and PDF parsing use the standard library. Adding a module requirement is a plan row of its own, with the reason written next to the requirement in `go.mod`, and `go mod tidy` writes `go.sum`.
+The module started with no third-party requirements. `golang.org/x/image v0.46.0` was the first: it supplies `tiff.Encode` for raster `.tif` and `.tiff` output, `ccitt` for CCITT image streams, and `font/sfnt` and `vector` for text. v0.0.3 added `github.com/mrjoshuak/go-jpeg2000 v1.5.12` for JPEG2000 decode, which pulls `golang.org/x/sys` and `golang.org/x/text` indirectly. Flate, PNG, JPEG, and PDF parsing use the standard library. Adding a module requirement is a plan row of its own, with the reason written next to the requirement in `go.mod`, and `go mod tidy` writes `go.sum`.
 
 ## Reference install
 

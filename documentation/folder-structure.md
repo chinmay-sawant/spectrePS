@@ -2,7 +2,7 @@
 
 The module path is `github.com/chinmay-sawant/spectrePS`. The last element stays `spectrePS`, matching the GitHub repository. The public library is package `spectreps` in `spectreps/`. Its import path is `github.com/chinmay-sawant/spectrePS/spectreps`.
 
-The module root holds `go.mod`, `go.sum`, the Makefile, the license, and the prose. Library `.go` files live under `spectreps/` and `internal/`. `go.mod` names one third-party requirement, `golang.org/x/image`, for TIFF encoding and image scaling. `go.sum` records its checksum.
+The module root holds `go.mod`, `go.sum`, the Makefile, the license, and the prose. Library `.go` files live under `spectreps/` and `internal/`. `go.mod` names two direct third-party requirements, `golang.org/x/image` for TIFF encoding, image scaling, CCITT, and `sfnt` glyph parsing, and `github.com/mrjoshuak/go-jpeg2000` for JPEG2000 decode, plus the indirect `golang.org/x/sys` and `golang.org/x/text`. `go.sum` records their checksums.
 
 ## What is in the tree now
 

@@ -66,3 +66,6 @@ SHA-256:
 - `gs-argv-input.pdf` is the two-page red and green input for `TestGSEndToEnd`.
 - `line-bottom.ppm` is the expected PPM for the first raster case, the
   PostScript y-flip test in `spectreps/raster_test.go`.
+- `text.pdf` is a hand-written two-line Helvetica PDF, the same page the
+  extraction test builds. `spectreps text` prints `Hello` and `World`.
+  SHA-256 `fc427fccbd290e1748841b6266f0d4a9d8e045075631a019e5b2c18a4ebab111`.

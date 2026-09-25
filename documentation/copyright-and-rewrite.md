@@ -9,7 +9,7 @@ The detailed contracts stay in their own files. This note is the reason those fi
 | Ghostscript behavior we measured | `documentation/ghostscript-baseline.md` |
 | Jobs Spectre takes and leaves | `documentation/covered-and-not-covered.md` |
 | Tests for the jobs Spectre takes | `documentation/test.md` |
-| Work ledgers | `plans/v0.0.1/00-program.md` and `plans/v0.0.2/00-program.md` |
+| Work ledgers | `plans/v0.0.1/00-program.md`, `plans/v0.0.2/00-program.md`, and `plans/v0.0.3/00-program.md` |
 | Deferred checklist | `plans/v0.0.1/10-deferred.md` |
 | MIT text | `LICENSE` |
 

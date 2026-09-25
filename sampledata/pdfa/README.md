@@ -9,4 +9,4 @@ Run the proof:
 make pdfa-check
 ```
 
-The target skips when `verapdf` is not on PATH and excludes `negative/`, which holds deliberate failures.
+The target skips when `verapdf` is not on PATH and applies the same `negative/` exclusion filter as the UA-2 check.
