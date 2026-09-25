@@ -36,7 +36,8 @@ Levels are a Spectre policy, not a Ghostscript clone. Level 1 is lossless: Flate
 
 ### 1.3 Image XObjects
 
-- [ ] The reader opens `/Subtype /Image` XObjects with Flate and DCT streams. A DCT stream decodes through `image/jpeg` and re-encodes at the level's quality. Proof: `go test -count=1 ./internal/pdf -run TestImageXObject`.
+- [x] The reader opens `/Subtype /Image` XObjects with Flate and DCT streams. A DCT stream decodes through `image/jpeg`. Proof: `go test -count=1 ./internal/pdf -run TestImageXObject`, passed 2026-09-25.
+- [ ] The writer re-encodes a DCT stream at the level's quality. The reader half lands first.
 
 ### 1.4 Levels
 
