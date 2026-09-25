@@ -1,7 +1,7 @@
 # v0.0.3 - PDF to PostScript
 
 > **Parent:** `plans/v0.0.3/00-program.md` - program ledger
-> **Status:** not started.
+> **Status:** in progress.
 > **Estimated effort:** 3 to 4 days for the path phase
 
 ---
@@ -18,13 +18,13 @@ A new `internal/psout` recorder implements `graphics.Marker` and emits PostScrip
 
 ### 1.1 psout.Emit
 
-- [ ] `internal/psout` gains a recorder that implements `graphics.Marker` and emits `setrgbcolor` or `setgray`, `setlinewidth`, `m`/`l`, and `S`/`f`/`f*` in points, and an `Emit(ctx, content)` that runs `pdf.Paint` through it. Proof: `go test -count=1 ./internal/psout -run TestEmitPS` checks the operator text for a `re cm S` input.
+- [x] `internal/psout` gains a recorder that implements `graphics.Marker` and emits `setrgbcolor` or `setgray`, `setlinewidth`, `m`/`l`, and `S`/`f`/`f*` in points, and an `Emit(ctx, content)` that runs `pdf.Paint` through it. Proof: `go test -count=1 ./internal/psout -run TestEmitPS` exited 0 on 2026-09-25 and checks the operator text for a `re cm S` input.
 
 ## Phase 2: Writer and command
 
 ### 2.1 psout.Write
 
-- [ ] `internal/psout.Write(ctx, pages, opts)` frames pages with `%!PS-Adobe-3.0`, a fixed 612 by 792 box, one `showpage` per page, and no creation date. Two calls return equal bytes. Flate stays off until the interpreter reads `FlateDecode`. Proof: `go test -count=1 ./internal/psout -run TestWritePS` and `TestWritePSStable`.
+- [x] `internal/psout.Write(ctx, pages, opts)` frames pages with `%!PS-Adobe-3.0`, a fixed 612 by 792 box, one `showpage` per page, and no creation date. Two calls return equal bytes. Flate stays off until the interpreter reads `FlateDecode`. Proof: `go test -count=1 ./internal/psout -run TestWritePS` and `TestWritePSStable` exited 0 on 2026-09-25.
 
 ### 2.2 Public method and CLI
 
