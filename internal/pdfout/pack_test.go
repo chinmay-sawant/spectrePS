@@ -3,12 +3,24 @@ package pdfout
 import (
 	"bytes"
 	"testing"
+
+	"github.com/chinmay-sawant/spectrePS/internal/pdf"
 )
 
 func TestWritePackedObjects(t *testing.T) {
 	file := mustOpenPDF(t, copyFixture(t))
 	opt := CopyOptions{PackObjects: true}
 	out := mustCopy(t, file, opt)
+	if !bytes.Equal(out, mustCopy(t, file, opt)) {
+		t.Fatal("two calls differ")
+	}
+	checkPackedShape(t, out)
+	checkPackedRoundTrip(t, out)
+	checkPackedDigest(t, out, file)
+}
+
+func checkPackedShape(t *testing.T, out []byte) {
+	t.Helper()
 	if !bytes.HasPrefix(out, []byte(packedHeaderLine)) {
 		t.Fatal("bad header")
 	}
@@ -21,9 +33,10 @@ func TestWritePackedObjects(t *testing.T) {
 	if !bytes.Contains(out, []byte("/Size 9")) || !bytes.Contains(out, []byte("/Root 1 0 R")) {
 		t.Fatal("trailer size or root wrong")
 	}
-	if !bytes.Equal(out, mustCopy(t, file, opt)) {
-		t.Fatal("two calls differ")
-	}
+}
+
+func checkPackedRoundTrip(t *testing.T, out []byte) {
+	t.Helper()
 	reopened := mustOpenPDF(t, out)
 	if reopened.PageCount() != 1 {
 		t.Fatalf("pages %d", reopened.PageCount())
@@ -43,6 +56,12 @@ func TestWritePackedObjects(t *testing.T) {
 	if _, ok := reopened.RawObject(copyFontNum); ok {
 		t.Fatal("font is not packed")
 	}
+}
+
+// checkPackedDigest checks that the packed and classic forms write the same
+// /ID, the SHA-256 of the source bodies in object-number order.
+func checkPackedDigest(t *testing.T, out []byte, file *pdf.File) {
+	t.Helper()
 	parts := make([][]byte, 0, copyAnnotNum)
 	for num := 1; num <= copyAnnotNum; num++ {
 		body, ok := file.RawObject(num)

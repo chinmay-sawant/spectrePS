@@ -87,7 +87,7 @@ func rewriteLevel(ctx context.Context, file *pdf.File, level int) ([]byte, error
 	if err != nil {
 		return nil, asPDFJobError(err)
 	}
-	out, err := pdfout.WriteCopy(ctx, file, pdfout.CopyOptions{Overrides: overrides})
+	out, err := pdfout.WriteCopy(ctx, file, pdfout.CopyOptions{Overrides: overrides, PackObjects: false})
 	if err != nil {
 		return nil, asPDFJobError(err)
 	}

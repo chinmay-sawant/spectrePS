@@ -96,26 +96,37 @@ func TestCopySkipsContainers(t *testing.T) {
 		t.Fatalf("source pages %d", file.PageCount())
 	}
 	first := mustCopy(t, file, CopyOptions{})
-	second := mustCopy(t, file, CopyOptions{})
-	if !bytes.Equal(first, second) {
+	if !bytes.Equal(first, mustCopy(t, file, CopyOptions{})) {
 		t.Fatal("two calls differ")
 	}
-	if bytes.Contains(first, []byte("/Type /ObjStm")) || bytes.Contains(first, []byte("/Type /XRef")) {
+	checkContainerOutput(t, first)
+	checkContainerRoundTrip(t, first)
+}
+
+// checkContainerOutput proves the containers are absent from the bytes and the
+// digest, and that their object numbers became free rows.
+func checkContainerOutput(t *testing.T, out []byte) {
+	t.Helper()
+	if bytes.Contains(out, []byte("/Type /ObjStm")) || bytes.Contains(out, []byte("/Type /XRef")) {
 		t.Fatal("output copies a dead container")
 	}
-	if got := bytes.Count(first, []byte(xrefRow(0, 0, 'f'))); got != containerFreeRows {
+	if got := bytes.Count(out, []byte(xrefRow(0, 0, 'f'))); got != containerFreeRows {
 		t.Fatalf("free rows %d, want %d", got, containerFreeRows)
 	}
-	if !bytes.Contains(first, []byte("/Size 7")) || !bytes.Contains(first, []byte("/Root 1 0 R")) {
+	if !bytes.Contains(out, []byte("/Size 7")) || !bytes.Contains(out, []byte("/Root 1 0 R")) {
 		t.Fatal("trailer size or root wrong")
 	}
-	wantID(t, first,
+	wantID(t, out,
 		pdf.SerializeValue(containerCatalogValue()),
 		pdf.SerializeValue(containerPagesValue()),
 		[]byte(containerPageBody()),
 		[]byte(containerContentBody()),
 	)
-	reopened := mustOpenPDF(t, first)
+}
+
+func checkContainerRoundTrip(t *testing.T, out []byte) {
+	t.Helper()
+	reopened := mustOpenPDF(t, out)
 	if reopened.PageCount() != 1 {
 		t.Fatalf("output pages %d", reopened.PageCount())
 	}
