@@ -1,7 +1,7 @@
 # v0.0.3 - gs argv grammar
 
 > **Parent:** `plans/v0.0.3/00-program.md` - program ledger
-> **Status:** not started.
+> **Status:** implemented. All rows are checked. Lint and test passed on 2026-09-25.
 > **Estimated effort:** about 3 days for the written proposals, 10 to 15 days for the parser
 
 ---
@@ -18,40 +18,40 @@ The mode is an allowlist, not a Ghostscript clone. A switch is accepted when it 
 
 ### 1.1 Entry shape and policy
 
-- [ ] A new `documentation/gs-argv-grammar.md` states the entry shape (`spectreps gs ...`), the allowlist policy, the accept-and-ignore list, and the exit codes. Proof: the file exists and states the policy.
+- [x] A new `documentation/gs-argv-grammar.md` states the entry shape (`spectreps gs ...`), the allowlist policy, the accept-and-ignore list, and the exit codes. Proof (2026-09-25): `test -f documentation/gs-argv-grammar.md` exited 0, and the file carries the entry shape, the allowlist policy, the accept-and-ignore table, and the exit-code table in its own sections.
 
 ### 1.2 Device and output
 
-- [ ] The device section maps `-sDEVICE` names onto subcommands, including `tiff24nc`, and defines `raster -format ppm|png|jpeg|tiff` so the device wins over the `-o` suffix. The output section maps `-sOutputFile` and defines the rejected forms (`-`, `%stdout`, `%pipe%`, printf widths). Proof: the sections exist.
+- [x] The device section maps `-sDEVICE` names onto subcommands, including `tiff24nc`, and defines `raster -format ppm|png|jpeg|tiff` so the device wins over the `-o` suffix. The output section maps `-sOutputFile` and defines the rejected forms (`-`, `%stdout`, `%pipe%`, printf widths). Proof (2026-09-25): `grep -c '^## Devices$\|^## Output$' documentation/gs-argv-grammar.md` printed 2; the device table names `tiff24nc` and the output section lists the four rejected forms.
 
 ### 1.3 Page range and geometry
 
-- [ ] The page section maps `-dFirstPage` and `-dLastPage` onto `-pages`, including `-dFirstPage=N` to `-pages N-`, and names the rejected `-sPageList` forms. The geometry section maps `-r`, `-dDEVICEWIDTHPOINTS`, `-dDEVICEHEIGHTPOINTS`, and `-g` at 72 dpi. Proof: the sections exist.
+- [x] The page section maps `-dFirstPage` and `-dLastPage` onto `-pages`, including `-dFirstPage=N` to `-pages N-`, and names the rejected `-sPageList` forms. The geometry section maps `-r`, `-dDEVICEWIDTHPOINTS`, `-dDEVICEHEIGHTPOINTS`, and `-g` at 72 dpi. Proof (2026-09-25): `grep -c '^## Page range$\|^## Geometry$' documentation/gs-argv-grammar.md` printed 2; the page table carries `-dFirstPage=N` to `-pages N-` and the rejected `-sPageList` forms, and the geometry section states the 72 dpi rule for `-g`.
 
 ### 1.4 Batch, safety, input, and values
 
-- [ ] Sections cover the accept-and-ignore switches (`-dBATCH`, `-dNOPAUSE`, `-q`, `-dSAFER`, `-dFIXEDMEDIA`), the rejected safety switches, one input file or `-f`, the rejected `-c`, and the `-s`/`-d` value allowlist. Proof: the sections exist.
+- [x] Sections cover the accept-and-ignore switches (`-dBATCH`, `-dNOPAUSE`, `-q`, `-dSAFER`, `-dFIXEDMEDIA`), the rejected safety switches, one input file or `-f`, the rejected `-c`, and the `-s`/`-d` value allowlist. Proof (2026-09-25): `grep -c '^## Accept and ignore$\|^## Input$\|^## The -s and -d value allowlist$' documentation/gs-argv-grammar.md` printed 3; the sections name the five ignored switches, `-dNOSAFER` and `-dDELAYSAFER`, `-f`, `-c`, and the value allowlist table.
 
 ## Phase 2: Parser
 
 ### 2.1 Dispatch and scanner skeleton
 
-- [ ] `spectreps gs` dispatches into a new scanner in `internal/cli/gs.go`. With no allowlisted switch it rejects everything and exits 2. Proof: `go test -count=1 ./internal/cli -run TestGSRejectsAll`.
+- [x] `spectreps gs` dispatches into a new scanner in `internal/cli/gs.go`. With no allowlisted switch it rejects everything and exits 2. Proof (2026-09-25): `go test -count=1 ./internal/cli -run TestGSRejectsAll` exited 0 (`ok github.com/chinmay-sawant/spectrePS/internal/cli`); the test covers no arguments, no device, unknown switches, `-c`, `-dNOSAFER`, `-dDELAYSAFER`, an unknown device, stdin, `@file`, and a missing input.
 
 ### 2.2 Families
 
-- [ ] The scanner accepts `-sDEVICE` with `raster -format`, `-sOutputFile`, `-dFirstPage` and `-dLastPage`, `-r`, the point-size switches, the accept-and-ignore switches, and one input or `-f`, and routes them to the existing commands. The `-s`/`-d` value parser allows only known names. Proof: `go test -count=1 ./internal/cli -run TestGSDevice`, `TestRasterFormatFlag`, `TestGSOutputFile`, `TestGSPageRange`, `TestGSResolution`, `TestGSPageSize`, `TestGSIgnoredSwitches`, `TestGSInputFile`, and `TestGSParamSyntax`.
+- [x] The scanner accepts `-sDEVICE` with `raster -format`, `-sOutputFile`, `-dFirstPage` and `-dLastPage`, `-r`, the point-size switches, the accept-and-ignore switches, and one input or `-f`, and routes them to the existing commands. The `-s`/`-d` value parser allows only known names. Proof (2026-09-25): `go test -count=1 ./internal/cli -run TestGSDevice`, `TestRasterFormatFlag`, `TestGSOutputFile`, `TestGSPageRange`, `TestGSResolution`, `TestGSPageSize`, `TestGSIgnoredSwitches`, `TestGSInputFile`, and `TestGSParamSyntax` each exited 0 (`ok github.com/chinmay-sawant/spectrePS/internal/cli`).
 
 ### 2.3 Page list subset
 
-- [ ] `-sPageList` accepts a simple comma list of pages and ranges and maps it onto the `-pages` grammar. Even and odd selections, reverse order, and `LastPage < FirstPage` stay rejected. Proof: `go test -count=1 ./internal/cli -run TestGSPageList`.
+- [x] `-sPageList` accepts a simple comma list of pages and ranges and maps it onto the `-pages` grammar. Even and odd selections, reverse order, and `LastPage < FirstPage` stay rejected. Proof (2026-09-25): `go test -count=1 ./internal/cli -run TestGSPageList` exited 0 (`ok github.com/chinmay-sawant/spectrePS/internal/cli`); the rejected table covers `even`, `odd`, `3-1`, gaps, overlaps, open ranges, page 0, `@pages`, and the `-dFirstPage` combination.
 
 ## Phase 3: Closure
 
 ### 3.1 End-to-end and closure
 
-- [ ] A `ps2pdf`-shaped run with `-sDEVICE=pdfwrite` against a checked-in fixture writes a PDF that opens and rasterizes. Proof: `go test -count=1 ./internal/cli -run TestGSEndToEnd`.
-- [ ] `make lint` and `make test` pass. Outcomes recorded on the day.
+- [x] A `ps2pdf`-shaped run with `-sDEVICE=pdfwrite` against a checked-in fixture writes a PDF that opens and rasterizes. Proof (2026-09-25): `go test -count=1 ./internal/cli -run TestGSEndToEnd` exited 0 (`ok github.com/chinmay-sawant/spectrePS/internal/cli`). The fixture is `testdata/gs-argv-input.pdf`; the test opens the written PDF with `OpenPDF`, rasterizes both pages at 20 by 20 points and 72 dpi, and checks the red and green fills.
+- [x] `make lint` and `make test` pass. Outcomes recorded on the day. Proof (2026-09-25): `make lint` exited 0 (`gofmt` printed nothing, `golangci-lint run ./...` exited 0, `size-check` reported 0 over-limit files). `make test` exited 0. `go test -count=1 -p 4 ./...` exited 0 with every package `ok`.
 
 ## Dependencies
 

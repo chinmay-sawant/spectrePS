@@ -45,6 +45,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	return dispatch(args, stdout, stderr)
 }
 
+//nolint:cyclop // one case per command, and the list is the CLI
 func dispatch(args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "version":
@@ -65,6 +66,8 @@ func dispatch(args []string, stdout, stderr io.Writer) int {
 		return cmdValidate(args[1:], stderr)
 	case "compare":
 		return cmdCompare(args[1:], stdout, stderr)
+	case "gs":
+		return cmdGS(args[1:], stdout, stderr)
 	}
 	usage(stderr)
 	return exitUsage
@@ -73,8 +76,8 @@ func dispatch(args []string, stdout, stderr io.Writer) int {
 func usage(w io.Writer) {
 	fmt.Fprint(w, `spectreps version
 spectreps run [-w points] [-h points] [-r dpi] [-o path] file
-spectreps raster [-w points] [-h points] [-r dpi] [-jpegq quality]
-                [-tiffcompress none|deflate] [-pages range] -o path file
+spectreps raster [-w points] [-h points] [-r dpi] [-format ppm|png|jpeg|tiff]
+                [-jpegq quality] [-tiffcompress none|deflate] [-pages range] -o path file
 spectreps pdfimage [-w points] [-h points] [-r dpi] [-colorspace rgb|gray|cmyk] [-pages range] -o path file
 spectreps bbox [-w points] [-h points] [-r dpi] [-pages range] file
 spectreps inkcov [-w points] [-h points] [-r dpi] [-pages range] file
@@ -84,6 +87,7 @@ spectreps ps -o path file.pdf
 spectreps validate file
 spectreps compare bytes fileA fileB
 spectreps compare raster [-w points] [-h points] [-r dpi] [-pages range] [-o path] fileA fileB
+spectreps gs [-sDEVICE=name] [-sOutputFile=path] [switches] file
 `)
 }
 
@@ -120,6 +124,7 @@ func cmdRaster(args []string, stderr io.Writer) int {
 	outPath := set.String("o", "", "output path")
 	jpegq := set.Int("jpegq", jpegDefaultQuality, "jpeg quality, 1 to 100")
 	tiffcompress := set.String("tiffcompress", "deflate", "tiff compression, none or deflate")
+	format := set.String("format", "", "output format: ppm, png, jpeg, or tiff")
 	sel := pageFlag(set)
 	rest, code := parseSet(set, args)
 	if code != 0 {
@@ -132,6 +137,11 @@ func cmdRaster(args []string, stderr io.Writer) int {
 	encoding, ok := tiffEncodingFromFlag(*tiffcompress)
 	if !ok {
 		fmt.Fprintf(stderr, "spectreps: -tiffcompress wants none or deflate, got %q\n", *tiffcompress)
+		return exitUsage
+	}
+	formatChoice, ok := parseRasterFormat(*format)
+	if !ok {
+		fmt.Fprintf(stderr, "spectreps: -format wants ppm, png, jpeg, or tiff, got %q\n", *format)
 		return exitUsage
 	}
 	opt := spectreps.RunOptions{
@@ -159,7 +169,7 @@ func cmdRaster(args []string, stderr io.Writer) int {
 			Op: "RasterizePage", Msg: "rangecheck", Filename: "", Line: 0, Column: 0,
 		})
 	}
-	return writePages(*outPath, pages, clampJPEGQuality(*jpegq), encoding, stderr)
+	return writePages(*outPath, pages, clampJPEGQuality(*jpegq), encoding, formatChoice, stderr)
 }
 
 func cmdPDFImage(args []string, stderr io.Writer) int {
@@ -536,6 +546,7 @@ func writePages(
 	pages []spectreps.PageImage,
 	jpegQuality int,
 	tiffCompress tiffEncoding,
+	format rasterFormat,
 	stderr io.Writer,
 ) int {
 	if len(pages) > 1 && !strings.Contains(outPath, "%d") {
@@ -547,7 +558,7 @@ func writePages(
 		if strings.Contains(path, "%d") {
 			path = strings.ReplaceAll(path, "%d", strconv.Itoa(i+1))
 		}
-		payload, err := encodePage(path, page, jpegQuality, tiffCompress)
+		payload, err := encodePage(path, page, jpegQuality, tiffCompress, format)
 		if err != nil {
 			fmt.Fprintln(stderr, err.Error())
 			return exitIO
@@ -563,7 +574,25 @@ func writePages(
 	return exitOK
 }
 
-func encodePage(path string, page spectreps.PageImage, jpegQuality int, tiffCompress tiffEncoding) ([]byte, error) {
+func encodePage(
+	path string,
+	page spectreps.PageImage,
+	jpegQuality int,
+	tiffCompress tiffEncoding,
+	format rasterFormat,
+) ([]byte, error) {
+	switch format {
+	case rasterPPM:
+		return encodePPM(page), nil
+	case rasterPNG:
+		return encodePNG(page)
+	case rasterJPEG:
+		return encodeJPEG(page, jpegQuality)
+	case rasterTIFF:
+		return encodeTIFF(page, tiffCompress)
+	case rasterFromPath:
+		// The zero value follows the -o suffix below.
+	}
 	switch {
 	case strings.HasSuffix(path, ".png"):
 		return encodePNG(page)
