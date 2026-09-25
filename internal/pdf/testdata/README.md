@@ -31,3 +31,13 @@ SHA-256:
 pixel at `(x, y)` is `(x*32, y*32, (x+y)*16)`. The gray pixel at `(x, y)` is
 `(y*32 + x*4) % 256`. The decoder tests rebuild the limit case from the RGB
 fixture by rewriting the four SIZ size fields.
+
+# Text fixture
+
+`text-tj.ppm` is the page from `TestTjGlyphPixels`: 20 by 20 pixels at 72 dpi
+with the synthetic `A` glyph in black on white. Running
+`UPDATE_FIXTURES=1 go test ./internal/pdf -run TestTjGlyphPixels` rewrites it.
+The font bytes come from the `synthFont` helper in `font_fixture_test.go`, not
+from a checked-in font file.
+
+SHA-256: `text-tj.ppm` `f42fa88995735407f44c5146d579bdf53d0b1332c63a7f0628a85cf70037357a`

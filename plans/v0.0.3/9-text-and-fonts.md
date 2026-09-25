@@ -67,19 +67,23 @@ One glyph source serves both front ends: advances in 1/1000 em, outlines, encodi
 
 ### 3.1 Text state
 
-- [ ] `BT`, `ET`, `Tf`, `Td`, `TD`, `Tm`, `T*`, `Tc`, `Tw`, `Tz`, `TL`, and `Ts` maintain the text state, saved and restored by `q` and `Q`. Proof: `go test -count=1 ./internal/pdf -run TestTextState`.
+- [x] `BT`, `ET`, `Tf`, `Td`, `TD`, `Tm`, `T*`, `Tc`, `Tw`, `Tz`, `TL`, and `Ts` maintain the text state, saved and restored by `q` and `Q`. Proof: `go test -count=1 ./internal/pdf -run TestTextState`.
+  Run 2026-09-25: `ok github.com/chinmay-sawant/spectrePS/internal/pdf 0.002s`. The test checks each parameter, the Td/TD/Tm/T* matrices, the BT reset, and the q/Q save. `Q` does not restore the text matrices, which are not part of the graphics state.
 
 ### 3.2 Tj outlines
 
-- [ ] `Tj` transforms glyph outlines through the text rendering matrix and blends coverage into the pixmap. Proof: `go test -count=1 ./internal/pdf -run TestTjGlyphPixels` against a checked-in PPM fixture.
+- [x] `Tj` transforms glyph outlines through the text rendering matrix and blends coverage into the pixmap. Proof: `go test -count=1 ./internal/pdf -run TestTjGlyphPixels` against a checked-in PPM fixture.
+  Run 2026-09-25: `ok github.com/chinmay-sawant/spectrePS/internal/pdf 0.004s`. The fixture is `internal/pdf/testdata/text-tj.ppm`, locked by the test with `UPDATE_FIXTURES=1`; the translated page moves the marked box by four pixels. `Pixmap.DrawGlyph` blends the `x/image/vector` coverage mask.
 
 ### 3.3 Standard 14 painting
 
-- [ ] Standard-14 painting follows the policy from 1.1. Proof: `go test -count=1 ./internal/pdf -run TestStandard14Paint`.
+- [x] Standard-14 painting follows the policy from 1.1. Proof: `go test -count=1 ./internal/pdf -run TestStandard14Paint`.
+  Run 2026-09-25: `ok github.com/chinmay-sawant/spectrePS/internal/pdf 0.003s`. Painting a Helvetica glyph returns `invalidfont` and leaves the page white, while a nil marker with a sink still delivers the advance and the `A` Unicode.
 
 ### 3.4 Advances
 
-- [ ] `TJ` numbers, `'`, and `"` position the next glyph with the width and the character and word spacing. Proof: `go test -count=1 ./internal/pdf -run TestTJAdvance` and `TestQuoteShow`.
+- [x] `TJ` numbers, `'`, and `"` position the next glyph with the width and the character and word spacing. Proof: `go test -count=1 ./internal/pdf -run TestTJAdvance` and `TestQuoteShow`.
+  Run 2026-09-25: `TestTJAdvance` `ok .../internal/pdf 0.003s`; `TestQuoteShow` `ok .../internal/pdf 0.002s`. The tests cover TJ numbers, `Tc`, `Tw`, `Tz`, the `'` next-line move, and the `"` spacing set.
 
 ### 3.5 PostScript show
 

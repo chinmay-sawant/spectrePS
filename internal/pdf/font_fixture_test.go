@@ -302,3 +302,20 @@ func synthFontStream(t *testing.T, extra string) string {
 	t.Helper()
 	return streamBody("/Filter /FlateDecode "+extra, flateRaw(t, synthFont()))
 }
+
+// synthTextPage is one page whose /F1 is the synthetic embedded TrueType font
+// and whose content stream is content.
+func synthTextPage(t *testing.T, content string) *File {
+	t.Helper()
+	doc := newDoc()
+	doc.object("<< /Type /Catalog /Pages 2 0 R >>")
+	doc.object("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+	doc.object("<< /Type /Page /Parent 2 0 R /Contents 4 0 R " +
+		"/Resources << /Font << /F1 5 0 R >> >> >>")
+	doc.object(streamBody("", []byte(content)))
+	doc.object("<< /Type /Font /Subtype /TrueType /BaseFont /Synth " +
+		"/FirstChar 65 /Widths [600] /FontDescriptor 6 0 R >>")
+	doc.object("<< /Type /FontDescriptor /FontName /Synth /Flags 32 /FontFile2 7 0 R >>")
+	doc.object(synthFontStream(t, ""))
+	return mustOpen(t, doc.classic(""))
+}
