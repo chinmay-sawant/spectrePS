@@ -2,7 +2,7 @@
 
 Binary name `spectreps`, built at `bin/spectreps` by `make build`.
 
-The CLI is a caller of package `spectreps`. Flags exist to fill `RunOptions`, `RewriteOptions`, and file paths. Ghostscript's full switch grammar is not a goal of the current tags. A compatibility mode that accepts a `gs` argv can be proposed later in `plans/v0.0.1/10-deferred.md`.
+The CLI is a caller of package `spectreps`. Flags exist to fill `RunOptions`, `RewriteOptions`, and file paths. Ghostscript's full switch grammar is not a goal of the current tags. A compatibility mode that accepts a `gs` argv can be proposed later in `plans/v0.0.1/10-deferred.md`. The switches the current subcommands can already express are mapped in `documentation/gs-argv-mapping.md`; Spectre does not accept a `gs` argv.
 
 ## Commands
 
