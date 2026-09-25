@@ -26,6 +26,8 @@ Anti-aliasing is off in this ledger. There is no `TextAlphaBits` equivalent yet.
 
 A mismatch is exit code 1. It is not an interpreter error.
 
+The CLI gives both inputs the same `RunOptions` value and the same `-pages` selection, so their page sizes always agree. `compare raster` prints `mismatch pixel N`, or `mismatch length` when the selected page counts differ. It never prints `mismatch width` or `mismatch height`, which `CompareRaster` can still report to a library caller. `compare bytes` prints `mismatch byte N` or `mismatch length N`.
+
 ## Box and ink coverage
 
 `MeasureBox`, `MeasureInk`, and `MeasureInkAmount` read a finished `PageImage`. They do not paint a second time and they add no operator.
@@ -103,6 +105,8 @@ The output is not a copy of the input xref, and it is not expected to match `pdf
 The pass-through writer (`WriteCopy`) serves levels 1 through 5. It copies every object it does not replace: the page tree, `/Resources`, fonts, annotations, and metadata. A source `/Type /XRef` or `/Type /ObjStm` container is not copied, so its object number becomes a free xref row and no dead container bytes reach the output. An object stored in an object stream is written uncompressed through `SerializeValue`. An override replaces a whole object body by number. The trailer uses the source `/Root`, `/Size` as the highest in-use object number plus one, and `/ID` as the SHA-256 of the written bodies only, in object-number order. Two calls on the same source return equal buffers, and the file carries no `/Info` and no dates.
 
 `CopyOptions.PackObjects` selects the optional packed output: `%PDF-1.5`, every non-stream body in one Flate `/Type /ObjStm`, and a Flate `/Type /XRef` stream with `W [1 4 2]` in place of the classic xref. The `/ID` digest is computed over the unpacked bodies before packing, so it does not change with the mode. The levels 1 through 5 path does not select the packed output.
+
+Levels 1 and 2 stay at or under 610,034 bytes on `sampledata/compress/whatisthis.pdf`. That is the recorded ceiling. The source packs 78 non-stream objects, so the classic form is 13,693 bytes over the 596,341-byte input, and `PackObjects` stays opt-in.
 
 A tagged source is a separate case. Levels 1 through 5 copy the structure tree, the parent tree, MCIDs, `/Alt`, `/ActualText`, and `/Lang`, and the writer keeps the source header block, binary marker included, so a PDF 2.0 file with tags does not leave as a 1.4 shell. Level 0 returns `/tagged` instead of building a path-only file that dropped the tree. `ImagePDF` and `WriteImages` take page and image values and never see a source document, so the `pdfimage` command refuses a tagged PDF before it rasterizes.
 

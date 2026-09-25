@@ -145,6 +145,29 @@ func TestMeasureInkAmount(t *testing.T) {
 	}
 }
 
+func TestValidationMeasureEdges(t *testing.T) {
+	t.Run("black page amount", func(t *testing.T) {
+		got := spectreps.MeasureInkAmount(withGray(2, 2, 6, 0))
+		want := spectreps.Ink{R: 1, G: 1, B: 1}
+		if got != want {
+			t.Fatalf("MeasureInkAmount(black) = %+v, want %+v", got, want)
+		}
+	})
+	t.Run("one channel marks box", func(t *testing.T) {
+		img := withPixel(2, 2, 6, 0, 0, 255, 255, 254)
+		got, ok := spectreps.MeasureBox(img, 72)
+		if !ok || got != boxOf(0, 1, 1, 2) {
+			t.Fatalf("MeasureBox(one low channel) = %+v %v, want %+v true", got, ok, boxOf(0, 1, 1, 2))
+		}
+	})
+	t.Run("zero size amount", func(t *testing.T) {
+		got := spectreps.MeasureInkAmount(spectreps.PageImage{})
+		if got != (spectreps.Ink{}) {
+			t.Fatalf("MeasureInkAmount(zero image) = %+v, want zero Ink", got)
+		}
+	})
+}
+
 // blankImage is a white image with stride padding left at zero, so a scan that
 // reads padding as pixels reports a marked page.
 func blankImage(width, height, stride int) spectreps.PageImage {

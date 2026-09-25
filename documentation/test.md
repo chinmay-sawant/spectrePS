@@ -14,8 +14,8 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - `cmd/spectreps` imports `internal/cli` only. `internal/cli` imports `github.com/chinmay-sawant/spectrePS/spectreps`. No Go file imports `os/exec` or uses cgo.
 - Unknown command, unknown flag, and a missing input file exit 2.
 - A missing input path that the program tries to read exits 3.
-- `raster` and `rewrite` without `-o` exit 2, including while the job itself is still `ErrNotImplemented`.
-- A cancelled context passed to `RunPostScript`, `OpenPDF`, `RasterizePage`, `ExtractText`, `RewritePDF`, or `ImagePDF` returns `ctx.Err()` and no partial success.
+- `raster` and `rewrite` without `-o` exit 2.
+- A cancelled context passed to `RunPostScript`, `OpenPDF`, `RasterizePage`, `ExtractText`, `RewritePDF`, `ImagePDF`, or `ImagePDFColor` returns `ctx.Err()` and no partial success. Every job panics on a nil context with the package message.
 
 ## PostScript subset
 
@@ -38,7 +38,7 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - `showpage` appends one image and clears the path. Two `showpage` calls return two images.
 - A program that paints nothing and never calls `showpage` returns one blank page. A program that paints and never calls `showpage` returns one image.
 - `translate`, `scale`, `rotate`, and `concat` change where the same path lands. `gsave` then `grestore` restores the matrix and the path. `gsave` past depth 32 is `limitcheck`.
-- A page above 40000000 pixels, or a side above 20000 pixels, returns `limitcheck` and does not allocate that pixmap. A letter page at 600 dpi is over the cap. A letter page at 300 dpi is under it.
+- A page above 40000000 pixels, or a side above 20000 pixels, returns `limitcheck` and does not allocate that pixmap. A letter page at 600 dpi is 5100 by 6600, which is 33,660,000 pixels, under the cap. The area cap is crossed at 655 dpi. A letter page at 300 dpi is under it.
 - `spectreps raster -o out.ppm in.ps` writes a P6 file. The header is `P6\n{width} {height}\n255\n`. The body matches `PageImage.Pixels`.
 - `spectreps raster -o out.png in.ps` writes a PNG that decodes to the same pixels as the PPM from the same program. The test compares decoded pixels, not the PNG bytes.
 - `spectreps raster -o out.jpg in.ps` writes a JPEG that starts with the SOI bytes `FF D8` and decodes to the page geometry. `.jpeg` selects the same encoder; every other suffix falls back to PPM. The test decodes with `image/jpeg` and does not compare JPEG bytes.
@@ -65,7 +65,7 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - `CompareRaster` on two equal images sets `Equal` true, `Offset` -1, and an empty `Reason`.
 - Different `Width` sets `Reason` `width` and `Offset` -1. Different `Height` with equal width sets `Reason` `height`.
 - The first differing RGB byte sets `Reason` `pixel` and `Offset` to that byte index in row-major order. Bytes in the stride padding are ignored.
-- `spectreps compare raster` uses one `RunOptions` value and one `-pages` selection for both files. A `.pdf` input opens with `OpenPDF` and paints each selected page with `RasterizePage`; any other input uses `RunPostScript`. Equal pixels exit 0. A mismatch exits 1 and prints `mismatch pixel N` or `mismatch width` on stdout. Different selected page counts print `mismatch length` and exit 1. stderr is empty.
+- `spectreps compare raster` uses one `RunOptions` value and one `-pages` selection for both files. A `.pdf` input opens with `OpenPDF` and paints each selected page with `RasterizePage`; any other input uses `RunPostScript`. Equal pixels exit 0. A mismatch exits 1 and prints `mismatch pixel N`. Different selected page counts print `mismatch length` and exit 1. Both inputs share the geometry, so `mismatch width` and `mismatch height` are library-only reasons and never reach the CLI. stderr is empty.
 - The compare command does not start `gs`.
 
 ## PDF open and rasterize
@@ -100,7 +100,7 @@ External tests use `package spectreps_test`, so they only see the exported API.
 - Two `RewritePDF` calls at any level on the same input return buffers `CompareFiles` reports equal. The output contains no `CreationDate` or `ModDate`.
 - The rewritten bytes are not required to equal the input bytes, and they are not compared with Ghostscript `pdfwrite`.
 - `spectreps rewrite` without `-o` exits 2. `-compress=false` selects the uncompressed level 0 option. `-level 1` through `-level 5` succeed on a text stream that level 0 rejects with `undefined`. A successful rewrite exits 0.
-- `sampledata/compress/whatisthis.pdf` and `sampledata/compress/path.pdf` rewrite at every level with the input page count. The JPEG image decodes, the caps hold, and level 5 is the smallest of the five. The test skips when `sampledata/` is absent.
+- `sampledata/compress/whatisthis.pdf` and `sampledata/compress/path.pdf` rewrite at every level with the input page count. The JPEG image decodes, the caps hold, and level 5 is the smallest of the five. The level 1 and 2 sizes for `whatisthis.pdf` stay at or under the recorded 610,034-byte ceiling. The test skips when `sampledata/` is absent.
 
 ## PDF/A-4 profile preflight
 

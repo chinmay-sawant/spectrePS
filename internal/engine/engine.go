@@ -1,13 +1,5 @@
 package engine
 
-import (
-	"context"
-	"errors"
-)
-
-// ErrNotImplemented is the job sentinel. Package spectreps re-exports this value.
-var ErrNotImplemented = errors.New("spectreps: not implemented")
-
 // Instance is one session. There is no process-wide singleton.
 type Instance struct {
 	closed bool
@@ -25,16 +17,4 @@ func (in *Instance) Close() error {
 	}
 	in.closed = true
 	return nil
-}
-
-// Ready checks the context before a job that this tag does not run yet.
-// A nil context panics. A done context returns ctx.Err().
-func (in *Instance) Ready(ctx context.Context) error {
-	if ctx == nil {
-		panic("spectreps: nil context")
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return ErrNotImplemented
 }

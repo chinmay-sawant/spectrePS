@@ -20,6 +20,12 @@ import (
 // squarePath is a 10 by 10 filled square on a 20 by 20 page.
 const squarePath = "0 0 moveto 10 0 lineto 10 10 lineto 0 10 lineto closepath fill"
 
+// whatisthisLevel12Ceiling is the accepted level 1 and 2 output size for
+// whatisthis.pdf, measured on 2026-09-25 after the container skip. The
+// source packs 78 non-stream objects, so the classic writer expands them;
+// the packed writer reaches 596,491 bytes and stays opt-in.
+const whatisthisLevel12Ceiling = 610034
+
 func callRun(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
@@ -286,6 +292,10 @@ func checkSampleSizes(t *testing.T, sizes []int, hasImage bool) {
 	}
 	if hasImage && sizes[maxRewriteLevel] >= sizes[1] {
 		t.Fatalf("level 5 wrote %d bytes, level 1 wrote %d", sizes[maxRewriteLevel], sizes[1])
+	}
+	if hasImage && (sizes[1] > whatisthisLevel12Ceiling || sizes[2] > whatisthisLevel12Ceiling) {
+		t.Fatalf("whatisthis.pdf: level 1 = %d bytes, level 2 = %d bytes, ceiling = %d",
+			sizes[1], sizes[2], whatisthisLevel12Ceiling)
 	}
 }
 
