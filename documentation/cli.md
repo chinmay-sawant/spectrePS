@@ -19,7 +19,7 @@ spectreps compare bytes fileA fileB
 spectreps compare raster [options] fileA fileB
 ```
 
-`version` prints `0.0.1` until the first tag that bumps `Version`, then prints that constant. Exit 0.
+`version` prints `0.0.2`. Exit 0.
 
 Shared options for `run`, `raster`, `pdfimage`, `bbox`, `inkcov`, and `compare raster`:
 

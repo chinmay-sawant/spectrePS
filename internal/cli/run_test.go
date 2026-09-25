@@ -65,7 +65,7 @@ func writePair(t *testing.T, a, b []byte) (string, string) {
 }
 
 func TestVersion(t *testing.T) {
-	want(t, []string{"version"}, 0, "0.0.1\n", "")
+	want(t, []string{"version"}, 0, "0.0.2\n", "")
 	wantCode(t, []string{"version", "extra"}, 2)
 }
 

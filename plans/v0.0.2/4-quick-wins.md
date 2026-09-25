@@ -1,6 +1,6 @@
-# v0.0.3 - Quick wins
+# v0.0.2 - Quick wins
 
-> **Parent:** `plans/v0.0.3/00-program.md` - future ledger
+> **Parent:** `plans/v0.0.2/00-program.md` - release ledger
 > **Status:** implemented. All rows are checked. Lint and test passed on 2026-09-25.
 > **Estimated effort:** days per phase. Phase 4 is a document.
 
@@ -73,6 +73,6 @@ The `gs` argv item is a written switch map, not code.
 
 ## Not in this file
 
-- `cm`, the text operators, and the object pass-through writer. They are rows 1.1 and 1.2 in `2-pdf-compression.md`.
+- `cm`, the text operators, and the object pass-through writer. They are rows 1.1 and 1.2 in `5-pdf-compression.md`.
 - `ink_cov` weighted amounts. Reason: Ghostscript prints `ink_cov` as a percent and its manual example disagrees with its source, so Spectre needs a named weighting model before any code. Next gate: a written model.
-- DCT, CCITT, and downsampling. They are rows 1.3 and 1.4 in `2-pdf-compression.md`.
+- DCT, CCITT, and downsampling. They are rows 1.3 and 1.4 in `5-pdf-compression.md`.

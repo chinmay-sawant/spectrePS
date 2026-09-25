@@ -12,7 +12,7 @@ Rows here are `[~]` on purpose. They are not a second active checklist. When one
 
 ## Executive summary
 
-Ghostscript 9.55.0 exposes hundreds of printer devices, plus PCL and XPS in sister products. Spectre's v0.0.1 release is the PostScript subset, the path-only PDF, one pixmap, Flate rewrite, validate, and byte compare. v0.0.2 added the page summaries, JPEG raster, and the bitmap PDF. v0.0.3 added TIFF raster, page ranges, gray and CMYK image PDF, the `gs` switch map, the object pass-through writer, and compression levels 1 to 5. What waits now is painting `Do`, CCITT and JPEG2000 decoding, `ink_cov` weights, text, PDF/A, PostScript output, the full `gs` grammar, and the printer languages.
+Ghostscript 9.55.0 exposes hundreds of printer devices, plus PCL and XPS in sister products. Spectre's v0.0.1 release is the PostScript subset, the path-only PDF, one pixmap, Flate rewrite, validate, and byte compare. v0.0.2 added the page summaries, JPEG and TIFF raster, page ranges, gray and CMYK image PDF, the `gs` switch map, the object pass-through writer, and compression levels 1 to 5. What waits now is painting `Do`, CCITT and JPEG2000 decoding, `ink_cov` weights, text, PDF/A, PostScript output, the full `gs` grammar, and the printer languages.
 
 ## Phase 10: Deferred
 
@@ -27,7 +27,7 @@ Ghostscript 9.55.0 exposes hundreds of printer devices, plus PCL and XPS in sist
 
 - [~] PDF/A-1b, PDF/A-2b, PDF/A-3b creation. Reason: needs output intents, metadata, and a finished rewrite. Creating the file is not a conformance certificate, and `PDFACompatibilityPolicy` 0 in Ghostscript can attach PDF/A metadata to a non-compliant file. Spectre will not copy that ambiguity. Next gate: a new plan file that states which PDF/A level and which policy.
 - [~] PDF to PostScript via a `ps2write` style device. Reason: it is another high-level device on the same marks. Next gate: a new plan file.
-- [~] Full `gs` argv grammar. Reason: the subcommands map to library methods, and a second flag grammar would fork the CLI. A bounded switch map landed in v0.0.3 (`plans/v0.0.3/1-quick-wins.md`, phase 4); the full grammar stays out. Next gate: a written proposal per switch family.
+- [~] Full `gs` argv grammar. Reason: the subcommands map to library methods, and a second flag grammar would fork the CLI. A bounded switch map landed in v0.0.2 (`plans/v0.0.2/4-quick-wins.md`, phase 4); the full grammar stays out. Next gate: a written proposal per switch family.
 
 ### 10.3 Out of product
 
@@ -38,13 +38,13 @@ Ghostscript 9.55.0 exposes hundreds of printer devices, plus PCL and XPS in sist
 - [x] `pdfimage24` style output, a page raster wrapped in a PDF. Landed in v0.0.2 (`plans/v0.0.2/3-pdfimage.md`).
 - [x] JPEG encoder. Landed in v0.0.2 (`plans/v0.0.2/2-jpeg-raster.md`).
 - [x] `bbox` and `inkcov` devices. Landed in v0.0.2 (`plans/v0.0.2/1-bbox-inkcov.md`).
-- [x] DCT encode and downsample on rewrite. Landed in v0.0.3 (`plans/v0.0.3/2-pdf-compression.md`, rows 1.3 and 1.4).
-- [x] PDF compression levels 1 to 5 over any PDF the reader can open. Landed in v0.0.3 (`plans/v0.0.3/2-pdf-compression.md`).
-- [x] TIFF raster. Landed in v0.0.3 (`plans/v0.0.3/1-quick-wins.md`, phase 2).
-- [x] Gray and CMYK image PDF (`pdfimage8`, `pdfimage32` style). Landed in v0.0.3 (`plans/v0.0.3/1-quick-wins.md`, phase 3).
-- [x] Page selection for the raster and PDF jobs. Landed in v0.0.3 (`plans/v0.0.3/1-quick-wins.md`, phase 1).
-- [x] PDF inputs in `compare raster`. Landed in v0.0.3 (`plans/v0.0.3/1-quick-wins.md`, phase 1).
-- [x] `gs` argv compatibility mode, bounded switch map. Landed in v0.0.3 (`documentation/gs-argv-mapping.md`).
+- [x] DCT encode and downsample on rewrite. Landed in v0.0.2 (`plans/v0.0.2/5-pdf-compression.md`, rows 1.3 and 1.4).
+- [x] PDF compression levels 1 to 5 over any PDF the reader can open. Landed in v0.0.2 (`plans/v0.0.2/5-pdf-compression.md`).
+- [x] TIFF raster. Landed in v0.0.2 (`plans/v0.0.2/4-quick-wins.md`, phase 2).
+- [x] Gray and CMYK image PDF (`pdfimage8`, `pdfimage32` style). Landed in v0.0.2 (`plans/v0.0.2/4-quick-wins.md`, phase 3).
+- [x] Page selection for the raster and PDF jobs. Landed in v0.0.2 (`plans/v0.0.2/4-quick-wins.md`, phase 1).
+- [x] PDF inputs in `compare raster`. Landed in v0.0.2 (`plans/v0.0.2/4-quick-wins.md`, phase 1).
+- [x] `gs` argv compatibility mode, bounded switch map. Landed in v0.0.2 (`documentation/gs-argv-mapping.md`).
 
 ## Dependencies
 
