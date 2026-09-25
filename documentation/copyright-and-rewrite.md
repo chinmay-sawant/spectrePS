@@ -58,7 +58,7 @@ Byte compare and pixel compare are Spectre commands. Ghostscript 9.55.0 has no `
 ## Ghostscript jobs Spectre leaves
 
 - Full PostScript LanguageLevel 3, including filters other than Flate, `%pipe%`, and `%disk`.
-- Full PDF 1.7 and PDF 2.0, including transparency, optional content, encryption, and passwords.
+- Full PDF 1.7 and PDF 2.0, including encryption and passwords. Transparency, the default optional content configuration, image masks, `/Mask`, and `/Decode` landed in v0.0.4; alternate OCG configurations and full color management stay out.
 - OCR (`pdfocr`, Tesseract). Font programs beyond the subset in `documentation/fonts.md`: bare CFF, Type 3, vertical writing, color fonts, and variable fonts.
 - Font embedding and subsetting.
 - PDF/A-1b, PDF/A-2b, PDF/A-3b, and PDF/A-4e creation. The PDF/A-4 and 4f claim landed as a rewrite option with a profile preflight.
@@ -117,7 +117,7 @@ ISO's own text on PDF 2.0 says some elements of the document may be the subject 
 
 Ghostscript. The search did not turn up an Artifex patent that reserves "interpret PostScript," "rasterize a page," or "write a PDF."
 
-The current Spectre slice reads paths, text, fonts, and Flate, DCT, CCITT, and JPEG2000 images through the Go decoders and `golang.org/x/image`, and it writes PostScript for path pages. It leaves out font programs beyond `documentation/fonts.md`, LZW, transparency, and color management. Ghostscript's own manual says `pdfwrite` ignores LZW requests. Adding a codec later is a new patent question even when a manual describes that codec.
+The current Spectre slice reads paths, text, fonts, and Flate, DCT, CCITT, and JPEG2000 images through the Go decoders and `golang.org/x/image`, paints transparency and the default optional content configuration, and writes PostScript for path pages. It leaves out font programs beyond `documentation/fonts.md`, full color management, and alternate optional content configurations. Ghostscript's own manual says `pdfwrite` ignores LZW requests. Adding a codec later is a new patent question even when a manual describes that codec.
 
 A letter or a lawsuit can still arrive. An expired patent, or a royalty-free license for a compliant PDF implementation, is why a claim about those particular Adobe patents would be weak. This note does not say every possible patent has been checked.
 

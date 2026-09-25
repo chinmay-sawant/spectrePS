@@ -72,6 +72,16 @@ func (p *Pixmap) DrawImageClipped(clips []Clip, pic image.Image, ctm Matrix, sca
 	p.restoreOutside(clips, rect, before)
 }
 
+// CompositeGroupClipped composites one rendered transparency group and puts
+// back every pixel outside the clip. The snapshot covers the page, because a
+// group can touch any pixel the page holds.
+func (p *Pixmap) CompositeGroupClipped(clips []Clip, group *Pixmap, alpha float64, mode BlendMode) {
+	rect := image.Rect(0, 0, p.w, p.h)
+	before := p.snapshotRect(rect)
+	p.CompositeGroup(group, alpha, mode)
+	p.restoreOutside(clips, rect, before)
+}
+
 // pathRect returns the pixel rectangle that holds every point plus pad.
 // The rectangle is clamped to the page.
 func (p *Pixmap) pathRect(pts []Point, pad float64) image.Rectangle {
@@ -129,26 +139,38 @@ func (p *Pixmap) imageRect(pic image.Image, ctm Matrix, scale float64) (image.Re
 	return image.Rect(col0, row0, col1, row1), true
 }
 
+// rectSnapshot holds the pixel and coverage bytes of one rectangle for a
+// later restore. A clipped-out mark must put back both planes, or a group
+// composite would read the color of a pixel that was clipped away.
+type rectSnapshot struct {
+	pix   []byte
+	alpha []byte
+}
+
 // snapshotRect copies one pixel rectangle for a later restore. The rectangle
 // is clamped to the page and row major.
-func (p *Pixmap) snapshotRect(rect image.Rectangle) []byte {
+func (p *Pixmap) snapshotRect(rect image.Rectangle) rectSnapshot {
 	rect = rect.Intersect(image.Rect(0, 0, p.w, p.h))
 	if rect.Empty() {
-		return nil
+		return rectSnapshot{pix: nil, alpha: nil}
 	}
 	rowLen := rect.Dx() * bytesPerPixel
-	out := make([]byte, 0, rowLen*rect.Dy())
+	out := rectSnapshot{
+		pix:   make([]byte, 0, rowLen*rect.Dy()),
+		alpha: make([]byte, 0, rect.Dx()*rect.Dy()),
+	}
 	for row := rect.Min.Y; row < rect.Max.Y; row++ {
 		start := row*p.w*bytesPerPixel + rect.Min.X*bytesPerPixel
-		out = append(out, p.pix[start:start+rowLen]...)
+		out.pix = append(out.pix, p.pix[start:start+rowLen]...)
+		out.alpha = append(out.alpha, p.alpha[row*p.w+rect.Min.X:row*p.w+rect.Max.X]...)
 	}
 	return out
 }
 
 // restoreOutside puts back every snapshot pixel whose center misses the clip.
-func (p *Pixmap) restoreOutside(clips []Clip, rect image.Rectangle, before []byte) {
+func (p *Pixmap) restoreOutside(clips []Clip, rect image.Rectangle, before rectSnapshot) {
 	rect = rect.Intersect(image.Rect(0, 0, p.w, p.h))
-	if before == nil || rect.Empty() {
+	if before.pix == nil || rect.Empty() {
 		return
 	}
 	subs, rules := clipSubpaths(clips)
@@ -162,7 +184,10 @@ func (p *Pixmap) restoreOutside(clips []Clip, rect image.Rectangle, before []byt
 			}
 			dst := row*p.w*bytesPerPixel + col*bytesPerPixel
 			src := (row-rect.Min.Y)*rowLen + (col-rect.Min.X)*bytesPerPixel
-			copy(p.pix[dst:dst+bytesPerPixel], before[src:src+bytesPerPixel])
+			copy(p.pix[dst:dst+bytesPerPixel], before.pix[src:src+bytesPerPixel])
+			alphaDst := row*p.w + col
+			alphaSrc := (row-rect.Min.Y)*rect.Dx() + (col - rect.Min.X)
+			p.alpha[alphaDst] = before.alpha[alphaSrc]
 		}
 	}
 }

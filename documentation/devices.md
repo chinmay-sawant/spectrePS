@@ -114,7 +114,7 @@ Any other filter or bit depth returns `undefined`, as does a Flate stream whose 
 - CalRGB as RGB and CalGray as gray. The white point, gamma, and matrix entries are ignored.
 - Separation and DeviceN. The tint transform evaluates as a type 2 exponential interpolation or a type 4 PostScript calculator function. A type 0 sampled or type 3 stitching function is undefined.
 
-A device sample scales by 1/255, and an Indexed sample is the index. Any other space, a malformed array, and a cycle through indirect references return `undefined` with the operator name, `Image` or `Do`.
+A device sample scales by 1/255, and an Indexed sample is the index. A `/Decode` array remaps each sample to `low + sample*(high-low)` before the conversion, for gray, RGB, CMYK, and Indexed spaces; an Indexed space refuses a decode array. Any other space, a malformed array, a malformed decode array, and a cycle through indirect references return `undefined` with the operator name, `Image` or `Do`. An image with `/ImageMask true` skips the color space entirely and decodes to one bit per sample.
 
 An LZW image decodes through `DecodeLZWImageValue` for the level 2 writer. `DecodeImage` itself still returns `undefined in LZWDecode`, because its table is the four forms above.
 
@@ -122,9 +122,9 @@ An LZW image decodes through `DecodeLZWImageValue` for the level 2 writer. `Deco
 
 The content interpreter resolves `Do` in the page's `/XObject` resources. `/Resources` inherits from the nearest `/Pages` ancestor, and the `/XObject` subdictionary, the image entry, and the image itself may each be indirect. An image decodes once per name per painted page.
 
-An image paints into its unit square: `(0,0)` is the lower left and `(1,1)` is the upper right. The square maps through the current matrix (`cm`), then scales by the paint scale. The pixmap stamps it with nearest-neighbor sampling, image row 0 is the top of the square, and the alpha channel is ignored. A CMYK, Indexed, Separation, or ICCBased image decodes to the preview RGB before it stamps, so `DrawImage` receives RGB pixels. `Marker.DrawImage(pic image.Image, ctm Matrix, scale float64)` is the device seam, and the pixmap and the rewrite recorder implement it.
+An image paints into its unit square: `(0,0)` is the lower left and `(1,1)` is the upper right. The square maps through the current matrix (`cm`), then scales by the paint scale. The pixmap stamps it with nearest-neighbor sampling, image row 0 is the top of the square, and the source alpha composites the pixel. A CMYK, Indexed, Separation, or ICCBased image decodes to the preview RGB before it stamps, so `DrawImage` receives RGB pixels. `Marker.DrawImage(pic image.Image, ctm Matrix, scale float64)` is the device seam, and the pixmap and the rewrite recorder implement it.
 
-A missing name, an entry whose `/Subtype` is not `/Image`, an image with an `/SMask`, and a decode error all return `undefined` with the `Do` operator name. Level 0 of `RewritePDF` cannot write image pixels, so a page that paints one returns `undefined in Do` instead of dropping or outlining the image. The pass-through writer at levels 1 through 5 copies the image unchanged.
+A missing name, an entry whose `/Subtype` is not `/Image`, and a decode error all return `undefined` with the `Do` operator name. An image `/SMask`, a color-key `/Mask`, a stencil `/Mask`, and an `/ImageMask` decode and paint through the alpha channel. Level 0 of `RewritePDF` cannot write image pixels, so a page that paints one returns `undefined in Do` instead of dropping or outlining the image. The pass-through writer at levels 1 through 5 copies the image unchanged.
 
 `Do` on a `/Subtype /Form` XObject runs the form content stream as content. `/Matrix` concatenates into the current matrix, `/BBox` becomes a clip on the form's marks, and a form `/Resources` subdictionary replaces the current resources. A form with no `/Resources` inherits the page resources. The form runs inside an implicit `q`/`Q`, so width, color, clip, resources, and text state return when it ends. Nested forms stop at depth 32 with `limitcheck` in `Do`. A form with no stream, no `/BBox`, a malformed `/Matrix` or `/BBox`, or a `/FormType` other than 1 returns `undefined` in `Do`. The level 0 recorder cannot express the box clip, so a page that runs a form returns `undefined in Do`.
 
@@ -141,6 +141,16 @@ A missing name, an entry whose `/Subtype` is not `/Image`, an image with an `/SM
 `BMC`, `BDC`, `EMC`, `MP`, and `DP` parse. Nesting caps at 64 with `limitcheck`, an unmatched `EMC` is `syntaxerror in content`, and `BX` skips content through the matching `EX`. An unterminated compatibility section is `syntaxerror in content`, and an `EX` outside a section is ignored. A page with marked content rasterizes and extracts as if the markers were absent.
 
 The read seams are separate from the number. `PaintOptions.MarkedContent` receives `BeginMarkedContent` at `BMC` and `BDC` and `EndMarkedContent` at the matching `EMC`, both at the same depth, with 1 for the outermost sequence. The properties value is the resolved `/Properties` entry for a name operand, the dictionary for an inline operand, and null for `BMC`. `MP` and `DP` fire no event because they have no `EMC`. `TextOptions.Runs` receives one `TextRun` per `Tj`, `TJ`, `'`, or `"` with the shown bytes, the font resource name, the size, the text and line matrices, rise, spacing, and horizontal scale. For `TJ` the bytes are the string elements concatenated and the numbers are omitted. `ImageNameMarker` receives the resource name and the resolved XObject dictionary before an image decodes. A nil or typed-nil sink is ignored.
+
+### Optional content
+
+The catalog `/OCProperties /D` dictionary is read. An optional content group whose object number appears in `/OFF` is hidden, and every other group is visible. A `BDC` whose properties name a hidden group opens a skip: the marked-content frame and its sink events still open and close in order, but the painting operators between them never run. A `/OC` entry on an image or form XObject is checked before decode, and a hidden XObject is skipped as if the `Do` were absent. A membership dictionary with `/OCGs` evaluates its members, and `/P` selects the policy: `/AnyOn` (the default) is hidden only when every member is off, `/AllOn` when any is off, `/AllOff` when any is on, and `/AnyOff` when every member is on. Alternate configurations, the `/AS` usage map, and the visibility flag stay out, a deviation recorded in `covered-and-not-covered.md`.
+
+### Content color operators
+
+`K` and `k` select DeviceCMYK and set the four components. `CS` and `cs` pop a space name, resolve it in `/Resources /ColorSpace` first and as a device name second, and reset the components to 0. `SC` and `sc` pop one value per component, and `SCN` and `scn` do the same but refuse a trailing pattern name with `undefined`. The stroke and non-stroking forms share one current color in this subset, so an `RG` color still fills a path. The current space and components survive `q`/`Q`.
+
+A mark reaches the RGB pixmap through the preview conversion the reading-side rules use. For DeviceCMYK the rule is frozen next to the writer's rule in the image color spaces section: `r = (1-C)*(1-K)`, and the matching green and blue terms. A Separation or DeviceN space evaluates its tint transform and previews the alternate space.
 
 ## Rewrite
 
@@ -350,7 +360,34 @@ type AlphaMarker interface {
 
 A fill or stroke mark composites as `out = blend(src, dst)*a + dst*(1-a)` per channel, rounded to the nearest byte. `SetFillAlpha` and `SetStrokeAlpha` clamp to 0 through 1, and the pixmap starts at alpha 1 and `BlendNormal`. The 12 separable modes use the ISO 32000-1 table 136 formulas. The four non-separable modes, Hue, Saturation, Color, and Luminosity, have no constant here. `blendModeName` in `internal/pdf` maps a `/BM` name to the enum and returns false for those four, so the PDF layer refuses them by name.
 
-The rewrite recorder does not implement `AlphaMarker`, so `Emit` keeps refusing a page that needs an alpha or blend effect. The `gs` operator and the `/ExtGState` lookup are a later phase-2 row, so no content operator sets the seam yet.
+The rewrite recorder does not implement `AlphaMarker`, so `Emit` keeps refusing a page that needs an alpha or blend effect. The `gs` operator is the one content operator that sets the seam: `/CA` sets the stroke alpha, `/ca` the fill alpha, and `/BM` the blend mode, and `q`/`Q` save and restore all three. A recorder marker without the seam turns any of those entries into `undefined in gs`, so level 0 never drops the effect.
+
+## Transparency groups and soft masks
+
+Two more optional seams sit beside `AlphaMarker`. A marker that cannot host them refuses the operator by name, exactly as the recorder refuses a clip.
+
+```go
+type SoftMaskMarker interface {
+    SetSoftMask(mask []byte)
+}
+
+type GroupMarker interface {
+    PageSize() (int, int)
+    CompositeGroup(group *Pixmap, alpha float64, mode BlendMode)
+}
+```
+
+The scratch page a group or a soft mask renders into has the page pixel size, and it obeys the same caps as a page: 40,000,000 pixels and a 20,000 pixel side, with `limitcheck` when crossed.
+
+A Form XObject with `/Group << /S /Transparency >>` renders into a scratch `Pixmap` that starts transparent, then composites once through `CompositeGroup`. The group alpha comes from `/CA`, the blend mode from the current `/BM`, and the current fill alpha multiplies the coverage. `/CS` must resolve through the reading-side color space rules, and `/I` and `/K` must be booleans. This subset composites every supported group once into the scratch, which is the isolated shape; `/I false` and `/K true` are read and validated but not given a different composite, a deviation recorded here. A marker without `GroupMarker` refuses the form with `undefined in Do`.
+
+An `/ExtGState /SMask` entry with `/S /Alpha` or `/S /Luminosity` and a `/G` Form XObject builds a per-pixel coverage plane applied to later marks. `/Alpha` takes the group coverage. `/Luminosity` takes the ISO 32000-1 weighted sum `0.30*R + 0.59*G + 0.11*B` of the group composited on black, times the coverage, so an untouched pixel stays 0. `/TR` carries `/Identity` only, `/None` clears the mask, and any other subtype, transfer function, or entry refuses with `undefined in gs`. A marker without `SoftMaskMarker` refuses the same way. The coverage plane is sampled on the device pixel grid the group was rendered with; a later change to the CTM does not move it, a deviation from the ISO 32000-1 mask space.
+
+## Image masks, soft masks, and Decode
+
+An image dictionary with `/ImageMask true` decodes at one bit per sample, most significant bit first, with `/Decode` defaulting to `[0 1]`. A decoded sample at or above 0.5 paints the current fill color; `Decode [1 0]` inverts the mask. The mask caches as an alpha plane and is tinted at each `Do`, because the fill color can change between paints. Only `/FlateDecode` image masks decode in this tag; a CCITT or DCT image mask refuses with that filter name.
+
+An image `/SMask` decodes to an alpha plane, and `/Mask` accepts two forms: a color-key array of `2n` sample ranges, where a pixel inside every range is masked out, and a stream used as a stencil. A soft mask stream decodes as an 8-bit gray image or as a bilevel image mask. A `/Decode` array on a Flate image remaps each sample before the color conversion, for gray, RGB, CMYK, and Indexed spaces; an Indexed space refuses a `/Decode` array because its sample is a table index. A `/Matte` entry is accepted and ignored, a deviation: the matte color is not removed before compositing. The composed image carries the coverage in its alpha channel, and `Pixmap.DrawImage` composites it, so a masked-out pixel leaves the page. The level 0 recorder still refuses any image with `undefined in Do`.
 
 ## Shared device interface inside the module
 

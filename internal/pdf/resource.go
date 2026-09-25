@@ -36,8 +36,12 @@ type Resources struct {
 	Fonts map[string]*Font
 	// ExtGStates holds the /ExtGState subdictionary by name, resolved.
 	ExtGStates map[string]Value
-	// Properties holds the /Properties subdictionary by name, resolved.
+	// Properties holds the /Properties subdictionary by name. An entry keeps
+	// its indirect reference so the optional content check can compare the
+	// object number against /OCProperties /D /OFF; the consumer resolves it.
 	Properties map[string]Value
+	// Colors holds the /ColorSpace subdictionary by name, resolved.
+	Colors map[string]Value
 	// file resolves the resources of a nested form XObject. It is nil for a
 	// Resources value built without a file, and a form that names its own
 	// resources then refuses with undefined in Do.
@@ -46,7 +50,10 @@ type Resources struct {
 
 // emptyResources returns a Resources value with no entries.
 func emptyResources() Resources {
-	return Resources{XObjects: nil, Fonts: nil, ExtGStates: nil, Properties: nil, file: nil}
+	return Resources{
+		XObjects: nil, Fonts: nil, ExtGStates: nil, Properties: nil,
+		Colors: nil, file: nil,
+	}
 }
 
 // ExtGState returns the resolved /ExtGState entry for a resource name.
@@ -101,6 +108,7 @@ func (file *File) resolveResources(val Value) (Resources, error) {
 		Fonts:      map[string]*Font{},
 		ExtGStates: map[string]Value{},
 		Properties: map[string]Value{},
+		Colors:     map[string]Value{},
 		file:       file,
 	}
 	if val.Kind == KindNull {
@@ -125,6 +133,9 @@ func (file *File) resolveResources(val Value) (Resources, error) {
 	if err := file.resolveProperties(node, &out); err != nil {
 		return emptyResources(), err
 	}
+	if err := file.resolveColors(node, &out); err != nil {
+		return emptyResources(), err
+	}
 	return out, nil
 }
 
@@ -138,13 +149,26 @@ func (file *File) resolveExtGStates(node Value, out *Resources) error {
 	return nil
 }
 
-// resolveProperties loads every /Properties entry as a resolved value.
+// resolveProperties loads every /Properties entry and keeps its reference, so
+// the optional content check can compare the object number against the OFF
+// list. The consumer resolves the entry before it reads it.
 func (file *File) resolveProperties(node Value, out *Resources) error {
-	sub, err := file.resolveSubdict(node, keyProperties)
+	sub, err := file.resolveRawSubdict(node, keyProperties)
 	if err != nil {
 		return err
 	}
 	out.Properties = sub
+	return nil
+}
+
+// resolveColors loads every /ColorSpace entry as a resolved value. A nested
+// reference inside a color space array stays indirect for the resolver.
+func (file *File) resolveColors(node Value, out *Resources) error {
+	sub, err := file.resolveSubdict(node, keyColorSpace)
+	if err != nil {
+		return err
+	}
+	out.Colors = sub
 	return nil
 }
 
@@ -169,6 +193,27 @@ func (file *File) resolveSubdict(node Value, key string) (map[string]Value, erro
 			return nil, err
 		}
 		out[name] = resolved
+	}
+	return out, nil
+}
+
+// resolveRawSubdict reads one named subdictionary of /Resources and keeps each
+// entry as written, so an indirect reference survives. The caller resolves it.
+func (file *File) resolveRawSubdict(node Value, key string) (map[string]Value, error) {
+	out := map[string]Value{}
+	entry, ok := node.ValueEntry(key)
+	if !ok || entry.Kind == KindNull {
+		return out, nil
+	}
+	sub, err := file.deref(entry)
+	if err != nil {
+		return nil, err
+	}
+	if sub.Kind != KindDict {
+		return out, nil
+	}
+	for name, item := range sub.Dict {
+		out[name] = item
 	}
 	return out, nil
 }

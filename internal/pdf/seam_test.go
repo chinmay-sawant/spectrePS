@@ -122,8 +122,8 @@ func TestPaintImageName(t *testing.T) {
 	})
 }
 
-// imageNameLog paints one page onto the image log and returns it. The page must
-// fail with undefined in Do, which the callers check after the event count.
+// imageNameLog paints one page onto the image log and returns it. A page that
+// still fails is checked after the event count.
 func imageNameLog(t *testing.T, file *File) *imageLog {
 	t.Helper()
 	content, err := file.Content(0)
