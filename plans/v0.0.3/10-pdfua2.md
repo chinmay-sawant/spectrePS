@@ -63,7 +63,7 @@ Interface changes:
 
 ### 3.3 Container version
 
-- [ ] A PDF 2.0 input does not leave as a 1.4 shell when tags are present. Proof: `go test -count=1 ./internal/pdfout -run TestTaggedHeader`.
+- [x] A PDF 2.0 input does not leave as a 1.4 shell when tags are present. `WriteCopy` keeps the source header block, including the binary marker line, when the source carries tags; an untagged source keeps `%PDF-1.4`. Proof: `go test -count=1 ./internal/pdfout -run TestTaggedHeader` exited 0 on 2026-09-25.
 
 ## Phase 4: Metadata
 

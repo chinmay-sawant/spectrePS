@@ -102,6 +102,32 @@ func TestLevelsPreserveTags(t *testing.T) {
 	}
 }
 
+// TestTaggedHeader proves a tagged PDF 2.0 source keeps its header, and an
+// untagged source keeps the classic 1.4 header.
+func TestTaggedHeader(t *testing.T) {
+	t.Parallel()
+	tagged := mustOpenPDF(t, taggedFixture(t))
+	out := mustCopy(t, tagged, CopyOptions{})
+	if !bytes.HasPrefix(out, []byte(taggedHeader20)) {
+		t.Fatalf("tagged header = %q", headerText(out))
+	}
+	if _, err := mustOpenPDF(t, out).StructTree(); err != nil {
+		t.Fatal(err)
+	}
+	plain := mustOpenPDF(t, copyFixture(t))
+	if !bytes.HasPrefix(mustCopy(t, plain, CopyOptions{}), []byte(headerLine)) {
+		t.Fatal("untagged source lost the 1.4 header")
+	}
+}
+
+// headerText returns the first line of a file for a failure message.
+func headerText(src []byte) string {
+	if end := bytes.IndexByte(src, '\n'); end >= 0 {
+		return string(src[:end])
+	}
+	return string(src)
+}
+
 // tagShapeOf reads the tree shape and one MCID lookup both ways.
 func tagShapeOf(t *testing.T, file *pdf.File) tagShape {
 	t.Helper()
