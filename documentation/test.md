@@ -68,7 +68,7 @@ External tests use `package spectreps_test`, so they only see the exported API.
 
 - A fixture with a `%PDF-` header, a classic xref, and a Flate content stream opens. The page count is the page tree length.
 - A fixture that uses an xref stream and a Flate object stream opens, and the page count is right.
-- Content operators `m l c h re S s f f* n q Q w RG rg g G` paint through the same device as the PostScript path operators. A one-page path PDF and the PostScript program of the same marks compare equal with `CompareRaster`.
+- Content operators `m l c h re S s f f* n q Q cm w RG rg g G` paint through the same device as the PostScript path operators. A one-page path PDF and the PostScript program of the same marks compare equal with `CompareRaster`.
 - `Tj`, `TJ`, `'`, `"`, and `Do` each return `JobError` with the operator name filled in. The page is not a blank success.
 - An encrypted file returns `invalidaccess`. An unknown stream filter returns `undefined`. A truncated xref returns `JobError`.
 - `RasterizePage` with a negative index, or an index past the last page, returns `rangecheck`.
