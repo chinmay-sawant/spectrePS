@@ -1,7 +1,7 @@
 # v0.0.3 - PDF/UA-2 preservation and preflight
 
 > **Parent:** `plans/v0.0.3/00-program.md` - program ledger
-> **Status:** not started.
+> **Status:** phases 1 to 3 landed on 2026-09-25. Phase 4 waits on `internal/pdfa` (phase 8), and phase 5 waits on phase 8 and the font machine from phase 9.
 > **Estimated effort:** weeks for the phases below. Tag generation is not scoped here.
 
 ---
