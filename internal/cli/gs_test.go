@@ -33,8 +33,10 @@ func gsPDF(t *testing.T) string {
 }
 
 // gsDeviceArgs builds a 20 by 20 raster job for one device.
-func gsDeviceArgs(device, out, src string) []string {
-	return []string{"gs", "-sDEVICE=" + device, "-sOutputFile=" + out, "-g20x20", src}
+func gsDeviceArgs(device, out, src string, extra ...string) []string {
+	args := []string{"gs", "-sDEVICE=" + device, "-sOutputFile=" + out}
+	args = append(args, extra...)
+	return append(args, "-g20x20", src)
 }
 
 // gsRasterArgs builds a 20 by 20 ppmraw job. The extras come before -g.
@@ -189,6 +191,14 @@ func gsDeviceJPEG(t *testing.T, dir, src string) {
 	out := filepath.Join(dir, "jpeg.dat")
 	want(t, gsDeviceArgs("jpeg", out, src), 0, "", "")
 	gsCheckJPEG(t, readPayload(t, out))
+
+	low := filepath.Join(dir, "jpeg-low.jpg")
+	high := filepath.Join(dir, "jpeg-high.jpg")
+	want(t, gsDeviceArgs("jpeg", low, src, "-dJPEGQ=20"), 0, "", "")
+	want(t, gsDeviceArgs("jpeg", high, src, "-dJPEGQ=90"), 0, "", "")
+	if bytes.Equal(readPayload(t, low), readPayload(t, high)) {
+		t.Fatal("-dJPEGQ did not change the JPEG bytes")
+	}
 }
 
 func gsDeviceTIFF(t *testing.T, dir, src string) {
@@ -235,6 +245,8 @@ func gsDeviceRejected(t *testing.T, src string) {
 			t.Fatalf("%s: code=%d stderr=%q", name, code, stderr)
 		}
 	}
+	quality := []string{"gs", "-sDEVICE=ppmraw", "-sOutputFile=out.dat", "-dJPEGQ=50", src}
+	want(t, quality, exitUsage, "", "spectreps: -dJPEGQ needs -sDEVICE=jpeg\n")
 }
 
 func TestRasterFormatFlag(t *testing.T) {
@@ -425,6 +437,12 @@ func gsRangeErrors(t *testing.T) {
 		"-dFirstPage=1", pdf,
 	}
 	want(t, rewrite, exitUsage, "", "spectreps: -dFirstPage has no place on -sDEVICE=pdfwrite\n")
+
+	list := []string{
+		"gs", "-sDEVICE=pdfwrite", "-sOutputFile=" + filepath.Join(dir, "list.pdf"),
+		"-sPageList=1", pdf,
+	}
+	want(t, list, exitUsage, "", "spectreps: -sPageList has no place on -sDEVICE=pdfwrite\n")
 }
 
 func TestGSResolution(t *testing.T) {
@@ -545,6 +563,11 @@ func TestGSParamSyntax(t *testing.T) {
 			"first page not a number",
 			[]string{"gs", "-dFirstPage=x", src},
 			"spectreps: -dFirstPage wants a page number, got \"x\"\n",
+		},
+		{
+			"jpeg quality not a number",
+			[]string{"gs", "-sDEVICE=jpeg", "-dJPEGQ=x", src},
+			"spectreps: -dJPEGQ wants a number, got \"x\"\n",
 		},
 		{"unknown set name", []string{"gs", "-sFoo=1", src}, "spectreps: -sFoo is not in the gs allowlist\n"},
 		{"unknown define", []string{"gs", "-dFoo", src}, "spectreps: -dFoo is not in the gs allowlist\n"},
