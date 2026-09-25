@@ -39,7 +39,7 @@ func TestBanned(t *testing.T) {
 	for _, name := range names {
 		assertErrName(t, name, "invalidaccess")
 	}
-	assertErrName(t, "show", "undefined")
+	assertErrName(t, "save", "undefined")
 }
 
 func TestLimits(t *testing.T) {

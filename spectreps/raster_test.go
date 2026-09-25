@@ -97,10 +97,10 @@ func TestRunPostScript(t *testing.T) {
 		t.Fatalf("default page %dx%d count %d", pages[0].Width, pages[0].Height, len(pages))
 	}
 	in := newInst(t)
-	_, err := in.RunPostScript(t.Context(), []byte("show"), spectreps.RunOptions{})
+	_, err := in.RunPostScript(t.Context(), []byte("/Nope findfont"), spectreps.RunOptions{})
 	var job spectreps.JobError
-	if !errors.As(err, &job) || job.Msg != "undefined" || job.Op != "show" {
-		t.Fatalf("show error = %v", err)
+	if !errors.As(err, &job) || job.Msg != "invalidfont" || job.Op != "findfont" {
+		t.Fatalf("findfont error = %v", err)
 	}
 }
 

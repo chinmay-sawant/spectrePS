@@ -87,7 +87,8 @@ One glyph source serves both front ends: advances in 1/1000 em, outlines, encodi
 
 ### 3.5 PostScript show
 
-- [ ] `findfont`, `scalefont`, `setfont`, and `show` drive the same text machine from the PostScript front end. Proof: `go test -count=1 ./internal/ps -run TestShowPS`.
+- [x] `findfont`, `scalefont`, `setfont`, and `show` drive the same text machine from the PostScript front end. Proof: `go test -count=1 ./internal/ps -run TestShowPS`.
+  Run 2026-09-25: `ok github.com/chinmay-sawant/spectrePS/internal/ps 0.002s`. `findfont` resolves the standard 14 names through `internal/font`, `scalefont` and `setfont` carry `/FontName` and `/FontSize` through the graphics state, and `show` advances the current point from the StandardEncoding widths. A device run returns `invalidfont`, the policy in `documentation/fonts.md`. Row 3.6 stays deferred by 1.1.
 
 ### 3.6 Type1, optional
 
