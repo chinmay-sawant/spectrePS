@@ -18,7 +18,8 @@ One glyph source serves both front ends: advances in 1/1000 em, outlines, encodi
 
 ### 1.1 Written model
 
-- [ ] `documentation/fonts.md` names the metrics source and license, the standard-14 painting policy (substitute outlines or `invalidfont`), the Type1 and CFF scope, the Type0 scope, and the exclusions. Proof: the file exists and `make lint` passes, since this row is documentation-only.
+- [x] `documentation/fonts.md` names the metrics source and license, the standard-14 painting policy (substitute outlines or `invalidfont`), the Type1 and CFF scope, the Type0 scope, and the exclusions. Proof: the file exists and `make lint` passes, since this row is documentation-only.
+  Run 2026-09-25: `documentation/fonts.md` exists. `make lint` passed: gofmt clean, `golangci-lint run ./...` clean, `size-check: clean (0 over-limit files)`. Policy chosen: `invalidfont`; Type 1 and bare CFF deferred; Type 0 limited to Identity-H.
 
 ### 1.2 Standard 14 widths
 
