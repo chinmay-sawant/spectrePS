@@ -38,7 +38,7 @@ A new `internal/psout` recorder implements `graphics.Marker` and emits PostScrip
 
 ### 3.2 Docs and closure
 
-- [x] `documentation/cli.md`, `devices.md`, `features.md`, `covered-and-not-covered.md`, and `public-api.md` state the new command. Proof: `grep -n 'spectreps ps' documentation/cli.md` printed line 17 on 2026-09-25. The `plans/v0.0.1/10-deferred.md` move to 10.4 is parent-owned and that file was not edited.
+- [x] `documentation/cli.md`, `devices.md`, `features.md`, `covered-and-not-covered.md`, and `public-api.md` state the new command. Proof: `grep -n 'spectreps ps' documentation/cli.md` printed line 18 on 2026-09-25, re-checked at integration. The `plans/v0.0.1/10-deferred.md` move to 10.4 is parent-owned and that file was not edited.
 - [x] `make lint` and `make test` pass. Outcomes recorded on the day: `make lint` exited 0 on 2026-09-25 with `gofmt -l .` clean, `golangci-lint run ./...` clean, and `size-check: clean (0 over-limit files)`. `go test -count=1 -p 4 ./...` exited 0 on 2026-09-25 with every package `ok`.
 
 ## Dependencies

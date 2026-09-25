@@ -67,7 +67,7 @@ Documented `pdfwrite` defaults that Spectre's rewrite phase has to stay honest a
 | `DownsampleColorImages`, gray, mono | false, except the screen and ebook presets |
 | `UseFlateCompression` | true, treated as always on |
 
-`-dJPEGQ` belongs to the raster `jpeg` device and to `pdfimage*`, not to `pdfwrite`. `pdfwrite` JPEG quality is `QFactor` inside the image dictionaries. The first Spectre rewrite uses Flate on content streams. DCT, CCITT, and downsample wait until an image model exists. See `plans/v0.0.1/10-deferred.md`.
+`-dJPEGQ` belongs to the raster `jpeg` device and to `pdfimage*`, not to `pdfwrite`. `pdfwrite` JPEG quality is `QFactor` inside the image dictionaries. Spectre's rewrite uses Flate on content streams and, at levels 3 through 5, its own DCT encode with a longest-side cap; see `documentation/devices.md`.
 
 A page that `pdfwrite` cannot keep as vectors, such as live transparency aimed at a PDF level below 1.4, can be rendered to a bitmap and wrapped. That fallback is not the normal path.
 

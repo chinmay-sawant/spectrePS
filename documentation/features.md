@@ -72,12 +72,11 @@ The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster
 
 | Feature | Why it waits | Next gate |
 | --- | --- | --- |
-| PDF/UA-2 tag generation | Reading order and role assignment need the text and font machine from phase 9, then structure authoring. | `plans/v0.0.3/10-pdfua2.md`. |
+| PDF/UA-2 tag generation | Reading order and role assignment are not implemented. Preservation and preflight landed in v0.0.3, and the font and text machine now exist. | A new plan file. |
 | PCLm | A different image-PDF flavor. | A plan file. |
 | Spot-color separations (`tiffsep`) | No separation model. | A plan file. |
-| Full `gs` argv grammar | The subcommands map to library methods, and a second flag grammar would fork the CLI. The bounded switch map landed. | `plans/v0.0.3/7-gs-argv.md`. |
 | PDF info, linearization, output encryption | Out of the current tags. | A new plan file. |
-| Full PDF 1.7 and PDF 2.0, including transparency and optional content | The current reader is a path-only subset. | A new plan file. |
+| Full PDF 1.7 and PDF 2.0, including transparency and optional content | The reader is a subset of ISO 32000-2; transparency, optional content, encryption, and color management are out. | A new plan file. |
 | `bind`, `save`, `restore`, `clip`, and filters other than Flate | Out of the current PostScript subset. | A new plan file. |
-| Font embedding and subsetting | Needs the font machine first. | A new plan file. |
+| Font embedding and subsetting | The font machine reads metrics and embedded programs; writing or subsetting a font is a separate job. | A new plan file. |
 | Printer languages: PCL, PXL, XPS, and the `gs -h` device list | GhostPCL, GhostXPS, and printer drivers are separate products from the PostScript and PDF interpreter. | A named device request opens a program plan. |

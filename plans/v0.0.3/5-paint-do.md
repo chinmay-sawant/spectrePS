@@ -56,7 +56,7 @@ The reader decodes image XObjects, but the content interpreter has no `Do` case 
 
 ### 4.2 Docs and closure
 
-- [x] `documentation/devices.md`, `features.md`, `covered-and-not-covered.md`, `test.md`, and `public-api.md` state the new behavior, and the deferred row moves to 10.4. Proof: `grep -n 'DrawImage' documentation/devices.md` showed the seam at line 52 and the interface at line 153 on 2026-09-25. `plans/v0.0.1/10-deferred.md` is not edited in this worktree; the ledger move belongs to the integration session.
+- [x] `documentation/devices.md`, `features.md`, `covered-and-not-covered.md`, `test.md`, and `public-api.md` state the new behavior, and the deferred row moves to 10.4. Proof: `grep -n 'DrawImage' documentation/devices.md` showed the seam at line 91 and the interface at line 262 on 2026-09-25, re-checked at integration. `plans/v0.0.1/10-deferred.md` is not edited in this worktree; the ledger move belongs to the integration session.
 - [x] `make lint` and `make test` pass. Outcomes recorded on the day: `make lint` exited 0 on 2026-09-25, `gofmt -l .` printed nothing, `golangci-lint run ./...` exited 0, and `size-check` reported 0 over-limit files. `make test` (`go test -p 24 ./...`) exited 0, and `go test -count=1 -p 4 ./...` exited 0.
 
 ## Dependencies

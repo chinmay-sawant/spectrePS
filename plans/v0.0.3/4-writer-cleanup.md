@@ -36,7 +36,7 @@ Two changes are format-neutral and cheap: skip the dead container objects, and r
 
 ### 3.1 Docs
 
-- [x] `documentation/devices.md` and `documentation/test.md` state the container rule and the optional packing, and the v0.0.2 known-limitation notes are closed in the feature map. Proof: `grep -n 'ObjStm' documentation/devices.md` printed the container rule and the packed mode on lines 56 and 58 on 2026-09-25, and the feature-map row named "Compression writer container cleanup" is gone.
+- [x] `documentation/devices.md` and `documentation/test.md` state the container rule and the optional packing, and the v0.0.2 known-limitation notes are closed in the feature map. Proof: `grep -n 'ObjStm' documentation/devices.md` printed the container rule and the packed mode on lines 103 and 105 on 2026-09-25, re-checked at integration, and the feature-map row named "Compression writer container cleanup" is gone.
 
 ### 3.2 Closure
 

@@ -60,11 +60,10 @@ Byte compare and pixel compare are Spectre commands. Ghostscript 9.55.0 has no `
 - Full PostScript LanguageLevel 3, including filters other than Flate, `%pipe%`, and `%disk`.
 - Full PDF 1.7 and PDF 2.0, including transparency, optional content, encryption, and passwords.
 - OCR (`pdfocr`, Tesseract). Font programs beyond the subset in `documentation/fonts.md`: Type 1 `/FontFile`, bare CFF, Type 3, vertical writing, color fonts, and variable fonts.
-- Images inside a PDF, DCT and CCITT compression, downsampling, and JPEG2000.
 - Font embedding and subsetting.
 - PDF/A-1b, PDF/A-2b, PDF/A-3b, and PDF/A-4e creation. The PDF/A-4 and 4f claim landed as a rewrite option with a profile preflight.
 - PDF/X creation.
-- PDF to PostScript (`pdf2ps`, `ps2write`) and EPS rewrite (`eps2write`, `ps2epsi`).
+- EPS rewrite (`eps2write`, `ps2epsi`) and PostScript output for pages with text, fonts, or images. The path-only `spectreps ps` landed in v0.0.3.
 - XPS output (`xpswrite`), DOCX output (`docxwrite`), and PCL-XL output (`pxlmono`, `pxlcolor`).
 - PCLm output. The 24-bit RGB path landed in v0.0.2, and the gray and CMYK image PDFs landed in v0.0.2.
 - Spot-color separations (`tiffsep`). The `bbox` and `inkcov` summaries landed in v0.0.2.
@@ -82,7 +81,7 @@ Ghostscript does not grade an existing PDF as PDF/A compliant. PDF/A in Ghostscr
 
 Ghostscript can create PDF/A-1b, PDF/A-2b, and PDF/A-3b. With the default `PDFACompatibilityPolicy` of 0, a feature that breaks PDF/A can be kept, and the file can still carry PDF/A metadata. That is creation, and it is not a certificate. The validation Spectre is building is the other job: stop on the first interpreter error. Spectre's PDF/A-4 claim is a rewrite option with a profile preflight, and it is not a certificate either.
 
-Raster and rewrite are also different jobs. Raster devices paint pixels. `pdfwrite` rebuilds a page description and compresses objects inside the new file. Spectre's first compression is Flate on those streams. DCT, CCITT, and downsampling wait until an image model exists.
+Raster and rewrite are also different jobs. Raster devices paint pixels. `pdfwrite` rebuilds a page description and compresses objects inside the new file. Spectre's first compression is Flate on those streams. The v0.0.3 image model adds DCT, CCITT, and JPEG2000 decode, and levels 3 through 5 re-encode as DCT with a longest-side cap.
 
 ## Tests
 
@@ -118,7 +117,7 @@ ISO's own text on PDF 2.0 says some elements of the document may be the subject 
 
 Ghostscript. The search did not turn up an Artifex patent that reserves "interpret PostScript," "rasterize a page," or "write a PDF."
 
-The current Spectre slice stays on paths, Flate, and the Go image encoders, including `golang.org/x/image/tiff`. It leaves out fonts, JPEG2000, LZW, transparency, and reading DCT images inside a PDF. Ghostscript's own manual says `pdfwrite` ignores LZW requests. Adding a codec later is a new patent question even when a manual describes that codec.
+The current Spectre slice reads paths, text, fonts, and Flate, DCT, CCITT, and JPEG2000 images through the Go decoders and `golang.org/x/image`, and it writes PostScript for path pages. It leaves out font programs beyond `documentation/fonts.md`, LZW, transparency, and color management. Ghostscript's own manual says `pdfwrite` ignores LZW requests. Adding a codec later is a new patent question even when a manual describes that codec.
 
 A letter or a lawsuit can still arrive. An expired patent, or a royalty-free license for a compliant PDF implementation, is why a claim about those particular Adobe patents would be weak. This note does not say every possible patent has been checked.
 
