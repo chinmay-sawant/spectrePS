@@ -30,7 +30,7 @@ The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster
 ## PDF output
 
 - `spectreps rewrite -level 0` writes a new PDF from a path-only PDF. Content streams carry the same path subset. `-compress` selects Flate content streams and defaults to true. Bytes are stable across two calls, and the file carries no wall-clock date. A missing `-level` selects 0.
-- `spectreps rewrite -level 1` through `-level 5` use the pass-through writer, so text, fonts, and content Spectre cannot interpret are copied. Level 1 Flates uncompressed content streams. Level 2 also re-encodes Flate and raw image streams losslessly, with no resample. Levels 3 through 5 also re-encode images as DCT with a longest-side cap and a quality. The caps and qualities are the table in `documentation/devices.md`.
+- `spectreps rewrite -level 1` through `-level 5` use the pass-through writer, so text, fonts, and content Spectre cannot interpret are copied. Level 1 Flates uncompressed content streams. Level 2 also re-encodes Flate and raw image streams losslessly, with no resample. Levels 3 through 5 also decode Flate, DCT, and JPEG2000 images and re-encode them as DCT with a longest-side cap and a quality. An image Spectre cannot decode, and an image with an `/SMask`, is copied unchanged. The caps and qualities are the table in `documentation/devices.md`.
 - `spectreps pdfimage` wraps each painted page in a new PDF as one image XObject, 8 bits per component, `/Filter /FlateDecode`. `-colorspace rgb|gray|cmyk` picks `/DeviceRGB` at 24 bits, `/DeviceGray` at 8 bits, or `/DeviceCMYK` at 32 bits, and defaults to `rgb`. `/MediaBox` comes from the pixel size and the paint dpi. A `.pdf` input paints the selected pages with `RasterizePage`; any other input uses `RunPostScript`. Bytes are stable, and the trailer `/ID` is the SHA-256 of the image streams.
 - The bitmap PDF says nothing about `Do` on the reading side. Spectre still returns `undefined` for `Do`, so it cannot rasterize its own image PDF yet.
 
@@ -58,8 +58,7 @@ The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster
 | Feature | Why it waits | Next gate |
 | --- | --- | --- |
 | Painting `Do` and reading images into a raster | The reader decodes image XObjects, but the content interpreter still returns `undefined` for `Do`. | `plans/v0.0.3/5-paint-do.md`. |
-| CCITT image streams on rewrite | `DecodeImage` reads Flate and DCT only, so those streams copy through unchanged. | `plans/v0.0.3/2-ccitt-decode.md`. |
-| JPEG2000 image streams on rewrite | The standard library and `golang.org/x/image` have no JPX decoder. | `plans/v0.0.3/3-jpeg2000-decode.md`. |
+| CCITT image streams on rewrite | `DecodeImage` has no CCITT branch, so those streams copy through unchanged. | `plans/v0.0.3/2-ccitt-decode.md`. |
 | Text extraction, `show`, `Tj` | Fonts are a separate machine from the path engine. | `plans/v0.0.3/9-text-and-fonts.md`. |
 | PDF/A-4 creation | Needs a named level, a refusal policy, and metadata. The file is not a conformance certificate. | `plans/v0.0.3/8-pdfa4.md`. |
 | PDF/UA-2 preservation and preflight | Tag generation needs the text and font machine, and the reader has no structure tree model. | `plans/v0.0.3/10-pdfua2.md`. |

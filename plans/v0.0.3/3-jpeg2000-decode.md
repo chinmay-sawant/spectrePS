@@ -1,7 +1,7 @@
 # v0.0.3 - JPEG2000 image streams
 
 > **Parent:** `plans/v0.0.3/00-program.md` - program ledger
-> **Status:** not started.
+> **Status:** implemented. Every row is checked. Lint and test passed on 2026-09-25.
 > **Estimated effort:** one small phase plus the conformance gate
 
 ---
@@ -40,8 +40,8 @@ For JPX, `/ColorSpace` is optional and ignored; the codestream carries the color
 
 ### 3.2 Docs and closure
 
-- [ ] `documentation/devices.md`, `features.md`, `covered-and-not-covered.md`, and the dependency reason state JPX decode. Proof: `grep -n 'JPEG2000' documentation/*.md`.
-- [ ] `make lint` and `make test` pass. Outcomes recorded on the day.
+- [x] `documentation/devices.md`, `features.md`, `covered-and-not-covered.md`, and the dependency reason state JPX decode. Proof: `grep -n 'JPEG2000' documentation/*.md` exited 0 on 2026-09-25. `devices.md` lines 47 and 70 name the decoder and the level policy, `features.md` line 33 names the level policy, and `covered-and-not-covered.md` lines 17 and 27 name the rewrite and reading behavior. `go.mod` carries `JPEG2000 image streams decode through a pure-Go decoder; the module uses no cgo.` above the require.
+- [x] `make lint` and `make test` pass. Outcomes recorded on the day. 2026-09-25: `make lint` exited 0, with `golangci-lint run ./...` reporting no findings and `size-check: clean (0 over-limit files).` `make test` exited 0, and every package with tests printed `ok`. `go test -count=1 -p 4 ./...` exited 0 too.
 
 ## Dependencies
 

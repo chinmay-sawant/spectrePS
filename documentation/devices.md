@@ -38,12 +38,13 @@ Ink output is RGB occupancy: the fraction of pixels marked in each of R, G, and 
 
 The reader walks the xref for in-use objects whose dictionary has `/Subtype /Image`. `ImageObjectNums` returns their object numbers in ascending order. `DecodeImage` returns an `image.Image` or an error. It never returns a blank image for a failed decode.
 
-Two stream forms decode at 8 bits per component:
+Three stream forms decode:
 
-- `/FlateDecode` with `/DeviceRGB` or `/DeviceGray`, through the same zlib path as content streams. A predictor above 1 is rejected.
+- `/FlateDecode` with `/DeviceRGB` or `/DeviceGray` at 8 bits per component, through the same zlib path as content streams. A predictor above 1 is rejected.
 - `/DCTDecode` through `image/jpeg`.
+- `/JPXDecode` through `github.com/mrjoshuak/go-jpeg2000`, a pure-Go decoder. `/ColorSpace` and `/BitsPerComponent` are optional and ignored for JPX: the codestream carries the color and the precision, so the branch runs before the shared parameter check. A header that declares more decoded sample bytes than the 32 MiB Flate cap returns `limitcheck` before the decoder allocates.
 
-Any other filter, color space, or bit depth returns `undefined`, as does a Flate stream whose byte count does not match width by height by components. JPEG is lossy, so decoded pixels are not a byte oracle for the source.
+Any other filter, color space, or bit depth returns `undefined`, as does a Flate stream whose byte count does not match width by height by components. JPEG is lossy, so decoded pixels are not a byte oracle for the source; a JPEG2000 stream may be lossless or lossy. A failed decode returns `syntaxerror` or `limitcheck`, never a blank image.
 
 ## Rewrite
 
@@ -66,7 +67,7 @@ The level table:
 | 4 | Strong | Flate | re-encoded as DCT, longest side capped at 1123 px, quality 60 |
 | 5 | Hard | Flate | re-encoded as DCT, longest side capped at 842 px, quality 40 |
 
-An image at or below its cap keeps its size. An image Spectre cannot decode, and an image with an `/SMask`, is copied unchanged. A level above 0 ignores `CompressStreams`. Every page reaches the output with the same page count and boxes, because the writer copies the page tree.
+An image at or below its cap keeps its size. An image Spectre cannot decode, and an image with an `/SMask`, is copied unchanged. Level 2 re-encodes Flate and raw streams only, so DCT and JPEG2000 streams copy through. Levels 3 through 5 decode JPEG2000 streams and re-encode them as DCT, exactly as for DCT streams. A level above 0 ignores `CompressStreams`. Every page reaches the output with the same page count and boxes, because the writer copies the page tree.
 
 The image helpers are three functions in `internal/pdfout`. `ScaleImage` takes any `image.Image` and returns RGBA resampled with the CatmullRom kernel from `golang.org/x/image/draw`; width and height below 1 clamp to 1. `EncodeDCT` wraps `image/jpeg` with the quality clamped to 1 through 100, and `EncodeFlateRGB` writes tightly packed RGB rows, top row first, inside zlib. All three are deterministic, so the same input returns the same bytes. Levels 3 through 5 call `ScaleImage` and `EncodeDCT`, and level 2 calls `EncodeFlateRGB`.
 
