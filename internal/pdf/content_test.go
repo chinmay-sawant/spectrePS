@@ -61,7 +61,7 @@ func TestContentScannerNameText(t *testing.T) {
 		t.Fatalf("name token = %+v", tok)
 	}
 	run := newRunner(nil, 1)
-	if err := run.take(tok); err != nil {
+	if err := run.take(t.Context(), tok); err != nil {
 		t.Fatal(err)
 	}
 	name, err := run.popName("Do")
@@ -100,7 +100,7 @@ func TestPaintNameOperand(t *testing.T) {
 				if !ok {
 					break
 				}
-				if err := run.take(tok); err != nil {
+				if err := run.take(t.Context(), tok); err != nil {
 					t.Fatal(err)
 				}
 			}

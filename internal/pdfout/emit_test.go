@@ -74,6 +74,31 @@ func TestEmitDoUnchanged(t *testing.T) {
 	}
 }
 
+// TestEmitClipUnchanged proves the rewrite recorder still refuses a clip. The
+// recorder does not implement graphics.ClipMarker, so W and W* are undefined.
+func TestEmitClipUnchanged(t *testing.T) {
+	cases := []struct {
+		name   string
+		src    string
+		opName string
+	}{
+		{name: "W", src: "0 0 10 10 re W n 1 0 0 rg 0 0 10 10 re f", opName: "W"},
+		{name: "W*", src: "0 0 10 10 re W* n 1 0 0 rg 0 0 10 10 re f", opName: "W*"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			got, err := Emit(t.Context(), []byte(testCase.src))
+			var job *pdf.Error
+			if !errors.As(err, &job) || job.Op != testCase.opName || job.Name != errUndefined {
+				t.Fatalf("Emit() error = %v, want undefined in %s", err, testCase.opName)
+			}
+			if got != nil {
+				t.Fatalf("Emit() bytes = %#v, want nil", got)
+			}
+		})
+	}
+}
+
 func checkEmitRecorderSeesImage(t *testing.T, file *pdf.File) {
 	t.Helper()
 	content, err := file.Content(0)

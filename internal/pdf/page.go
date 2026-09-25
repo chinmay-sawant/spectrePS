@@ -157,8 +157,9 @@ func (file *File) PaintPage(ctx context.Context, index int, marker graphics.Mark
 		return err
 	}
 	return PaintWith(ctx, content, marker, scale, PaintOptions{
-		Resources: res,
-		Text:      TextOptions{Fonts: nil, Sink: nil},
+		Resources:     res,
+		Text:          TextOptions{Fonts: nil, Sink: nil, Runs: nil},
+		MarkedContent: nil,
 	})
 }
 

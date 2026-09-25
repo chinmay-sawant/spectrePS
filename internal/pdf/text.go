@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"image/draw"
 	"math"
+	"slices"
 
 	"github.com/chinmay-sawant/spectrePS/internal/graphics"
 	"golang.org/x/image/font/sfnt"
@@ -62,6 +63,26 @@ type Glyph struct {
 	Box Box
 }
 
+// TextRun is one show operator as an event sink sees it. Bytes holds the shown
+// text: for TJ the string elements concatenated, with the numbers omitted.
+type TextRun struct {
+	FontName    string
+	Size        float64
+	TextMatrix  graphics.Matrix
+	LineMatrix  graphics.Matrix
+	Rise        float64
+	CharSpacing float64
+	WordSpacing float64
+	HScale      float64
+	Bytes       []byte
+}
+
+// TextRunSink receives one TextRun per show operator, in stream order, before
+// the operator paints its glyphs. A nil sink keeps the old behavior.
+type TextRunSink interface {
+	TextRun(r TextRun)
+}
+
 // TextOptions carries the text seam for one content run.
 type TextOptions struct {
 	// Fonts resolves a /Font resource name. A nil map uses the fonts in
@@ -69,6 +90,8 @@ type TextOptions struct {
 	Fonts map[string]*Font
 	// Sink receives positioned glyphs. A nil sink discards them.
 	Sink GlyphSink
+	// Runs receives one event per show operator. A nil sink discards them.
+	Runs TextRunSink
 }
 
 // glyphMarker is implemented by markers that blend glyph coverage. A marker
@@ -284,6 +307,7 @@ func (run *runner) showString() error {
 	if err != nil {
 		return err
 	}
+	run.fireRun(text)
 	return run.showBytes(opShow, text)
 }
 
@@ -294,6 +318,11 @@ func (run *runner) showArray() error {
 	if err != nil {
 		return err
 	}
+	shown, err := arrayText(items)
+	if err != nil {
+		return err
+	}
+	run.fireRun(shown)
 	for _, element := range items {
 		if element.kind == itemString {
 			if err := run.showBytes(opShowArray, element.str); err != nil {
@@ -310,6 +339,22 @@ func (run *runner) showArray() error {
 	return nil
 }
 
+// arrayText concatenates the string elements of one TJ array and validates the
+// other elements.
+func arrayText(items []item) ([]byte, error) {
+	var out []byte
+	for _, element := range items {
+		if element.kind == itemString {
+			out = append(out, element.str...)
+			continue
+		}
+		if element.kind != itemNumber {
+			return nil, NewError(opShowArray, errType)
+		}
+	}
+	return out, nil
+}
+
 func (run *runner) quoteShow() error {
 	text, err := run.popStr(opShowQuote)
 	if err != nil {
@@ -318,6 +363,7 @@ func (run *runner) quoteShow() error {
 	if err := run.nextLine(); err != nil {
 		return err
 	}
+	run.fireRun(text)
 	return run.showBytes(opShowQuote, text)
 }
 
@@ -341,7 +387,27 @@ func (run *runner) doubleQuoteShow() error {
 	if err := run.nextLine(); err != nil {
 		return err
 	}
+	run.fireRun(text)
 	return run.showBytes(opShowDQuote, text)
+}
+
+// fireRun delivers one show operator to the run sink with the current text
+// state, before the operator paints its glyphs. A nil sink discards it.
+func (run *runner) fireRun(text []byte) {
+	if !activeSink(run.runs) {
+		return
+	}
+	run.runs.TextRun(TextRun{
+		FontName:    run.text.fontName,
+		Size:        run.text.size,
+		TextMatrix:  run.textMatrix,
+		LineMatrix:  run.textLine,
+		Rise:        run.text.rise,
+		CharSpacing: run.text.charSpacing,
+		WordSpacing: run.text.wordSpacing,
+		HScale:      run.text.hscale,
+		Bytes:       slices.Clone(text),
+	})
 }
 
 // showBytes shows one string. A Type0 font reads two-byte codes and ignores a
@@ -437,6 +503,12 @@ func (run *runner) paintGlyph(opName string, fnt *Font, code uint32) error {
 	mask, origin, ok := run.glyphMask(fnt, code)
 	if !ok {
 		return NewError(opName, errInvalidFont)
+	}
+	if len(run.clips) > 0 {
+		if target, ok := run.marker.(graphics.ClipMarker); ok {
+			target.DrawGlyphClipped(run.clips, mask, origin.X, origin.Y, run.red, run.green, run.blue)
+			return nil
+		}
 	}
 	painter.DrawGlyph(mask, origin.X, origin.Y, run.red, run.green, run.blue)
 	return nil

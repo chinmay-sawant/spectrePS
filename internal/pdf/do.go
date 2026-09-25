@@ -1,43 +1,85 @@
 package pdf
 
-import "image"
+import (
+	"context"
+	"image"
+
+	"github.com/chinmay-sawant/spectrePS/internal/graphics"
+)
 
 // opDo is the content operator name for one XObject paint.
 const opDo = "Do"
 
 // takeDo dispatches the Do operator.
-func (run *runner) takeDo(opName string) (bool, error) {
+func (run *runner) takeDo(ctx context.Context, opName string) (bool, error) {
 	if opName != opDo {
 		return false, nil
 	}
-	return true, run.do()
+	return true, run.do(ctx)
 }
 
-// do pops one name, resolves it in the page /XObject resources, and stamps
-// the decoded image through the current matrix.
-// A missing name, a non-image subtype, and a decode error are undefined in Do.
-func (run *runner) do() error {
+// do pops one name and resolves it in the page /XObject resources. An image
+// XObject stamps through the current matrix. A /Subtype /Form XObject runs its
+// content stream. Any other subtype is undefined in Do.
+func (run *runner) do(ctx context.Context) error {
 	name, err := run.popName(opDo)
 	if err != nil {
 		return err
 	}
-	pic, err := run.image(name)
+	val, ok := run.xobjects[name]
+	if !ok {
+		return NewError(opDo, errUndefined)
+	}
+	if isFormXObject(val) {
+		return run.runForm(ctx, val)
+	}
+	if !hasImageSubtype(val) {
+		return NewError(opDo, errUndefined)
+	}
+	run.nameImage(name, val)
+	pic, err := run.image(name, val)
 	if err != nil {
 		return err
 	}
 	if run.marker != nil {
-		run.marker.DrawImage(pic, run.ctm, run.scale)
+		run.drawImage(pic)
 	}
 	return nil
 }
 
-// image decodes one /XObject name once and caches the pixels for the run.
-func (run *runner) image(name string) (image.Image, error) {
+// nameImage tells a marker the resource name and the resolved XObject
+// dictionary before decode. A marker without the seam keeps today's behavior.
+func (run *runner) nameImage(name string, val Value) {
+	if !activeSink(run.marker) {
+		return
+	}
+	recorder, ok := run.marker.(ImageNameMarker)
+	if !ok {
+		return
+	}
+	recorder.ImageName(name, val)
+}
+
+// drawImage stamps one decoded image through every active clip.
+func (run *runner) drawImage(pic image.Image) {
+	if len(run.clips) == 0 {
+		run.marker.DrawImage(pic, run.ctm, run.scale)
+		return
+	}
+	target, ok := run.marker.(graphics.ClipMarker)
+	if !ok {
+		return
+	}
+	target.DrawImageClipped(run.clips, pic, run.ctm, run.scale)
+}
+
+// image decodes one resolved image XObject once and caches the pixels for the
+// run. The caller has already checked the image subtype.
+func (run *runner) image(name string, val Value) (image.Image, error) {
 	if pic, ok := run.images[name]; ok {
 		return pic, nil
 	}
-	val, ok := run.xobjects[name]
-	if !ok || hasSMask(val) {
+	if hasSMask(val) {
 		return nil, NewError(opDo, errUndefined)
 	}
 	pic, err := DecodeImageValue(val)

@@ -28,6 +28,12 @@ const (
 	opaqueAlpha    = 255
 )
 
+// ImageNameMarker is implemented by markers that record an image XObject
+// name before decode. A marker without it keeps today's behavior.
+type ImageNameMarker interface {
+	ImageName(name string, dict Value)
+}
+
 // ImageObjectNums returns the in-use object numbers whose resolved object is an
 // image XObject: a stream or dictionary with /Subtype /Image.
 // The numbers come in ascending order.

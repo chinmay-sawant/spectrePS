@@ -42,7 +42,7 @@ func playContent(t *testing.T, run *runner, content string) {
 		if !ok {
 			return
 		}
-		if err := run.take(tok); err != nil {
+		if err := run.take(t.Context(), tok); err != nil {
 			t.Fatal(err)
 		}
 	}
