@@ -35,13 +35,14 @@ const (
 // File is one open PDF subset.
 // Page count is the number of leaves walked from the page tree.
 type File struct {
-	src     []byte
-	trailer Value
-	xref    map[int]XEntry
-	cache   map[int]Value
-	streams map[int]map[int]stmItem
-	pages   [][]byte
-	busy    map[int]bool
+	src       []byte
+	trailer   Value
+	xref      map[int]XEntry
+	cache     map[int]Value
+	streams   map[int]map[int]stmItem
+	pages     [][]byte
+	resources []Value
+	busy      map[int]bool
 }
 
 type objPos struct {
@@ -77,19 +78,25 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 		return nil, NewError(opEncrypt, errAccess)
 	}
 	file := &File{
-		src:     src,
-		trailer: trailer,
-		xref:    entries,
-		cache:   map[int]Value{},
-		streams: map[int]map[int]stmItem{},
-		pages:   nil,
-		busy:    map[int]bool{},
+		src:       src,
+		trailer:   trailer,
+		xref:      entries,
+		cache:     map[int]Value{},
+		streams:   map[int]map[int]stmItem{},
+		pages:     nil,
+		resources: nil,
+		busy:      map[int]bool{},
 	}
-	pages, err := file.walkRoot()
+	leaves, err := file.walkRoot()
 	if err != nil {
 		return nil, err
 	}
-	file.pages = pages
+	file.pages = make([][]byte, len(leaves))
+	file.resources = make([]Value, len(leaves))
+	for i, leaf := range leaves {
+		file.pages[i] = leaf.content
+		file.resources[i] = leaf.resources
+	}
 	return file, nil
 }
 

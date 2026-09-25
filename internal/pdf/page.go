@@ -11,11 +11,20 @@ const (
 	errRange = "rangecheck"
 	opRaster = "RasterizePage"
 
-	keyPage     = "Page"
-	keyPages    = "Pages"
-	keyKids     = "Kids"
-	keyContents = "Contents"
+	keyPage      = "Page"
+	keyPages     = "Pages"
+	keyKids      = "Kids"
+	keyContents  = "Contents"
+	keyResources = "Resources"
+	keyXObject   = "XObject"
 )
+
+// pageLeaf is one page leaf from the tree walk: the decoded content bytes and
+// the nearest /Resources, either the page's own or an ancestor's.
+type pageLeaf struct {
+	content   []byte
+	resources Value
+}
 
 // PageCount returns the number of page leaves walked from the page tree.
 func (file *File) PageCount() int {
@@ -143,10 +152,14 @@ func (file *File) PaintPage(ctx context.Context, index int, marker graphics.Mark
 	if err != nil {
 		return err
 	}
-	return Paint(ctx, content, marker, scale)
+	res, err := file.PageResources(index)
+	if err != nil {
+		return err
+	}
+	return PaintWith(ctx, content, marker, scale, PaintOptions{Resources: res})
 }
 
-func (file *File) walkRoot() ([][]byte, error) {
+func (file *File) walkRoot() ([]pageLeaf, error) {
 	root, ok := file.trailer.ValueEntry(keyRoot)
 	if !ok || root.Kind == KindNull {
 		return nil, NewError(opPDF, errSyntax)
@@ -159,10 +172,10 @@ func (file *File) walkRoot() ([][]byte, error) {
 	if !ok || pages.Kind == KindNull {
 		return nil, NewError(opPDF, errSyntax)
 	}
-	return file.walkRef(pages, map[int]bool{})
+	return file.walkRef(pages, map[int]bool{}, NullVal())
 }
 
-func (file *File) walkRef(val Value, seen map[int]bool) ([][]byte, error) {
+func (file *File) walkRef(val Value, seen map[int]bool, resources Value) ([]pageLeaf, error) {
 	if val.Kind == KindRef {
 		if seen[val.RefNum] {
 			return nil, NewError(opPDF, errSyntax)
@@ -173,13 +186,14 @@ func (file *File) walkRef(val Value, seen map[int]bool) ([][]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return file.walkNode(node, seen)
+	return file.walkNode(node, seen, resources)
 }
 
-func (file *File) walkNode(node Value, seen map[int]bool) ([][]byte, error) {
+func (file *File) walkNode(node Value, seen map[int]bool, inherited Value) ([]pageLeaf, error) {
+	resources := nearestResources(node, inherited)
 	typeName, _ := node.NameEntry(keyType)
 	if typeName == keyPage {
-		return file.leaf(node)
+		return file.leaf(node, resources)
 	}
 	kids, hasKids := node.ArrayEntry(keyKids)
 	if typeName != keyPages && !hasKids {
@@ -188,21 +202,31 @@ func (file *File) walkNode(node Value, seen map[int]bool) ([][]byte, error) {
 	if !hasKids {
 		return nil, NewError(opPDF, errSyntax)
 	}
-	return file.walkKids(kids, seen)
+	return file.walkKids(kids, seen, resources)
 }
 
-func (file *File) leaf(node Value) ([][]byte, error) {
+// nearestResources returns the node's own /Resources, or the nearest ancestor's
+// when the node has none.
+func nearestResources(node Value, inherited Value) Value {
+	entry, ok := node.ValueEntry(keyResources)
+	if !ok || entry.Kind == KindNull {
+		return inherited
+	}
+	return entry
+}
+
+func (file *File) leaf(node Value, resources Value) ([]pageLeaf, error) {
 	content, err := file.pageBytes(node)
 	if err != nil {
 		return nil, err
 	}
-	return [][]byte{content}, nil
+	return []pageLeaf{{content: content, resources: resources}}, nil
 }
 
-func (file *File) walkKids(kids []Value, seen map[int]bool) ([][]byte, error) {
-	pages := make([][]byte, 0, len(kids))
+func (file *File) walkKids(kids []Value, seen map[int]bool, resources Value) ([]pageLeaf, error) {
+	pages := make([]pageLeaf, 0, len(kids))
 	for _, kid := range kids {
-		sub, err := file.walkRef(kid, seen)
+		sub, err := file.walkRef(kid, seen, resources)
 		if err != nil {
 			return nil, err
 		}

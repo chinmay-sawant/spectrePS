@@ -1,7 +1,7 @@
 # v0.0.3 - Paint Do and rasterize image PDFs
 
 > **Parent:** `plans/v0.0.3/00-program.md` - program ledger
-> **Status:** not started.
+> **Status:** phase 1 landed. Phases 2 to 4 open.
 > **Estimated effort:** about 4 days
 
 ---
@@ -18,15 +18,15 @@ The reader decodes image XObjects, but the content interpreter has no `Do` case 
 
 ### 1.1 Name-carrying lexer
 
-- [ ] The content scanner returns name text and `runner` gains a `popName` helper. `Do` on a non-name operand is `typecheck`, and `/Im Do` without resources stays `undefined`. Proof: `go test -count=1 ./internal/pdf -run TestPaintNameOperand`, and the updated `TestPaintUndefined`.
+- [x] The content scanner returns name text and `runner` gains a `popName` helper. `Do` on a non-name operand is `typecheck`, and `/Im Do` without resources stays `undefined`. Proof: `go test -count=1 ./internal/pdf -run TestPaintNameOperand` and `go test -count=1 ./internal/pdf -run TestPaintUndefined` exited 0 on 2026-09-25.
 
 ### 1.2 Page resources with inheritance
 
-- [ ] The page-tree walk keeps each page's nearest `/Resources`, with `/XObject` subdictionary lookup, and `PaintPage` passes it to the interpreter. `/Resources` inherited from a Pages ancestor resolves. Proof: `go test -count=1 ./internal/pdf -run TestPageResourcesInherited` and `TestPageResourcesDirect`.
+- [x] The page-tree walk keeps each page's nearest `/Resources`, with `/XObject` subdictionary lookup, and `PaintPage` passes it to the interpreter. `/Resources` inherited from a Pages ancestor resolves. Proof: `go test -count=1 ./internal/pdf -run TestPageResourcesInherited` and `go test -count=1 ./internal/pdf -run TestPageResourcesDirect` exited 0 on 2026-09-25.
 
 ### 1.3 Value-based image decode
 
-- [ ] The decode path is factored so a resolved stream value decodes the same way `DecodeImage(num)` does, and direct and indirect XObjects both work. Proof: `go test -count=1 ./internal/pdf -run TestDecodeImageValue`, with the existing `TestImageXObject` tests still passing.
+- [x] The decode path is factored so a resolved stream value decodes the same way `DecodeImage(num)` does, and direct and indirect XObjects both work. Proof: `go test -count=1 ./internal/pdf -run TestDecodeImageValue` and `go test -count=1 ./internal/pdf -run TestImageXObject` exited 0 on 2026-09-25.
 
 ## Phase 2: The seam and the pixmap
 
