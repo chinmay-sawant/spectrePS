@@ -12,6 +12,7 @@ func TestTextCommand(t *testing.T) {
 	symbolic := writeTemp(t, "symbolic.pdf", textPDF(t, symbolicTextObjects(t)))
 	want(t, []string{"text", symbolic}, 0, "AB\r\n", "")
 	wantCode(t, []string{"text"}, 2)
+	wantCode(t, []string{"text", "-w", "20", twoLines}, 2)
 }
 
 func textPDF(t *testing.T, objects [][]byte) []byte {

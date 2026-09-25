@@ -16,6 +16,7 @@ spectreps inkcov [options] file.ps|file.pdf
 spectreps ink_cov [options] file.ps|file.pdf
 spectreps rewrite [options] file.pdf
 spectreps ps -o path file.pdf
+spectreps text [-pages range] file.pdf
 spectreps validate [options] file.ps|file.pdf
 spectreps compare bytes fileA fileB
 spectreps compare raster [options] fileA fileB
@@ -77,6 +78,8 @@ Any other `-colorspace` value exits 2. `rgb` keeps the 24-bit RGB bytes from ear
 | `-o` | Output PostScript path | required |
 
 `ps` opens a PDF and re-emits each page's path subset as one date-free PostScript program. The header is `%!PS-Adobe-3.0` with a fixed 612 by 792 box. Marks are `setrgbcolor` or `setgray`, `setlinewidth`, `m`/`l`, and `S`/`f`/`f*` in 72 dpi points, and a prolog defines the short names. Text and images are not emitted: a page with `Tj` exits 1 with `Error: /undefined in Tj`. The file is written at mode `0o600`, and bytes are stable across two runs. `documentation/devices.md` has the shape.
+
+`text` opens a PDF and prints the extracted text of the selected pages to stdout. Lines run top to bottom and left to right, each line ends with CRLF, and a font with neither `/ToUnicode` nor a named encoding falls back to the code point. The command accepts `-pages` and no other option. Extraction is compared as text and geometry, not as raster bytes: text pixels never byte-match Ghostscript, because hinting and antialiasing differ. `documentation/devices.md` has the layout.
 
 `validate` takes one input and writes errors to stderr. It has no output file. `validate` does not run the PDF/UA-2 preflight yet. That preflight is `internal/pdfa.PreflightUA2`, it runs only for a UA-2 request, and its rules are in `documentation/devices.md`. The scope is preserve and preflight, and the claim is preflight only.
 

@@ -44,10 +44,11 @@ This is not a clean-room rewrite. A clean room is a formal split: one group stud
 Each row is a small slice, not Ghostscript parity.
 
 - Interpret PostScript. The slice is the operator set in `documentation/language.md`, not LanguageLevel 3.
-- Open a PDF and rasterize pages. The slice is path operators plus Flate streams, not PDF 1.7 or PDF 2.0.
+- Open a PDF and rasterize pages. The slice is path and text operators plus Flate streams, not PDF 1.7 or PDF 2.0.
 - Rasterize to an image. Spectre writes PPM, PNG, JPEG, and TIFF (none or Deflate). Ghostscript also writes BMP, PCX, fax, and PSD.
 - Select pages with `-pages`, in the style of `-dFirstPage` and `-dLastPage`. `raster`, `bbox`, `inkcov`, `pdfimage`, and `compare raster` take the flag, and a `%d` output path numbers the emitted pages from 1.
 - Rewrite a PDF as a new file and compress streams with Flate.
+- Paint and extract PDF text, in the style of `txtwrite` and `ps2ascii`. Spectre paints embedded TrueType and OpenType outlines and the standard 14 advances, and extraction writes UTF-8 with CRLF lines.
 - Stop on the first broken-file error, the same idea as `-dPDFSTOPONERROR`.
 - A library call and a CLI over that call, the same split as `gsapi` and the `gs` binary.
 - Block `file`, `run`, `deletefile`, `renamefile`, and `filenameforall` by default. They return `invalidaccess`. That is the rough idea of SAFER.
@@ -58,7 +59,7 @@ Byte compare and pixel compare are Spectre commands. Ghostscript 9.55.0 has no `
 
 - Full PostScript LanguageLevel 3, including filters other than Flate, `%pipe%`, and `%disk`.
 - Full PDF 1.7 and PDF 2.0, including transparency, optional content, encryption, and passwords.
-- Fonts, `show`, text extraction (`txtwrite`, `ps2ascii`), and OCR (`pdfocr`, Tesseract).
+- OCR (`pdfocr`, Tesseract). Font programs beyond the subset in `documentation/fonts.md`: Type 1 `/FontFile`, bare CFF, Type 3, vertical writing, color fonts, and variable fonts.
 - Images inside a PDF, DCT and CCITT compression, downsampling, and JPEG2000.
 - Font embedding and subsetting.
 - PDF/A-1b, PDF/A-2b, PDF/A-3b, and PDF/A-4e creation. The PDF/A-4 and 4f claim landed as a rewrite option with a profile preflight.
@@ -107,7 +108,7 @@ Spectre can say what it implements. "This program reads the PostScript language"
 
 A patent covers a method. Following a manual can be exactly the act a patent describes. Writing original Go does not, by itself, answer a patent claim. The public record that was checked in September 2026 says the following.
 
-PostScript. In 1988, Adobe co-founder Charles Geschke told IEEE Spectrum that Adobe had no patents on PostScript, only copyrights and trade secrets. The trade secret was font hinting, which was kept out of the published language. The language itself was published so others could implement it. Spectre's current plan has no fonts, so it is not implementing that unpublished hinting work. Source: IEEE Spectrum, "Inventing Postscript, the Tech That Took the Pain out of Printing."
+PostScript. In 1988, Adobe co-founder Charles Geschke told IEEE Spectrum that Adobe had no patents on PostScript, only copyrights and trade secrets. The trade secret was font hinting, which was kept out of the published language. The language itself was published so others could implement it. Spectre does not implement font hinting, so it is not reimplementing that unpublished work. Source: IEEE Spectrum, "Inventing Postscript, the Tech That Took the Pain out of Printing."
 
 PDF. Adobe published a royalty-free patent license for implementations of ISO 32000-1, PDF 1.7. The text grants every individual and organization the royalty-free right, under essential claims Adobe owns, to make, have made, use, sell, import, and distribute compliant implementations. A compliant implementation is the portion of a product that reads, writes, modifies, or processes files compliant with that specification. Adobe may revoke the grant if the licensee sues someone else claiming that a compliant implementation infringes an essential claim. Adobe disclaims a warranty that third parties have no patents. Source: Adobe's public patent license, `ISO32000-1PublicPatentLicense.pdf`.
 

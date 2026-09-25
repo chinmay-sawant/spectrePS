@@ -1,6 +1,6 @@
 # PostScript subset
 
-This is the contract for tag 0.0.2. A program that stays inside this file runs. A name this file does not list returns `undefined`, except the banned operators, which return `invalidaccess`.
+This is the contract for the current tree. A program that stays inside this file runs. A name this file does not list returns `undefined`, except the banned operators, which return `invalidaccess`.
 
 The input is PostScript source bytes. Spectre does not invent a second page-description language. PDF content operators are specified in `documentation/devices.md`, because they are a different syntax on the same graphics engine.
 
@@ -74,6 +74,10 @@ Control: `exec` `if` `ifelse` `repeat` `for` `loop` `forall` `exit`.
 
 Path and paint: `moveto` `rmoveto` `lineto` `rlineto` `curveto` `rcurveto` `closepath` `newpath` `currentpoint` `stroke` `fill` `eofill` `setlinewidth` `setrgbcolor` `setgray` `gsave` `grestore` `showpage`.
 
+Text and fonts: `findfont` `scalefont` `setfont` `show`.
+
+`findfont` knows the standard 14 names. Any other name, and a font operand that is not a font dictionary, is `invalidfont`. `setfont` makes one font current, and `gsave` and `grestore` save it. `show` takes a string, advances the current point by the StandardEncoding width of each code, and needs a current point; a show with none is `nocurrentpoint`. The standard 14 fonts have metrics but no outline program, so `show` on a pixmap returns `invalidfont` and does not change the page. Metrics and advances still work. `documentation/fonts.md` has the font model.
+
 Graphics defaults: line width 1, line cap 0, line join 0, miter limit 10, solid dash, gray 0. `gsave` depth max 32. Path point max 100000.
 
 `showpage` finishes the current page and starts a blank one. If the program paints and never calls `showpage`, the job finishes one page at the end. If it paints nothing and never calls `showpage`, the job still finishes one blank page.
@@ -94,6 +98,7 @@ Matrix operators `translate` `scale` `rotate` `concat` `setmatrix` `currentmatri
 | `syntaxerror` | The scanner rejects the bytes, or braces do not match. |
 | `limitcheck` | Exec stack, dict stack, path, gsave, or pixel cap. |
 | `invalidaccess` | Write to `systemdict`, or a banned operator. |
+| `invalidfont` | A font operand is malformed, or `show` paints a standard 14 glyph. |
 | `invalidexit` | `exit` with no loop. |
 | `dictstackunderflow` | `end` when only `systemdict` remains. |
 
@@ -120,4 +125,4 @@ A default letter page at 72 dpi is 612 by 792 pixels. A letter page at 300 dpi i
 
 ## Out of this tag
 
-Fonts, `show`, images, `clip`, `save`, `restore`, `bind`, filters, and file I/O. `bind` is omitted on purpose, so a name inside a procedure sees the definition from execution time. A test must redefine a name after building a procedure and observe the new value.
+Images, `clip`, `save`, `restore`, `bind`, filters, and file I/O. `bind` is omitted on purpose, so a name inside a procedure sees the definition from execution time. A test must redefine a name after building a procedure and observe the new value.

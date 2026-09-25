@@ -11,7 +11,9 @@ import (
 // cmdText prints the extracted text of the selected PDF pages. The output is
 // UTF-8 with one CRLF per line; text pixels are a different question.
 func cmdText(args []string, stdout, stderr io.Writer) int {
-	rest, _, sel, code := parsePageFlags("text", args, stderr)
+	set := newFlagSet("text", stderr)
+	sel := pageFlag(set)
+	rest, code := parseSet(set, args)
 	if code != 0 {
 		return code
 	}
@@ -36,7 +38,7 @@ func writeText(
 	stdout, stderr io.Writer,
 	in *spectreps.Instance,
 	src []byte,
-	sel pageSelection,
+	sel *pageSelection,
 ) int {
 	ctx := context.Background()
 	doc, err := in.OpenPDF(ctx, src)

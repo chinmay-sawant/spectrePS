@@ -1,14 +1,14 @@
 # v0.0.3 - Text and fonts
 
 > **Parent:** `plans/v0.0.3/00-program.md` - program ledger
-> **Status:** not started.
+> **Status:** complete. 2026-09-25. Every row landed except 3.6, which is dropped to a later tag.
 > **Estimated effort:** about six weeks across four phases. Type1 and a full Type0 path are extra.
 
 ---
 
 ## Overview
 
-PostScript `show` and PDF `Tj`, `TJ`, `'`, and `"` return `undefined` today. The scanner throws text payloads away, the runner has no text state or resources, and there is no font model. This phase builds the machine: metrics, encodings, painting, positioning, and extraction.
+PostScript `show` and PDF `Tj`, `TJ`, `'`, and `"` returned `undefined` when this plan opened. The scanner threw text payloads away, the runner had no text state or resources, and there was no font model. This phase built the machine: metrics, encodings, painting, positioning, and extraction.
 
 ## Executive summary
 
@@ -92,7 +92,8 @@ One glyph source serves both front ends: advances in 1/1000 em, outlines, encodi
 
 ### 3.6 Type1, optional
 
-- [ ] `/FontFile` Type1 charstrings and `seac` decode. Proof: `go test -count=1 ./internal/pdf -run TestType1Glyph`. This row is dropped to a later tag if 1.1 defers Type1.
+- [~] `/FontFile` Type1 charstrings and `seac` decode. Proof: `go test -count=1 ./internal/pdf -run TestType1Glyph`. This row is dropped to a later tag if 1.1 defers Type1.
+  Dropped 2026-09-25: row 1.1 defers Type 1, so this row does not run in this ledger. `documentation/fonts.md` records the scope and the integrator moves the row to `plans/v0.0.1/10-deferred.md`.
 
 ## Phase 4: Extraction
 
@@ -115,8 +116,10 @@ One glyph source serves both front ends: advances in 1/1000 em, outlines, encodi
 
 ### 5.1 Docs and closure
 
-- [ ] `documentation/language.md`, `devices.md`, `features.md`, `covered-and-not-covered.md`, and `cli.md` state the supported operators, the extraction command, and the pixel-parity caveat, and the deferred row moves to 10.4. Proof: `grep -n 'ExtractText' documentation/public-api.md`.
-- [ ] `make lint` and `make test` pass. Outcomes recorded on the day.
+- [x] `documentation/language.md`, `devices.md`, `features.md`, `covered-and-not-covered.md`, and `cli.md` state the supported operators, the extraction command, and the pixel-parity caveat, and the deferred row moves to 10.4. Proof: `grep -n 'ExtractText' documentation/public-api.md`.
+  Run 2026-09-25: `grep` hits `documentation/public-api.md:106`, `:159`, and `:161`. The five docs name the text operators, `spectreps text`, and the no-byte-match caveat. Row 3.6 is marked `[~]` in this file; the integrator moves it to `plans/v0.0.1/10-deferred.md` as 10.4.
+- [x] `make lint` and `make test` pass. Outcomes recorded on the day.
+  Run 2026-09-25: `make lint` passed: gofmt clean, `golangci-lint run ./...` clean, `size-check: clean (0 over-limit files)`. `make test` (`go test -p 24 ./...`) passed for every package, and `go test -count=1 -p 4 ./...` passed as well.
 
 ## Dependencies
 

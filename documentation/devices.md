@@ -125,7 +125,7 @@ The image helpers are three functions in `internal/pdfout`. `ScaleImage` takes a
 
 The structure model is `internal/pdf/structtree.go`. It parses `/MarkInfo`, `/StructTreeRoot`, `/K`, `/S`, `/P`, `/Pg`, `/MCID`, `/Alt`, `/ActualText`, `/Lang`, `/Namespaces`, `/RoleMap`, `/RoleMapNS`, and `/ParentTree` into typed values. The tree walk caps depth at 64 and reports a cycle as `limitcheck`. The parent tree resolves an MCID to its structure element and back; a claim with no agreeing entry is `undefined in ParentTree`. A role map resolves a custom type to a standard type; a cycle or a chain past 32 hops is `limitcheck`, a mapping into its own namespace or to itself is `syntaxerror`, and an unmapped custom type is `undefined`.
 
-The font check is dictionary-level only. A font passes when it has `/ToUnicode`, or when it is a simple font with a standard `/Encoding`. Otherwise an `/ActualText` on the structure element or an ancestor covers the run. Spectre does not decode glyphs. The claim is preflight only, never certification.
+The font check is dictionary-level only. A font passes when it has `/ToUnicode`, or when it is a simple font with a standard `/Encoding`. Otherwise an `/ActualText` on the structure element or an ancestor covers the run. The preflight does not decode glyphs. The claim is preflight only, never certification.
 
 `internal/pdfa` adds the PDF/UA-2 metadata and the machine checks. `ReadUA2` reads the catalog `/Metadata` packet with the `pdfuaid` values and `dc:title`, plus `/Lang`, `/MarkInfo`, and `/ViewerPreferences`. `UA2Write` keeps the source claim and adds `pdfuaid:part 2` and `pdfuaid:rev 2024` only when the caller opted in after a passing preflight. `UA2XMP`, `UA2ExtraObjects`, and `UA2Catalog` produce the stream and the catalog.
 
@@ -137,7 +137,7 @@ The font check is dictionary-level only. A font passes when it has `/ToUnicode`,
 
 The program starts with `%!PS-Adobe-3.0` and a fixed `%%BoundingBox: 0 0 612 792`. A prolog defines the short path names in terms of `moveto`, `lineto`, `stroke`, `fill`, and `eofill`, because a bare `m` or `S` is not a PostScript operator. Each page gets a `%%Page` comment and one `showpage`, and the program ends with `%%EOF`. There is no creation date, and two calls on the same document return equal buffers, so `CompareFiles` is the proof.
 
-The PDF painter flattens `c` into straight segments before the recorder sees it, so the writer emits what `pdf.Paint` gives and never writes `curveto`. Text and images wait for the font and image machines: `Tj` returns `undefined in Tj`. The proof is a round trip: a PDF page with `re`/`f`, `m`/`l`/`S`, a curve, and `q`/`Q`/`cm` becomes PostScript, runs back through `RunPostScript` at 72 dpi, and matches under `CompareRaster`.
+The PDF painter flattens `c` into straight segments before the recorder sees it, so the writer emits what `pdf.Paint` gives and never writes `curveto`. The recorder refuses text and images: `Tj` returns `undefined in Tj`, so a text page does not leave as a silently blank program. The proof is a round trip: a PDF page with `re`/`f`, `m`/`l`/`S`, a curve, and `q`/`Q`/`cm` becomes PostScript, runs back through `RunPostScript` at 72 dpi, and matches under `CompareRaster`.
 
 ## Bitmap PDF
 
@@ -222,6 +222,20 @@ The scan walks every in-use object, not only the page tree, so an unused font or
 
 Two rewrites of the same input and mode return equal bytes, because the packet, the profile, and the trailer `/ID` are fixed.
 
+## Text and fonts
+
+Fonts come from `internal/font` for the standard 14 metrics, encodings, and glyph names, and from `golang.org/x/image/font/sfnt` for embedded TrueType and OpenType programs. The model, its sources, and the painting policy are in `documentation/fonts.md`.
+
+PDF text operators: `BT`, `ET`, `Tf`, `Td`, `TD`, `Tm`, `T*`, `Tc`, `Tw`, `Tz`, `TL`, `Ts`, `Tj`, `TJ`, `'`, and `"`. The text state and the text matrices follow ISO 32000-1. `q` and `Q` save and restore the text state, and `BT` resets both matrices.
+
+A simple font reads `/Widths`, `/FirstChar`, `/MissingWidth`, `/FontDescriptor`, and `/BaseFont`, with the standard 14 metrics as the fallback when `/Widths` is absent. `/Encoding` names StandardEncoding, WinAnsiEncoding, or MacRomanEncoding, and `/Differences` overrides codes by name. `/ToUnicode` CMaps (`bfchar` and `bfrange`) win over the encoding and the Adobe Glyph List. A Type0 font reads `/Encoding /Identity-H`, a CIDFontType2 descendant, `/CIDToGIDMap`, `/W`, and `/DW`.
+
+The show operators deliver each positioned glyph to the `TextOptions.Sink` seam with its code, Unicode, advance, and device box. `File.ExtractText` reads that sink and lays the glyphs out: lines sort top to bottom, glyphs on one baseline sort left to right, a gap wider than a quarter of the box height inserts a space, and each line ends with CRLF. A font with no `/ToUnicode` and no named encoding falls back to the code point.
+
+Painting needs an outline program. The standard 14 ship no outlines and Spectre does not substitute host fonts, so painting a standard 14 glyph returns `invalidfont`. Advances, encodings, and extraction still work, because the glyph box and the text need metrics only. A `/FontFile2` or OpenType `/FontFile3` stream is the outline source when one exists. Type 1 `/FontFile`, bare CFF, and Type0 fonts outside Identity-H are out of this tag.
+
+Text pixels never byte-match Ghostscript, because hinting and antialiasing differ. Text tests compare shapes and advances, and extraction tests compare text and geometry, never `CompareRaster` against `gs`.
+
 ## PDF subset for the first PDF tag
 
 Phase 06 reads:
@@ -229,11 +243,11 @@ Phase 06 reads:
 - A header starting with `%PDF-`.
 - Classic xref tables, then xref streams in a following row of the same phase.
 - Flate-decoded content streams via `compress/flate`.
-- Page content operators `m l c h re S s f f* n q Q cm w RG rg g G Do`.
+- Page content operators `m l c h re S s f f* n q Q cm w RG rg g G Do BT ET Tf Td TD Tm T* Tc Tw Tz TL Ts Tj TJ ' "`.
 
 Those operators map to the same path and color operations as `moveto` `lineto` `curveto` `closepath` `stroke` `fill` `eofill` `gsave` `grestore` `concat` `setlinewidth` `setrgbcolor` `setgray`.
 
-`Do` paints an image XObject and returns `undefined` with the `Do` operator name when the name or image cannot decode. `Tj`, `TJ`, `'`, and `"` return `undefined` with the operator name filled in, unless a later phase defines them. A page that uses them does not rasterize as a blank success.
+`Do` paints an image XObject and returns `undefined` with the `Do` operator name when the name or image cannot decode. The text operators paint and extract through the font machine above. A font with no outline source paints as `invalidfont`, and a Type 1, bare CFF, or non-Identity Type0 font is out of this tag. A page that uses an unsupported operator does not rasterize as a blank success.
 
 Encrypted files return `invalidaccess`. Unknown filters return `undefined`.
 
