@@ -36,20 +36,26 @@ type (
 	}
 
 	snapshot struct {
-		path    []point
-		hasPt   bool
-		curX    float64
-		curY    float64
-		subX    float64
-		subY    float64
-		subOpen bool
-		ctm     graphics.Matrix
-		width   float64
-		red     float64
-		green   float64
-		blue    float64
-		text    textState
-		clips   []graphics.Clip
+		path        []point
+		hasPt       bool
+		curX        float64
+		curY        float64
+		subX        float64
+		subY        float64
+		subOpen     bool
+		ctm         graphics.Matrix
+		width       float64
+		red         float64
+		green       float64
+		blue        float64
+		fillAlpha   float64
+		strokeAlpha float64
+		blendMode   graphics.BlendMode
+		softMask    []byte
+		space       colorSpace
+		values      []float64
+		text        textState
+		clips       []graphics.Clip
 	}
 
 	item struct {
@@ -62,37 +68,47 @@ type (
 	}
 
 	runner struct {
-		marker     graphics.Marker
-		scale      float64
-		file       *File
-		xobjects   map[string]Value
-		images     map[string]image.Image
-		fonts      map[string]*Font
-		extgstates map[string]Value
-		properties map[string]Value
-		sink       GlyphSink
-		runs       TextRunSink
-		mcSink     MarkedContentSink
-		mcStack    []mcFrame
-		clips      []graphics.Clip
-		formDepth  int
-		stack      []item
-		path       []point
-		hasPt      bool
-		curX       float64
-		curY       float64
-		subX       float64
-		subY       float64
-		subOpen    bool
-		ctm        graphics.Matrix
-		width      float64
-		red        float64
-		green      float64
-		blue       float64
-		saves      []*snapshot
-		text       textState
-		textMatrix graphics.Matrix
-		textLine   graphics.Matrix
+		marker      graphics.Marker
+		scale       float64
+		file        *File
+		xobjects    map[string]Value
+		images      map[string]image.Image
+		masks       map[string]*image.Alpha
+		colors      map[string]Value
+		fonts       map[string]*Font
+		extgstates  map[string]Value
+		properties  map[string]Value
+		ocOff       map[int]bool
+		sink        GlyphSink
+		runs        TextRunSink
+		mcSink      MarkedContentSink
+		mcStack     []mcFrame
+		clips       []graphics.Clip
+		formDepth   int
+		skipDepth   int
+		stack       []item
+		path        []point
+		hasPt       bool
+		curX        float64
+		curY        float64
+		subX        float64
+		subY        float64
+		subOpen     bool
+		ctm         graphics.Matrix
+		width       float64
+		red         float64
+		green       float64
+		blue        float64
+		fillAlpha   float64
+		strokeAlpha float64
+		blendMode   graphics.BlendMode
+		softMask    []byte
+		space       colorSpace
+		values      []float64
+		saves       []*snapshot
+		text        textState
+		textMatrix  graphics.Matrix
+		textLine    graphics.Matrix
 	}
 )
 
@@ -167,46 +183,64 @@ func PaintWith(
 	run.fonts = opt.Resources.Fonts
 	run.extgstates = opt.Resources.ExtGStates
 	run.properties = opt.Resources.Properties
+	run.colors = opt.Resources.Colors
 	if opt.Text.Fonts != nil {
 		run.fonts = opt.Text.Fonts
 	}
 	run.sink = opt.Text.Sink
 	run.runs = opt.Text.Runs
 	run.mcSink = opt.MarkedContent
+	ocOff, err := opt.Resources.ocOffGroups()
+	if err != nil {
+		return err
+	}
+	run.ocOff = ocOff
 	lex := scanner{src: content, pos: 0}
 	return run.play(ctx, &lex)
 }
 
 func newRunner(marker graphics.Marker, scale float64) *runner {
 	return &runner{
-		marker:     marker,
-		scale:      scale,
-		file:       nil,
-		xobjects:   nil,
-		images:     nil,
-		fonts:      nil,
-		extgstates: nil,
-		properties: nil,
-		sink:       nil,
-		runs:       nil,
-		mcSink:     nil,
-		mcStack:    nil,
-		clips:      nil,
-		formDepth:  0,
-		stack:      nil,
-		path:       nil,
-		hasPt:      false,
-		curX:       0,
-		curY:       0,
-		subX:       0,
-		subY:       0,
-		subOpen:    false,
-		ctm:        graphics.Identity(),
-		width:      defaultWidth,
-		red:        0,
-		green:      0,
-		blue:       0,
-		saves:      nil,
+		marker:      marker,
+		scale:       scale,
+		file:        nil,
+		xobjects:    nil,
+		images:      nil,
+		masks:       nil,
+		colors:      nil,
+		fonts:       nil,
+		extgstates:  nil,
+		properties:  nil,
+		ocOff:       nil,
+		sink:        nil,
+		runs:        nil,
+		mcSink:      nil,
+		mcStack:     nil,
+		clips:       nil,
+		formDepth:   0,
+		skipDepth:   0,
+		stack:       nil,
+		path:        nil,
+		hasPt:       false,
+		curX:        0,
+		curY:        0,
+		subX:        0,
+		subY:        0,
+		subOpen:     false,
+		ctm:         graphics.Identity(),
+		width:       defaultWidth,
+		red:         0,
+		green:       0,
+		blue:        0,
+		fillAlpha:   1,
+		strokeAlpha: 1,
+		blendMode:   graphics.BlendNormal,
+		softMask:    nil,
+		// The initial color space is DeviceGray with a black component, so a
+		// page that never sets color paints black, as it does today.
+		space:  deviceSpace(1, grayPreview),
+		values: []float64{0},
+		saves:  nil,
 		text: textState{
 			font: nil, fontName: "", size: 0, hscale: 1,
 			leading: 0, charSpacing: 0, wordSpacing: 0, rise: 0,
@@ -262,6 +296,9 @@ func (run *runner) take(ctx context.Context, tok ctok) error {
 		run.stack = append(run.stack, itemOf(tok))
 		return nil
 	}
+	if run.skipDepth > 0 {
+		return run.takeSkipped(tok.text)
+	}
 	if handled, err := run.takePath(tok.text); handled {
 		return err
 	}
@@ -271,7 +308,7 @@ func (run *runner) take(ctx context.Context, tok ctok) error {
 	if handled, err := run.takeDo(ctx, tok.text); handled {
 		return err
 	}
-	if handled, err := run.takeState(tok.text); handled {
+	if handled, err := run.takeState(ctx, tok.text); handled {
 		return err
 	}
 	if handled, err := run.takeMarked(tok.text); handled {
@@ -284,6 +321,26 @@ func (run *runner) take(ctx context.Context, tok ctok) error {
 		return nil
 	}
 	return NewError(tok.text, errUndefined)
+}
+
+// takeSkipped walks operators inside content hidden by an OFF optional
+// content group. Only BMC, BDC, and EMC matter, because they change the
+// skip nesting. Operands still pile up on the stack and are dropped at the
+// matching EMC, because a skipped section may hold any operator. The EMC that
+// closes the OFF group also closes the marked-content frame, so the sink stays
+// paired while the painting is skipped.
+func (run *runner) takeSkipped(opName string) error {
+	switch opName {
+	case "BMC", "BDC":
+		run.skipDepth++
+	case "EMC":
+		run.skipDepth--
+		if run.skipDepth == 0 {
+			run.stack = nil
+			return run.endMarked()
+		}
+	}
+	return nil
 }
 
 func (run *runner) takePath(opName string) (bool, error) {
@@ -354,8 +411,8 @@ func (run *runner) takePaintClip(opName string) (bool, error) {
 }
 
 // takeState dispatches the graphics state operators.
-func (run *runner) takeState(opName string) (bool, error) {
-	if handled, err := run.takeStateCore(opName); handled {
+func (run *runner) takeState(ctx context.Context, opName string) (bool, error) {
+	if handled, err := run.takeStateCore(ctx, opName); handled {
 		return true, err
 	}
 	if handled, err := run.takeStateLine(opName); handled {
@@ -365,7 +422,7 @@ func (run *runner) takeState(opName string) (bool, error) {
 }
 
 // takeStateCore dispatches the save, matrix, width, and gs operators.
-func (run *runner) takeStateCore(opName string) (bool, error) {
+func (run *runner) takeStateCore(ctx context.Context, opName string) (bool, error) {
 	switch opName {
 	case "q":
 		return true, run.save()
@@ -376,7 +433,7 @@ func (run *runner) takeStateCore(opName string) (bool, error) {
 	case "w":
 		return true, run.setWidth()
 	case "gs":
-		return true, run.setExtGState()
+		return true, run.setExtGState(ctx)
 	default:
 		return false, nil
 	}
@@ -394,13 +451,23 @@ func (run *runner) takeStateLine(opName string) (bool, error) {
 	}
 }
 
-// takeStateColor dispatches the color operators.
+// takeStateColor dispatches the color operators. The stroke and non-stroking
+// forms share one current color, the behavior this interpreter had before
+// the color space work, so an RG color still fills a path.
 func (run *runner) takeStateColor(opName string) (bool, error) {
 	switch opName {
 	case "RG", "rg":
 		return true, run.setRGB(opName)
 	case "G", "g":
 		return true, run.setGray(opName)
+	case "K", "k":
+		return true, run.setCMYK()
+	case "CS", "cs":
+		return true, run.setColorSpaceOp(opName)
+	case "SC", "sc":
+		return true, run.setComponents(opName)
+	case "SCN", "scn":
+		return true, run.setComponentsName(opName)
 	default:
 		return false, nil
 	}
@@ -1110,25 +1177,32 @@ func (run *runner) restore() error {
 	saved := run.saves[count-1]
 	run.saves = run.saves[:count-1]
 	run.apply(saved)
+	run.syncState()
 	return nil
 }
 
 func (run *runner) snap() *snapshot {
 	return &snapshot{
-		path:    slices.Clone(run.path),
-		hasPt:   run.hasPt,
-		curX:    run.curX,
-		curY:    run.curY,
-		subX:    run.subX,
-		subY:    run.subY,
-		subOpen: run.subOpen,
-		ctm:     run.ctm,
-		width:   run.width,
-		red:     run.red,
-		green:   run.green,
-		blue:    run.blue,
-		text:    run.text,
-		clips:   slices.Clone(run.clips),
+		path:        slices.Clone(run.path),
+		hasPt:       run.hasPt,
+		curX:        run.curX,
+		curY:        run.curY,
+		subX:        run.subX,
+		subY:        run.subY,
+		subOpen:     run.subOpen,
+		ctm:         run.ctm,
+		width:       run.width,
+		red:         run.red,
+		green:       run.green,
+		blue:        run.blue,
+		fillAlpha:   run.fillAlpha,
+		strokeAlpha: run.strokeAlpha,
+		blendMode:   run.blendMode,
+		softMask:    run.softMask,
+		space:       run.space,
+		values:      slices.Clone(run.values),
+		text:        run.text,
+		clips:       slices.Clone(run.clips),
 	}
 }
 
@@ -1145,6 +1219,12 @@ func (run *runner) apply(saved *snapshot) {
 	run.red = saved.red
 	run.green = saved.green
 	run.blue = saved.blue
+	run.fillAlpha = saved.fillAlpha
+	run.strokeAlpha = saved.strokeAlpha
+	run.blendMode = saved.blendMode
+	run.softMask = saved.softMask
+	run.space = saved.space
+	run.values = slices.Clone(saved.values)
 	run.text = saved.text
 	run.clips = slices.Clone(saved.clips)
 }
@@ -1195,9 +1275,9 @@ func (run *runner) setRGB(opName string) error {
 	if err != nil {
 		return err
 	}
-	run.red = red
-	run.green = green
-	run.blue = blue
+	run.space = deviceSpace(rgbComponents, rgbPreview)
+	run.values = []float64{red, green, blue}
+	run.setPreview()
 	return nil
 }
 
@@ -1206,15 +1286,106 @@ func (run *runner) setGray(opName string) error {
 	if err != nil {
 		return err
 	}
-	run.red = gray
-	run.green = gray
-	run.blue = gray
+	run.space = deviceSpace(1, grayPreview)
+	run.values = []float64{gray}
+	run.setPreview()
 	return nil
+}
+
+// setCMYK pops c m y k and selects DeviceCMYK, the K operator.
+func (run *runner) setCMYK() error {
+	const opName = "k"
+	black, err := run.popNum(opName)
+	if err != nil {
+		return err
+	}
+	yellow, err := run.popNum(opName)
+	if err != nil {
+		return err
+	}
+	magenta, err := run.popNum(opName)
+	if err != nil {
+		return err
+	}
+	cyan, err := run.popNum(opName)
+	if err != nil {
+		return err
+	}
+	run.space = deviceSpace(cmykComponents, cmykPreview)
+	run.values = []float64{cyan, magenta, yellow, black}
+	run.setPreview()
+	return nil
+}
+
+// setColorSpaceOp pops a name and selects the current color space. A name
+// resolves in /Resources /ColorSpace first and as a device space name second.
+// The components reset to 0, the initial color of the new space.
+func (run *runner) setColorSpaceOp(opName string) error {
+	name, err := run.popName(opName)
+	if err != nil {
+		return err
+	}
+	space, err := run.colorSpaceFor(name, opName)
+	if err != nil {
+		return err
+	}
+	run.space = space
+	run.values = make([]float64, space.components)
+	run.setPreview()
+	return nil
+}
+
+// colorSpaceFor resolves one CS operand: a /ColorSpace resource name, then a
+// device space name. An unlisted name is undefined in opName.
+func (run *runner) colorSpaceFor(name, opName string) (colorSpace, error) {
+	if entry, ok := run.colors[name]; ok {
+		space, err := run.file.resolveColorSpace(entry, opName)
+		if err != nil {
+			return colorSpace{}, err
+		}
+		return space, nil
+	}
+	return deviceColorSpace(name, opName)
+}
+
+// setComponents pops one value per current color component for SC and sc.
+func (run *runner) setComponents(opName string) error {
+	count := run.space.components
+	if count < 1 {
+		count = 1
+	}
+	values := make([]float64, count)
+	for idx := count - 1; idx >= 0; idx-- {
+		value, err := run.popNum(opName)
+		if err != nil {
+			return err
+		}
+		values[idx] = value
+	}
+	run.values = values
+	run.setPreview()
+	return nil
+}
+
+// setComponentsName pops the SCN and scn operands. A trailing name selects a
+// pattern color, which this subset does not paint, so it is undefined.
+func (run *runner) setComponentsName(opName string) error {
+	count := len(run.stack)
+	if count > 0 && run.stack[count-1].kind == itemName {
+		return NewError(opName, errUndefined)
+	}
+	return run.setComponents(opName)
+}
+
+// setPreview recomputes the painted RGB triple from the current color space
+// and components, so every mark reaches the RGB pixmap through the preview.
+func (run *runner) setPreview() {
+	run.red, run.green, run.blue = run.space.rgb(run.values)
 }
 
 // setExtGState resolves one /ExtGState name and applies the parameters this
 // subset can honor. An unknown name is undefined in gs.
-func (run *runner) setExtGState() error {
+func (run *runner) setExtGState(ctx context.Context) error {
 	const opName = "gs"
 	name, err := run.popName(opName)
 	if err != nil {
@@ -1231,30 +1402,160 @@ func (run *runner) setExtGState() error {
 	if resolved.Kind != KindDict {
 		return NewError(opName, errUndefined)
 	}
-	return run.applyExtGState(resolved, opName)
+	return run.applyExtGState(ctx, resolved, opName)
 }
 
 // applyExtGState validates every entry before it changes the state, so a
-// refusal leaves the previous state intact. /LW applies. /LC, /LJ, /ML, and
-// /RI are no-ops under the capsule stroke. Any other entry refuses with
-// undefined in gs instead of skipping the state.
-func (run *runner) applyExtGState(entry Value, opName string) error {
-	width := run.width
+// refusal leaves the previous state intact. /LW, /CA, /ca, /BM, and /SMask
+// apply through the optional marker seams. /LC, /LJ, /ML, and /RI are no-ops
+// under the capsule stroke. Any other entry refuses with undefined in gs
+// instead of skipping the state, and so does an alpha or mask entry when the
+// marker cannot host the seam, which keeps the rewrite recorder honest.
+//
+//nolint:cyclop // one case per ExtGState entry
+func (run *runner) applyExtGState(ctx context.Context, entry Value, opName string) error {
+	state := extGState{
+		width:       run.width,
+		fillAlpha:   run.fillAlpha,
+		strokeAlpha: run.strokeAlpha,
+		blendMode:   run.blendMode,
+		softMask:    run.softMask,
+	}
+	needsAlpha, needsMask := false, false
 	for key, item := range entry.Dict {
+		var err error
 		switch key {
-		case "Type", "LC", "LJ", "ML", "RI":
+		case keyType, "LC", "LJ", "ML", "RI":
 		case "LW":
-			number, ok := valueNum(item)
-			if !ok {
-				return NewError(opName, errType)
-			}
-			width = number
+			err = state.setWidth(item, opName)
+		case "CA":
+			needsAlpha = true
+			err = state.setAlpha(item, opName, true)
+		case "ca":
+			needsAlpha = true
+			err = state.setAlpha(item, opName, false)
+		case "BM":
+			needsAlpha = true
+			err = state.setBlend(item, opName)
+		case "SMask":
+			needsMask = true
+			state.softMask, err = run.stateSoftMask(ctx, item, opName)
+		case "TR":
+			err = identityTransfer(item, opName)
 		default:
 			return NewError(opName, errUndefined)
 		}
+		if err != nil {
+			return err
+		}
 	}
-	run.width = width
+	if err := run.checkStateSeams(needsAlpha, needsMask, opName); err != nil {
+		return err
+	}
+	run.width = state.width
+	run.fillAlpha = state.fillAlpha
+	run.strokeAlpha = state.strokeAlpha
+	run.blendMode = state.blendMode
+	run.softMask = state.softMask
+	run.syncState()
 	return nil
+}
+
+// extGState carries the parameters one gs applies after the whole entry
+// validates, so a refusal never leaves a partly applied state.
+type extGState struct {
+	width       float64
+	fillAlpha   float64
+	strokeAlpha float64
+	blendMode   graphics.BlendMode
+	softMask    []byte
+}
+
+func (state *extGState) setWidth(item Value, opName string) error {
+	number, ok := valueNum(item)
+	if !ok {
+		return NewError(opName, errType)
+	}
+	state.width = number
+	return nil
+}
+
+// setAlpha reads /CA or /ca. The value clamps to 0 through 1.
+func (state *extGState) setAlpha(item Value, opName string, stroke bool) error {
+	number, ok := valueNum(item)
+	if !ok {
+		return NewError(opName, errType)
+	}
+	if stroke {
+		state.strokeAlpha = clampNumber(number, 0, 1)
+		return nil
+	}
+	state.fillAlpha = clampNumber(number, 0, 1)
+	return nil
+}
+
+// setBlend reads /BM. A name maps through blendModeName; the four
+// non-separable modes and any other name are undefined in gs.
+func (state *extGState) setBlend(item Value, opName string) error {
+	if item.Kind != KindName {
+		return NewError(opName, errUndefined)
+	}
+	mode, ok := blendModeName(item.Name)
+	if !ok {
+		return NewError(opName, errUndefined)
+	}
+	state.blendMode = mode
+	return nil
+}
+
+// identityTransfer accepts /TR /Identity and the absent default. Any other
+// transfer function is undefined in gs, because this subset builds only an
+// identity state soft mask.
+func identityTransfer(item Value, opName string) error {
+	if item.Kind == KindNull {
+		return nil
+	}
+	if item.Kind == KindName && item.Name == nameIdentity {
+		return nil
+	}
+	return NewError(opName, errUndefined)
+}
+
+// checkStateSeams requires the marker to implement the optional seam a gs
+// entry needs. A marker without AlphaMarker or SoftMaskMarker keeps its
+// refusal, so the rewrite recorder never drops an alpha, blend, or mask effect.
+func (run *runner) checkStateSeams(needsAlpha, needsMask bool, opName string) error {
+	if run.marker == nil {
+		return nil
+	}
+	if needsAlpha {
+		if _, ok := run.marker.(graphics.AlphaMarker); !ok {
+			return NewError(opName, errUndefined)
+		}
+	}
+	if needsMask {
+		if _, ok := run.marker.(graphics.SoftMaskMarker); !ok {
+			return NewError(opName, errUndefined)
+		}
+	}
+	return nil
+}
+
+// syncState pushes the alpha, blend, and soft mask state to the marker when
+// it implements the optional seams. A marker without them ignores the state,
+// exactly as it did before the seams existed.
+func (run *runner) syncState() {
+	if run.marker == nil {
+		return
+	}
+	if alpha, ok := run.marker.(graphics.AlphaMarker); ok {
+		alpha.SetFillAlpha(run.fillAlpha)
+		alpha.SetStrokeAlpha(run.strokeAlpha)
+		alpha.SetBlendMode(run.blendMode)
+	}
+	if mask, ok := run.marker.(graphics.SoftMaskMarker); ok {
+		mask.SetSoftMask(run.softMask)
+	}
 }
 
 // discardNum pops and ignores one numeric operand. J, j, M, and i are line

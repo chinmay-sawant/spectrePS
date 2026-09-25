@@ -135,7 +135,7 @@ func checkExtGStateErrors(t *testing.T) {
 	}{
 		{name: "unknown name", content: "/Nope gs", body: "<< /Type /ExtGState /LW 8 >>",
 			opName: "gs", errName: nameUndefined},
-		{name: "unsupported entry", content: "/GS0 gs", body: "<< /Type /ExtGState /BM /Multiply >>",
+		{name: "unsupported entry", content: "/GS0 gs", body: "<< /Type /ExtGState /HT /Nope >>",
 			opName: "gs", errName: nameUndefined},
 		{name: "not a dict", content: "/GS0 gs", body: "[1 2 3]",
 			opName: "gs", errName: nameUndefined},

@@ -99,6 +99,58 @@ func TestEmitClipUnchanged(t *testing.T) {
 	}
 }
 
+// TestEmitGSUnchanged proves the rewrite recorder still refuses an alpha,
+// blend, or soft mask ExtGState. The recorder implements neither AlphaMarker
+// nor SoftMaskMarker, so gs returns undefined instead of dropping the effect.
+func TestEmitGSUnchanged(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{name: "fill alpha", body: "<< /Type /ExtGState /ca 0.5 >>"},
+		{name: "stroke alpha", body: "<< /Type /ExtGState /CA 0.5 >>"},
+		{name: "blend", body: "<< /Type /ExtGState /BM /Multiply >>"},
+		{name: "soft mask", body: "<< /Type /ExtGState /SMask /None >>"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			file := gsEmitPDF(t, testCase.body)
+			got, err := EmitPage(t.Context(), file, 0)
+			var job *pdf.Error
+			if !errors.As(err, &job) || job.Op != "gs" || job.Name != errUndefined {
+				t.Fatalf("EmitPage() error = %v, want undefined in gs", err)
+			}
+			if got != nil {
+				t.Fatalf("EmitPage() bytes = %#v, want nil", got)
+			}
+		})
+	}
+	t.Run("plain width still emits", func(t *testing.T) {
+		file := gsEmitPDF(t, "<< /Type /ExtGState /LW 2 >>")
+		got, err := EmitPage(t.Context(), file, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) == 0 {
+			t.Fatal("emit returned no operators")
+		}
+	})
+}
+
+// gsEmitPDF is one page whose content applies /GS0 and paints a square.
+func gsEmitPDF(t *testing.T, body string) *pdf.File {
+	t.Helper()
+	doc := newFixtureDoc()
+	doc.object("<< /Type /Catalog /Pages 2 0 R >>")
+	doc.object("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+	doc.object("<< /Type /Page /Parent 2 0 R /Contents 4 0 R " +
+		"/Resources << /ExtGState << /GS0 5 0 R >> >> >>")
+	doc.object(string(streamBody(
+		[]byte("/GS0 gs 1 0 0 rg 0 0 10 10 re f"), false)))
+	doc.object(body)
+	return mustOpenPDF(t, doc.classic())
+}
+
 func checkEmitRecorderSeesImage(t *testing.T, file *pdf.File) {
 	t.Helper()
 	content, err := file.Content(0)

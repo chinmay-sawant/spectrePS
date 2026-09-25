@@ -32,18 +32,33 @@ func (run *runner) takeMarked(opName string) (bool, error) {
 
 // beginMarked pops a tag and, for BDC, the properties operand, then opens one
 // nesting level. The depth passed to the sink is 1 for the outermost sequence.
+// A sequence whose optional content group is OFF opens a skip instead, so its
+// painting operators never run. The frame and the sink event stay paired.
 func (run *runner) beginMarked(opName string, withProps bool) error {
 	props := NullVal()
+	raw := otherItem()
 	if withProps {
-		got, err := run.popProperty(opName)
+		got, err := run.popPropertyItem(opName)
 		if err != nil {
 			return err
 		}
-		props = got
+		raw = got
+		resolved, err := run.propertyValue(raw, opName)
+		if err != nil {
+			return err
+		}
+		props = resolved
 	}
 	tag, err := run.popName(opName)
 	if err != nil {
 		return err
+	}
+	hidden := false
+	if withProps {
+		hidden, err = run.ocHidden(props, raw)
+		if err != nil {
+			return err
+		}
 	}
 	if len(run.mcStack) >= maxMarkedDepth {
 		return NewError(opName, errLimit)
@@ -52,6 +67,9 @@ func (run *runner) beginMarked(opName string, withProps bool) error {
 	run.mcStack = append(run.mcStack, mcFrame{tag: tag, depth: depth})
 	if activeSink(run.mcSink) {
 		run.mcSink.BeginMarkedContent(tag, props, depth)
+	}
+	if hidden {
+		run.skipDepth = 1
 	}
 	return nil
 }
@@ -83,28 +101,45 @@ func (run *runner) endMarked() error {
 	return nil
 }
 
-// popProperty pops the properties operand of BDC or DP. A name resolves in the
-// /Properties resources and a dictionary stands for itself. Anything else is
-// typecheck and a name outside /Properties is undefined.
+// popProperty pops the properties operand of BDC or DP and resolves it. A
+// name resolves in the /Properties resources and a dictionary stands for
+// itself. Anything else is typecheck and a name outside /Properties is
+// undefined.
 func (run *runner) popProperty(opName string) (Value, error) {
+	raw, err := run.popPropertyItem(opName)
+	if err != nil {
+		return NullVal(), err
+	}
+	return run.propertyValue(raw, opName)
+}
+
+// popPropertyItem pops the raw properties operand and keeps its name text or
+// dictionary, so the optional content check can read an indirect reference
+// before resolution loses the object number.
+func (run *runner) popPropertyItem(opName string) (item, error) {
 	count := len(run.stack)
 	if count == 0 {
-		return NullVal(), NewError(opName, errUnderflow)
+		return otherItem(), NewError(opName, errUnderflow)
 	}
 	last := run.stack[count-1]
-	if last.kind == itemName {
+	if last.kind == itemName || last.kind == itemDict {
 		run.stack = run.stack[:count-1]
-		prop, ok := run.properties[last.name]
+		return last, nil
+	}
+	return otherItem(), NewError(opName, errType)
+}
+
+// propertyValue resolves one raw properties operand through /Properties or
+// through the file. A name outside /Properties is undefined in opName.
+func (run *runner) propertyValue(raw item, opName string) (Value, error) {
+	if raw.kind == itemName {
+		prop, ok := run.properties[raw.name]
 		if !ok {
 			return NullVal(), NewError(opName, errUndefined)
 		}
 		return run.derefValue(prop, opName)
 	}
-	if last.kind == itemDict {
-		run.stack = run.stack[:count-1]
-		return run.derefValue(last.val, opName)
-	}
-	return NullVal(), NewError(opName, errType)
+	return run.derefValue(raw.val, opName)
 }
 
 // derefValue resolves one resource value through the file when indirect.

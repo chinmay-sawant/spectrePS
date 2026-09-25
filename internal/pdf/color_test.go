@@ -277,14 +277,14 @@ func TestColorSpaceImageCMYKDCTPreview(t *testing.T) {
 	pic.SetCMYK(0, 0, color.CMYK{C: 0, M: 255, Y: 255, K: 0})
 	pic.SetCMYK(1, 0, color.CMYK{C: 0, M: 0, Y: 0, K: 255})
 	space := colorSpaceFor(t, nil, NameVal(colorCMYK))
-	got, err := previewDecoded(pic, space, opImage)
+	got, err := previewDecoded(pic, space, nil, opImage)
 	if err != nil {
 		t.Fatal(err)
 	}
 	checkRGBPixels(t, got, []byte{255, 0, 0, 0, 0, 0})
 
 	rgb := image.NewRGBA(image.Rect(0, 0, 1, 1))
-	_, err = previewDecoded(rgb, space, opImage)
+	_, err = previewDecoded(rgb, space, nil, opImage)
 	wantErr(t, err, opImage, errUndefined)
 }
 

@@ -59,7 +59,33 @@ type AlphaMarker interface {
 	SetBlendMode(mode BlendMode)
 }
 
-var _ AlphaMarker = (*Pixmap)(nil)
+// SoftMaskMarker is implemented by devices that clip later marks with a
+// per-pixel coverage plane. It sits beside AlphaMarker, so a device that
+// cannot mask, such as the rewrite recorder, simply does not implement it. A
+// Pixmap does.
+type SoftMaskMarker interface {
+	// SetSoftMask installs the coverage plane, row 0 at the top, one byte per
+	// page pixel. A nil or wrong-sized plane clears the mask.
+	SetSoftMask(mask []byte)
+}
+
+// GroupMarker is implemented by devices that host a transparency group or a
+// state soft mask. The scratch page has the page pixel size, and the group is
+// composited once when its content has finished.
+type GroupMarker interface {
+	// PageSize returns the device page in pixels.
+	PageSize() (int, int)
+	// CompositeGroup composites a rendered group with its alpha and blend mode.
+	CompositeGroup(group *Pixmap, alpha float64, mode BlendMode)
+	// CompositeGroupClipped composites a group through the active clips.
+	CompositeGroupClipped(clips []Clip, group *Pixmap, alpha float64, mode BlendMode)
+}
+
+var (
+	_ AlphaMarker    = (*Pixmap)(nil)
+	_ SoftMaskMarker = (*Pixmap)(nil)
+	_ GroupMarker    = (*Pixmap)(nil)
+)
 
 // SetFillAlpha sets the constant alpha for fill and glyph marks.
 func (p *Pixmap) SetFillAlpha(alpha float64) {
@@ -80,11 +106,18 @@ func (p *Pixmap) SetBlendMode(mode BlendMode) {
 
 // paint composites one mark pixel: the blend function of the backdrop and the
 // source color, then the constant alpha. Each channel is
-// blend(src, dst)*alpha + dst*(1-alpha), rounded to the nearest byte.
+// blend(src, dst)*alpha + dst*(1-alpha), rounded to the nearest byte. An
+// active soft mask multiplies the alpha, and the mark updates the coverage
+// plane a group composite reads.
 func (p *Pixmap) paint(col, row int, red, green, blue, alpha float64) {
-	if alpha <= 0 || col < 0 || row < 0 || col >= p.w || row >= p.h {
+	if col < 0 || row < 0 || col >= p.w || row >= p.h {
 		return
 	}
+	alpha = p.maskedAlpha(col, row, alpha)
+	if alpha <= 0 {
+		return
+	}
+	p.markAlpha(col, row, alpha)
 	if alpha >= 1 && p.blendMode == BlendNormal {
 		p.set(col, row, colorByte(red), colorByte(green), colorByte(blue))
 		return
@@ -93,6 +126,61 @@ func (p *Pixmap) paint(col, row int, red, green, blue, alpha float64) {
 	p.pix[offset] = compositeByte(p.pix[offset], red, p.blendMode, alpha)
 	p.pix[offset+1] = compositeByte(p.pix[offset+1], green, p.blendMode, alpha)
 	p.pix[offset+2] = compositeByte(p.pix[offset+2], blue, p.blendMode, alpha)
+}
+
+// maskedAlpha multiplies one mark alpha by the active soft mask coverage.
+func (p *Pixmap) maskedAlpha(col, row int, alpha float64) float64 {
+	if p.softMask == nil {
+		return alpha
+	}
+	return alpha * float64(p.softMask[row*p.w+col]) / colorScale
+}
+
+// markAlpha composites one mark alpha into the coverage plane with
+// a + dst*(1-a), so overlapping marks accumulate coverage toward 255.
+func (p *Pixmap) markAlpha(col, row int, alpha float64) {
+	offset := row*p.w + col
+	backdrop := float64(p.alpha[offset]) / colorScale
+	out := alpha + backdrop*(1-alpha)
+	if out >= 1 {
+		p.alpha[offset] = whiteByte
+		return
+	}
+	p.alpha[offset] = byte(math.Round(out * colorScale))
+}
+
+// CompositeGroup composites one rendered transparency group onto the page.
+// coverage is the group alpha times the coverage plane, so an untouched group
+// pixel changes nothing. Each channel is
+// blend(src, dst)*coverage + dst*(1-coverage), rounded.
+func (p *Pixmap) CompositeGroup(group *Pixmap, alpha float64, mode BlendMode) {
+	if group == nil {
+		return
+	}
+	alpha = clampUnit(alpha)
+	if alpha <= 0 {
+		return
+	}
+	width := min(p.w, group.w)
+	height := min(p.h, group.h)
+	for row := range height {
+		for col := range width {
+			coverage := alpha * float64(group.alpha[row*group.w+col]) / colorScale
+			if p.softMask != nil {
+				coverage *= float64(p.softMask[row*p.w+col]) / colorScale
+			}
+			if coverage <= 0 {
+				continue
+			}
+			offset := row*group.w*bytesPerPixel + col*bytesPerPixel
+			for part := range bytesPerPixel {
+				dst := row*p.w*bytesPerPixel + col*bytesPerPixel + part
+				src := float64(group.pix[offset+part]) / colorScale
+				p.pix[dst] = compositeByte(p.pix[dst], src, mode, coverage)
+			}
+			p.markAlpha(col, row, coverage)
+		}
+	}
 }
 
 // compositeByte blends one channel with alpha, rounded to a byte.

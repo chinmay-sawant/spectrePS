@@ -30,33 +30,91 @@ type Image struct {
 	Pixels []byte
 }
 
-// Pixmap is the RGB device. It flips Y when it stores a pixel.
+// Pixmap is the RGB device. It flips Y when it stores a pixel. The alpha
+// plane is the mark coverage a transparency group carries; on an opaque page
+// every value stays 255.
 type Pixmap struct {
 	w           int
 	h           int
 	pix         []byte
+	alpha       []byte
+	softMask    []byte
 	pages       []Image
 	fillAlpha   float64
 	strokeAlpha float64
 	blendMode   BlendMode
 }
 
-// NewPixmap allocates a white page. The caller has already applied the pixel caps.
+// NewPixmap allocates a white, opaque page. The caller has already applied
+// the pixel caps.
 func NewPixmap(width, height int) *Pixmap {
 	stride := width * bytesPerPixel
 	pix := make([]byte, height*stride)
 	for i := range pix {
 		pix[i] = whiteByte
 	}
+	alpha := make([]byte, width*height)
+	for i := range alpha {
+		alpha[i] = whiteByte
+	}
 	return &Pixmap{
 		w:           width,
 		h:           height,
 		pix:         pix,
+		alpha:       alpha,
+		softMask:    nil,
 		pages:       nil,
 		fillAlpha:   1,
 		strokeAlpha: 1,
 		blendMode:   BlendNormal,
 	}
+}
+
+// NewGroupPixmap allocates a transparent page for a transparency group or a
+// soft mask. The pixels start white and the alpha plane starts at 0, so an
+// untouched group composites nothing. The caller has already applied the
+// pixel caps.
+func NewGroupPixmap(width, height int) *Pixmap {
+	pixmap := NewPixmap(width, height)
+	for i := range pixmap.alpha {
+		pixmap.alpha[i] = 0
+	}
+	return pixmap
+}
+
+// PageSize returns the device page in pixels.
+func (p *Pixmap) PageSize() (int, int) {
+	return p.w, p.h
+}
+
+// AlphaPlane returns a copy of the coverage plane, row 0 at the top, one byte
+// per pixel. An untouched group pixel is 0 and a fully painted one is 255.
+func (p *Pixmap) AlphaPlane() []byte {
+	out := make([]byte, len(p.alpha))
+	copy(out, p.alpha)
+	return out
+}
+
+// PixelPlane returns a copy of the pixel plane, row 0 at the top, three bytes
+// per pixel, walking the page row by row without stride padding.
+func (p *Pixmap) PixelPlane() []byte {
+	out := make([]byte, 0, p.w*p.h*bytesPerPixel)
+	for row := range p.h {
+		start := row * p.w * bytesPerPixel
+		out = append(out, p.pix[start:start+p.w*bytesPerPixel]...)
+	}
+	return out
+}
+
+// SetSoftMask installs a per-pixel coverage plane applied to later marks. The
+// plane is a copy of the pixel count, row 0 at the top. A plane of the wrong
+// size and a nil plane both clear the mask.
+func (p *Pixmap) SetSoftMask(mask []byte) {
+	if len(mask) != p.w*p.h {
+		p.softMask = nil
+		return
+	}
+	p.softMask = mask
 }
 
 // Stroke paints a centered stroke. width is already in device pixels.
@@ -105,6 +163,12 @@ func (p *Pixmap) ShowPage() {
 	for i := range p.pix {
 		p.pix[i] = whiteByte
 	}
+	for i := range p.alpha {
+		p.alpha[i] = whiteByte
+	}
+	// A soft mask belongs to the graphics state of the page that set it, so a
+	// reused device does not carry it into the next page.
+	p.softMask = nil
 }
 
 // Pages returns the pages collected by ShowPage.
@@ -126,7 +190,9 @@ func (p *Pixmap) set(col, row int, red, green, blue byte) {
 
 // DrawImage stamps one image. The image unit square maps through ctm, then
 // scales by scale to device pixels. Sampling is nearest neighbor with image
-// row 0 at the top of the square, and the image alpha is ignored.
+// row 0 at the top of the square. The source alpha composites the pixel, so
+// an /SMask or a stencil mask decoded to alpha paints correctly; an opaque
+// source replaces the backdrop as before.
 func (p *Pixmap) DrawImage(pic image.Image, ctm Matrix, scale float64) {
 	if pic == nil {
 		return
@@ -149,8 +215,12 @@ func (p *Pixmap) DrawImage(pic image.Image, ctm Matrix, scale float64) {
 			if !ok {
 				continue
 			}
-			red, green, blue, _ := pic.At(bounds.Min.X+srcX, bounds.Min.Y+srcY).RGBA()
-			p.set(col, row, byte(red>>byteShift), byte(green>>byteShift), byte(blue>>byteShift))
+			red, green, blue, alpha := pic.At(bounds.Min.X+srcX, bounds.Min.Y+srcY).RGBA()
+			p.paint(col, row,
+				float64(byte(red>>byteShift))/colorScale,
+				float64(byte(green>>byteShift))/colorScale,
+				float64(byte(blue>>byteShift))/colorScale,
+				float64(byte(alpha>>byteShift))/colorScale)
 		}
 	}
 }
@@ -189,6 +259,15 @@ func (p *Pixmap) blend(col, row int, red, green, blue, alpha byte) {
 	if alpha == 0 || col < 0 || row < 0 || col >= p.w || row >= p.h {
 		return
 	}
+	coverage := float64(alpha) / colorScale
+	if p.softMask != nil {
+		coverage *= float64(p.softMask[row*p.w+col]) / colorScale
+		alpha = byte(math.Round(coverage * colorScale))
+		if alpha == 0 {
+			return
+		}
+	}
+	p.markAlpha(col, row, coverage)
 	offset := row*p.w*bytesPerPixel + col*bytesPerPixel
 	p.pix[offset] = blendByte(p.pix[offset], red, int(alpha))
 	p.pix[offset+1] = blendByte(p.pix[offset+1], green, int(alpha))
