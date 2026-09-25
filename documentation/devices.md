@@ -290,15 +290,15 @@ Two rewrites of the same input and mode return equal bytes, because the packet, 
 
 ## Text and fonts
 
-Fonts come from `internal/font` for the standard 14 metrics, encodings, and glyph names, and from `golang.org/x/image/font/sfnt` for embedded TrueType and OpenType programs. The model, its sources, and the painting policy are in `documentation/fonts.md`.
+Fonts come from `internal/font` for the standard 14 metrics, encodings, glyph names, and the Type 1 program decoder, and from `golang.org/x/image/font/sfnt` for embedded TrueType and OpenType programs. The model, its sources, and the painting policy are in `documentation/fonts.md`.
 
 PDF text operators: `BT`, `ET`, `Tf`, `Td`, `TD`, `Tm`, `T*`, `Tc`, `Tw`, `Tz`, `TL`, `Ts`, `Tj`, `TJ`, `'`, and `"`. The text state and the text matrices follow ISO 32000-1. `q` and `Q` save and restore the text state, and `BT` resets both matrices.
 
-A simple font reads `/Widths`, `/FirstChar`, `/MissingWidth`, `/FontDescriptor`, and `/BaseFont`, with the standard 14 metrics as the fallback when `/Widths` is absent. `/Encoding` names StandardEncoding, WinAnsiEncoding, or MacRomanEncoding, and `/Differences` overrides codes by name. `/ToUnicode` CMaps (`bfchar` and `bfrange`) win over the encoding and the Adobe Glyph List. A Type0 font reads `/Encoding /Identity-H`, a CIDFontType2 descendant, `/CIDToGIDMap`, `/W`, and `/DW`.
+A simple font reads `/Widths`, `/FirstChar`, `/MissingWidth`, `/FontDescriptor`, and `/BaseFont`, with the standard 14 metrics as the fallback when `/Widths` is absent. `/Encoding` names StandardEncoding, WinAnsiEncoding, or MacRomanEncoding, and `/Differences` overrides codes by name. A symbolic Type 1 font with no `/Encoding` starts from the program's built-in encoding. `/ToUnicode` CMaps (`bfchar` and `bfrange`) win over the encoding and the Adobe Glyph List. A Type0 font reads `/Encoding /Identity-H`, a CIDFontType2 descendant, `/CIDToGIDMap`, `/W`, and `/DW`.
 
-The show operators deliver each positioned glyph to the `TextOptions.Sink` seam with its code, Unicode, advance, and device box. `File.ExtractText` reads that sink and lays the glyphs out: lines sort top to bottom, glyphs on one baseline sort left to right, a gap wider than a quarter of the box height inserts a space, and each line ends with CRLF. A font with no `/ToUnicode` and no named encoding falls back to the code point.
+The show operators deliver each positioned glyph to the `TextOptions.Sink` seam with its code, Unicode, advance, and device box. `File.ExtractText` reads that sink and lays the glyphs out: lines sort top to bottom, glyphs on one baseline sort left to right, a gap wider than a quarter of the box height inserts a space, and each line ends with CRLF. A font with no `/ToUnicode`, no PDF encoding, and no built-in encoding falls back to the code point.
 
-Painting needs an outline program. The standard 14 ship no outlines and Spectre does not substitute host fonts, so painting a standard 14 glyph returns `invalidfont`. Advances, encodings, and extraction still work, because the glyph box and the text need metrics only. A `/FontFile2` or OpenType `/FontFile3` stream is the outline source when one exists. Type 1 `/FontFile`, bare CFF, and Type0 fonts outside Identity-H are out of this tag.
+Painting needs an outline program. The standard 14 ship no outlines and Spectre does not substitute host fonts, so painting a standard 14 glyph returns `invalidfont`. Advances, encodings, and extraction still work, because the glyph box and the text need metrics only. A PFA or PFB `/FontFile`, a `/FontFile2`, or an OpenType `/FontFile3` stream is the outline source when one exists. Bare CFF and Type0 fonts outside Identity-H are out of this tag.
 
 Text pixels never byte-match Ghostscript, because hinting and antialiasing differ. Text tests compare shapes and advances, and extraction tests compare text and geometry, never `CompareRaster` against `gs`.
 
@@ -313,7 +313,7 @@ Phase 06 reads:
 
 Those operators map to the same path and color operations as `moveto` `lineto` `curveto` `closepath` `stroke` `fill` `eofill` `gsave` `grestore` `concat` `setlinewidth` `setrgbcolor` `setgray`.
 
-`Do` paints an image XObject, runs a form XObject, and returns `undefined` with the `Do` operator name when the name, image, or form cannot run. The text operators paint and extract through the font machine above. A font with no outline source paints as `invalidfont`, and a Type 1, bare CFF, or non-Identity Type0 font is out of this tag. A page that uses an unsupported operator does not rasterize as a blank success.
+`Do` paints an image XObject, runs a form XObject, and returns `undefined` with the `Do` operator name when the name, image, or form cannot run. The text operators paint and extract through the font machine above. A font with no outline source paints as `invalidfont`; bare CFF and non-Identity Type0 fonts are out of this tag. A page that uses an unsupported operator does not rasterize as a blank success.
 
 Encrypted files return `invalidaccess`. Unknown filters return `undefined`.
 

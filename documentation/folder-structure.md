@@ -22,6 +22,7 @@ internal/pdfa/
 internal/pdfout/
 internal/ps/
 internal/psout/
+internal/type1synth/
 internal/validation/
 spectreps/
 sampledata/
@@ -68,7 +69,7 @@ The test files use `package spectreps_test`. Another module imports `github.com/
 
 ## Private code
 
-`internal/engine` holds the session and file byte compare. `internal/ps` is the PostScript interpreter, `internal/graphics` the device, matrix, and pixmap layer, `internal/pdf` the PDF reader, `internal/pdfout` the PDF writers, `internal/pdfa` the PDF/A and PDF/UA-2 metadata and preflight, `internal/font` the font metrics, encodings, and glyph-name tables, `internal/psout` the PDF-to-PostScript writer, `internal/validation` the validation corpus manifest reader and checker, and `internal/cli` the command layer. Add a directory when its first `.go` file or fixture is real. Do not add `pkg/`, `api/`, `util/`, or empty placeholder packages.
+`internal/engine` holds the session and file byte compare. `internal/ps` is the PostScript interpreter, `internal/graphics` the device, matrix, and pixmap layer, `internal/pdf` the PDF reader, `internal/pdfout` the PDF writers, `internal/pdfa` the PDF/A and PDF/UA-2 metadata and preflight, `internal/font` the font metrics, encodings, glyph-name tables, and the Type 1 program decoder, `internal/type1synth` the synthetic Type 1 programs the tests embed, `internal/psout` the PDF-to-PostScript writer, `internal/validation` the validation corpus manifest reader and checker, and `internal/cli` the command layer. Add a directory when its first `.go` file or fixture is real. Do not add `pkg/`, `api/`, `util/`, or empty placeholder packages.
 
 `sampledata/` holds the fixtures and samples. Scenario folders (`compress/`, `pdfa/`, `pdfua2/`) hold the PDFs the plans measure. `sampledata/fixtures/` holds the unit-test inputs and expected PPM bytes. Golden files are written by the test that first locks a case, then checked in. They are not copied from Ghostscript output. Matching Ghostscript byte for byte is not a success criterion.
 
