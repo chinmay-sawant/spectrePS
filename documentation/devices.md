@@ -28,11 +28,48 @@ A mismatch is exit code 1. It is not an interpreter error.
 
 ## Box and ink coverage
 
-`MeasureBox` and `MeasureInk` read a finished `PageImage`. They do not paint a second time and they add no operator.
+`MeasureBox`, `MeasureInk`, and `MeasureInkAmount` read a finished `PageImage`. They do not paint a second time and they add no operator.
 
 The box is the union of marked pixels in points, origin at the lower left. A pixel marks when any of R, G, or B is not 255. `dpi` of 0 selects 72.
 
-Ink output is RGB occupancy: the fraction of pixels marked in each of R, G, and B. The pixmap is RGB, not CMYK, so the CLI line ends in `RGB` and not `CMYK OK`. These numbers are occupancy fractions, not Ghostscript `ink_cov` weighted amounts.
+`MeasureInk` is RGB occupancy: the fraction of pixels marked in each of R, G, and B. The pixmap is RGB, not CMYK, so the CLI line ends in `RGB` and not `CMYK OK`. These numbers are occupancy fractions, not Ghostscript `ink_cov` weighted amounts. `spectreps inkcov` prints them.
+
+### Weighted ink amounts
+
+`MeasureInkAmount` is the weighted ink amount. Let `N` be `Width * Height` and let `v_i` be the byte in the channel being measured, `c`, of pixel `i`, where `c` is R, G, or B. The amount is:
+
+```
+amount_c = (1/N) * sum (255 - v_i)/255
+```
+
+The sum ignores stride padding. A white byte contributes 0, a black byte contributes 1, and every other byte contributes its complement as a fraction. A zero-size image returns the zero `Ink`. `spectreps ink_cov` prints `amount * 100` with five decimals and the `RGB` suffix.
+
+Worked example. A 20 by 20 page holds a cyan square (`0 1 1 setrgbcolor`) over 10 by 10 pixels. Those 100 pixels are `(0, 255, 255)` and the other 300 are white.
+
+- R: 100 pixels contribute `(255-0)/255 = 1` and 300 contribute 0, so the amount is `100/400 = 0.25`.
+- G and B: the square bytes are 255, so both amounts are 0.
+
+`spectreps ink_cov -w 20 -h 20 -r 72` prints `Page 1`, then `25.00000 0.00000 0.00000 RGB`.
+
+Second worked example. Every pixel on a byte-128 gray page is `(128, 128, 128)`. Each byte contributes `(255-128)/255 = 127/255 = 0.49803921...`, so the page prints `49.80392 49.80392 49.80392 RGB`.
+
+The alternatives considered:
+
+- Luma. One number per pixel, `0.299*R + 0.587*G + 0.114*B`, folds the channels into a display-weighted brightness. It loses which channel is heavy, and its weights are not ink weights. The report could not keep three RGB columns.
+- Total occupancy. The existing `MeasureInk` counts a marked channel as 1 no matter how dark the byte is. A 1 percent cyan tint and a full cyan pixel both count once. That is the Ghostscript `inkcov` device, not `ink_cov`. It cannot tell a light page from a dark one.
+
+The per-channel complement wins because it keeps both facts: which channel and how much. It is the continuous refinement of occupancy: a byte counts `(255 - v)/255` instead of 1, so a black byte counts 1 and a byte at 254 counts `1/255`. White and black land on the two ends. The channels stay R, G, and B because the pixmap is RGB, so the line keeps the `RGB` suffix.
+
+Manual versus source. The 10.09.0 manual example line shows fractions, and its walk-through says a half cyan fill reports `0.50 0.00 0.00 0.00` for `ink_cov`. The source (`devices/gdevicov.c`, `cov_write_page_ink`) computes `c = dc_pix*100 / (total_pix*255)` and prints a percent. The source is the reference. Measured by hand on the installed 9.55.0:
+
+```
+$ gs -q -dNOPAUSE -dBATCH -sDEVICE=ink_cov -g20x20 -r72 -o- quarter-cyan.ps
+25.00000  0.00000  0.00000  0.00000 CMYK OK
+$ gs -q -dNOPAUSE -dBATCH -sDEVICE=ink_cov -g20x20 -r72 -o- half-cyan.ps
+49.80392  0.00000  0.00000  0.00000 CMYK OK
+```
+
+The first file fills a quarter page with 100 percent cyan. The second fills a whole page with a 50 percent cyan tint, which the CMYK8 device stores as byte 127, so the printed value is `127/255 * 100`. A full black page prints `100.00000` on K. Spectre follows the source: it scales the amount by 100 and keeps the same five decimals. The suffix is `RGB`, not `CMYK OK`, because the Spectre pixmap is RGB.
 
 ## Image XObjects
 

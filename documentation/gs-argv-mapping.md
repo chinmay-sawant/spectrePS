@@ -15,6 +15,7 @@ Ghostscript picks a device with `-sDEVICE=name`. Spectre has no device flag. `sp
 | `jpeg` | `spectreps raster -o page.jpg` or `.jpeg` | The same pixmap through `image/jpeg` at the `-jpegq` quality, default 75. Lossy. |
 | `bbox` | `spectreps bbox` | Writes `%%BoundingBox` and `%%HiResBoundingBox` per page to stdout, with no output file. |
 | `inkcov` | `spectreps inkcov` | Writes an RGB occupancy line per page to stdout. It is not the weighted `ink_cov` report. |
+| `ink_cov` | `spectreps ink_cov` | Writes a weighted RGB amount per page to stdout, as a percent with five decimals. Ghostscript names CMYK channels; the Spectre pixmap is RGB, so the suffix stays `RGB`. |
 | `pdfimage24` | `spectreps pdfimage -o out.pdf` | One 24-bit RGB image page per input page, with Flate streams. |
 | `pdfwrite` | `spectreps rewrite -o out.pdf` | PDF inputs in the reader subset only. Spectre writes its own PDF, and the bytes are not expected to match `pdfwrite`. |
 

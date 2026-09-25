@@ -25,7 +25,8 @@ The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster
 
 - `spectreps bbox` prints `%%BoundingBox` with floored minima and ceilinged maxima, then `%%HiResBoundingBox` with the float edges. The box is the union of marked pixels in points, origin at the lower left. A pixel marks when any of R, G, or B is not 255. A blank page prints a zero box.
 - `spectreps inkcov` prints `Page N` and three RGB occupancy fractions with five digits after the point. It is not a CMYK report and it does not end in `CMYK OK`. These are occupancy fractions, not `ink_cov` weighted amounts.
-- Both commands accept `-w`, `-h`, and `-r`, and they rasterize every page of a PDF input.
+- `spectreps ink_cov` prints `Page N` and three weighted RGB amounts as percentages with five digits after the point. The amount is the mean channel complement over `Width * Height`, the model in `documentation/devices.md`. The channels are the pixmap channels, so the line ends in `RGB`.
+- All three commands accept `-w`, `-h`, and `-r` and share the `-pages` range. They rasterize a PDF input one selected page at a time.
 
 ## PDF output
 
@@ -42,7 +43,7 @@ The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster
 
 ## Library and CLI
 
-- Package `spectreps` exposes `New`, `Close`, `RunPostScript`, `OpenPDF`, `PageCount`, `RasterizePage`, `RewritePDF`, `ImagePDF`, `MeasureBox`, `MeasureInk`, `CompareFiles`, `CompareRaster`, and `Version`. The full contract is `documentation/public-api.md`.
+- Package `spectreps` exposes `New`, `Close`, `RunPostScript`, `OpenPDF`, `PageCount`, `RasterizePage`, `RewritePDF`, `ImagePDF`, `MeasureBox`, `MeasureInk`, `MeasureInkAmount`, `CompareFiles`, `CompareRaster`, and `Version`. The full contract is `documentation/public-api.md`.
 - Every job takes a `context.Context`. A canceled context returns `ctx.Err()` with no partial success, and a nil context panics.
 - The `spectreps` command parses flags and maps errors to exit codes 0 through 3. The contract is `documentation/cli.md`.
 - `internal/cli` calls the public package. `cmd/spectreps` calls `internal/cli` only.
@@ -68,7 +69,6 @@ The released tag is v0.0.1. v0.0.2 adds the page summaries, JPEG and TIFF raster
 | PCLm | A different image-PDF flavor. | A plan file. |
 | Spot-color separations (`tiffsep`) | No separation model. | A plan file. |
 | Full `gs` argv grammar | The subcommands map to library methods, and a second flag grammar would fork the CLI. The bounded switch map landed. | `plans/v0.0.3/7-gs-argv.md`. |
-| `ink_cov` weighted ink amounts | Ghostscript prints `ink_cov` as a percent and its manual example disagrees with its source. | `plans/v0.0.3/1-ink-cov.md`. |
 | PDF info, linearization, output encryption | Out of the current tags. | A new plan file. |
 | Full PDF 1.7 and PDF 2.0, including transparency and optional content | The current reader is a path-only subset. | A new plan file. |
 | `bind`, `save`, `restore`, `clip`, and filters other than Flate | Out of the current PostScript subset. | A new plan file. |

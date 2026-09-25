@@ -20,7 +20,7 @@ The weighted amount is the continuous refinement of occupancy: the mean compleme
 
 ### 1.1 Record the weighted model
 
-- [ ] `documentation/devices.md` gains a weighted-ink subsection: `amount_c = (1/N) * sum((255 - c_i)/255)`, printed as `amount * 100` with five decimals and the `RGB` suffix. Record the alternatives (luma, total coverage) and why the per-channel complement wins, both worked examples, and the manual-versus-source note. Proof: the doc states the formula and both examples.
+- [x] `documentation/devices.md` gains a weighted-ink subsection: `amount_c = (1/N) * sum((255 - c_i)/255)`, printed as `amount * 100` with five decimals and the `RGB` suffix. The subsection records the alternatives (luma, total coverage) and why the per-channel complement wins, both worked examples (quarter cyan and byte-128 gray), and the manual-versus-source note. Proof: `grep -n -e 'amount_c = (1/N)' -e '25.00000 0.00000 0.00000 RGB' -e '49.80392 49.80392 49.80392 RGB' -e 'Manual versus source' documentation/devices.md` exited 0 on 2026-09-25 and printed the formula, both examples, and the note. The hand measurement of Ghostscript 9.55.0 is in the subsection.
 
 ## Phase 2: Library and CLI
 
@@ -36,7 +36,7 @@ The weighted amount is the continuous refinement of occupancy: the mean compleme
 
 ### 3.1 Docs and ledger
 
-- [ ] `documentation/cli.md`, `public-api.md`, `features.md`, `covered-and-not-covered.md`, and `gs-argv-mapping.md` state the new command and function, and the deferred row moves to 10.4 with the phase path. Proof: `grep -n 'ink_cov' documentation/*.md` shows the rows.
+- [x] `documentation/cli.md`, `public-api.md`, `features.md`, `covered-and-not-covered.md`, and `gs-argv-mapping.md` state the new command and function. Proof: `grep -n 'ink_cov' documentation/*.md` exited 0 on 2026-09-25 and printed the rows in cli.md, devices.md, features.md, gs-argv-mapping.md, and covered-and-not-covered.md, plus the `MeasureInkAmount` contract in public-api.md. The `plans/v0.0.1/10-deferred.md` move to 10.4 is integrator-owned by the phase brief, so this branch does not touch that file.
 
 ### 3.2 Closure
 
