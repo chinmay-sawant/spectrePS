@@ -18,12 +18,30 @@ const (
 
 func TestImageXObjectJPX(t *testing.T) {
 	t.Parallel()
-	t.Run("rgb codestream", checkJPXRGB)
-	t.Run("gray container", checkJPXGray)
-	t.Run("bare dictionary", checkJPXBare)
-	t.Run("filter array", checkJPXFilterArray)
-	t.Run("malformed", checkJPXMalformed)
-	t.Run("size limit", checkJPXLimit)
+	t.Run("rgb codestream", func(t *testing.T) {
+		t.Parallel()
+		checkJPXRGB(t)
+	})
+	t.Run("gray container", func(t *testing.T) {
+		t.Parallel()
+		checkJPXGray(t)
+	})
+	t.Run("bare dictionary", func(t *testing.T) {
+		t.Parallel()
+		checkJPXBare(t)
+	})
+	t.Run("filter array", func(t *testing.T) {
+		t.Parallel()
+		checkJPXFilterArray(t)
+	})
+	t.Run("malformed", func(t *testing.T) {
+		t.Parallel()
+		checkJPXMalformed(t)
+	})
+	t.Run("size limit", func(t *testing.T) {
+		t.Parallel()
+		checkJPXLimit(t)
+	})
 }
 
 // jpxFixture reads one checked-in fixture. See testdata/README.md for the
@@ -119,6 +137,7 @@ func checkJPXMalformed(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 			dict := "/Subtype /Image /Width 8 /Height 8 /BitsPerComponent 8 " +
 				"/ColorSpace /DeviceRGB /Filter /JPXDecode"
 			file, num := oneImageDoc(t, dict, testCase.raw)
@@ -140,8 +159,8 @@ func checkJPXLimit(t *testing.T) {
 	if !bytes.HasPrefix(raw, []byte{0xFF, 0x4F, 0xFF, 0x51}) {
 		t.Fatal("fixture does not start with SOC and SIZ")
 	}
-	for _, at := range []int{8, 12, 24, 28} {
-		putJPXInt(t, raw, at, jpxLimitSide)
+	for _, offset := range []int{8, 12, 24, 28} {
+		putJPXInt(t, raw, offset, jpxLimitSide)
 	}
 	dict := "/Subtype /Image /Width 8 /Height 8 /Filter /JPXDecode"
 	file, num := oneImageDoc(t, dict, raw)
@@ -152,15 +171,15 @@ func checkJPXLimit(t *testing.T) {
 	}
 }
 
-func putJPXInt(t *testing.T, raw []byte, at, value int) {
+func putJPXInt(t *testing.T, raw []byte, offset, value int) {
 	t.Helper()
-	if at < 0 || at+4 > len(raw) {
-		t.Fatalf("SIZ field at %d is outside %d bytes", at, len(raw))
+	if offset < 0 || offset+4 > len(raw) {
+		t.Fatalf("SIZ field at %d is outside %d bytes", offset, len(raw))
 	}
-	raw[at] = byte(value >> 24)
-	raw[at+1] = byte(value >> 16)
-	raw[at+2] = byte(value >> 8)
-	raw[at+3] = byte(value)
+	raw[offset] = byte(value >> 24)
+	raw[offset+1] = byte(value >> 16)
+	raw[offset+2] = byte(value >> 8)
+	raw[offset+3] = byte(value)
 }
 
 func checkJPXBounds(t *testing.T, pic image.Image) {
