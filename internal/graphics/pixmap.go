@@ -1,6 +1,9 @@
 package graphics
 
-import "math"
+import (
+	"image"
+	"math"
+)
 
 const (
 	bytesPerPixel = 3
@@ -9,6 +12,7 @@ const (
 	pixelCenter   = 0.5
 	halfWidth     = 2
 	minFillPoints = 2
+	byteShift     = 8
 )
 
 // Point is one device-space point. Y grows up. Move starts a subpath.
@@ -104,6 +108,74 @@ func (p *Pixmap) set(col, row int, red, green, blue byte) {
 	p.pix[i] = red
 	p.pix[i+1] = green
 	p.pix[i+2] = blue
+}
+
+// DrawImage stamps one image. The image unit square maps through ctm, then
+// scales by scale to device pixels. Sampling is nearest neighbor with image
+// row 0 at the top of the square, and the image alpha is ignored.
+func (p *Pixmap) DrawImage(pic image.Image, ctm Matrix, scale float64) {
+	if pic == nil {
+		return
+	}
+	bounds := pic.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+	if width <= 0 || height <= 0 {
+		return
+	}
+	imageToDevice := Concat(ctm, Matrix{A: scale, B: 0, C: 0, D: scale, E: 0, F: 0})
+	toImage, ok := imageToDevice.Invert()
+	if !ok {
+		return
+	}
+	col0, col1, row0, row1 := p.imageSpan(imageToDevice)
+	for row := row0; row < row1; row++ {
+		for col := col0; col < col1; col++ {
+			srcX, srcY, ok := p.imagePixel(toImage, width, height, col, row)
+			if !ok {
+				continue
+			}
+			red, green, blue, _ := pic.At(bounds.Min.X+srcX, bounds.Min.Y+srcY).RGBA()
+			p.set(col, row, byte(red>>byteShift), byte(green>>byteShift), byte(blue>>byteShift))
+		}
+	}
+}
+
+// imagePixel maps one device pixel center back to an image pixel. The bool is
+// false when the center falls outside the image unit square.
+func (p *Pixmap) imagePixel(toImage Matrix, width, height, col, row int) (int, int, bool) {
+	posX, posY := toImage.Apply(float64(col)+pixelCenter, float64(p.h-1-row)+pixelCenter)
+	if posX < 0 || posX >= 1 || posY < 0 || posY >= 1 {
+		return 0, 0, false
+	}
+	return int(posX * float64(width)), height - 1 - int(posY*float64(height)), true
+}
+
+// imageSpan returns the half-open pixel ranges the mapped unit square covers.
+func (p *Pixmap) imageSpan(mat Matrix) (int, int, int, int) {
+	minX, minY, maxX, maxY := unitBox(mat)
+	col0 := clampInt(int(math.Floor(minX)), p.w)
+	col1 := clampInt(int(math.Ceil(maxX)), p.w)
+	row0 := p.h - clampInt(int(math.Ceil(maxY)), p.h)
+	row1 := p.h - clampInt(int(math.Floor(minY)), p.h)
+	if row0 > row1 {
+		row0, row1 = row1, row0
+	}
+	return col0, col1, row0, row1
+}
+
+// unitBox returns the device bounds of the unit square mapped through mat.
+func unitBox(mat Matrix) (float64, float64, float64, float64) {
+	minX, minY := mat.Apply(0, 0)
+	maxX, maxY := minX, minY
+	for _, corner := range [][2]float64{{1, 0}, {0, 1}, {1, 1}} {
+		posX, posY := mat.Apply(corner[0], corner[1])
+		minX = math.Min(minX, posX)
+		maxX = math.Max(maxX, posX)
+		minY = math.Min(minY, posY)
+		maxY = math.Max(maxY, posY)
+	}
+	return minX, minY, maxX, maxY
 }
 
 func (p *Pixmap) strokeSegment(a, b Point, half float64, red, green, blue byte) {

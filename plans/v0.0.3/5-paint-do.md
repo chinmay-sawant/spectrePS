@@ -1,7 +1,7 @@
 # v0.0.3 - Paint Do and rasterize image PDFs
 
 > **Parent:** `plans/v0.0.3/00-program.md` - program ledger
-> **Status:** phase 1 landed. Phases 2 to 4 open.
+> **Status:** phases 1 and 2 landed. Phases 3 and 4 open.
 > **Estimated effort:** about 4 days
 
 ---
@@ -32,11 +32,11 @@ The reader decodes image XObjects, but the content interpreter has no `Do` case 
 
 ### 2.1 Marker.DrawImage
 
-- [ ] `internal/graphics/device.go` gains `DrawImage(pic image.Image, ctm Matrix, scale float64)`, implemented by `Pixmap`. `pdfout.recorder` implements it by recording that an image was seen. Proof: `go test -count=1 ./internal/graphics -run TestPixmapDrawImageUnitSquare`, `TestPixmapDrawImageCTM`, and `TestPixmapDrawImageNearest`.
+- [x] `internal/graphics/device.go` gains `DrawImage(pic image.Image, ctm Matrix, scale float64)`, implemented by `Pixmap`. `pdfout.recorder` implements it by recording that an image was seen. Proof: `go test -count=1 ./internal/graphics -run TestPixmapDrawImageUnitSquare` and `go test -count=1 ./internal/graphics -run 'TestPixmapDrawImageCTM|TestPixmapDrawImageNearest'` exited 0 on 2026-09-25.
 
 ### 2.2 Nearest-neighbor sampler
 
-- [ ] The pixmap inverts the image-to-device matrix once per stamp, loops the mapped bounding box, and samples the nearest pixel with row 0 at the top. Opaque RGB and gray are painted; alpha is ignored in this phase. Proof: the same test run, plus a 1:1 round trip of an `ImagePDF` stream.
+- [x] The pixmap inverts the image-to-device matrix once per stamp, loops the mapped bounding box, and samples the nearest pixel with row 0 at the top. Opaque RGB and gray are painted; alpha is ignored in this phase. Proof: the same test run, plus `go test -count=1 ./internal/graphics -run TestPixmapDrawImageRoundTrip` for the 1:1 `ImagePDF` round trip. Both exited 0 on 2026-09-25.
 
 ## Phase 3: Interpreter and rewrite gate
 
