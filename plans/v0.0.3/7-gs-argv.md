@@ -36,15 +36,15 @@ The mode is an allowlist, not a Ghostscript clone. A switch is accepted when it 
 
 ### 2.1 Dispatch and scanner skeleton
 
-- [ ] `spectreps gs` dispatches into a new scanner in `internal/cli/gs.go`. With no allowlisted switch it rejects everything and exits 2. Proof: `go test -count=1 ./internal/cli -run TestGSRejectsAll`.
+- [x] `spectreps gs` dispatches into a new scanner in `internal/cli/gs.go`. With no allowlisted switch it rejects everything and exits 2. Proof (2026-09-25): `go test -count=1 ./internal/cli -run TestGSRejectsAll` exited 0 (`ok github.com/chinmay-sawant/spectrePS/internal/cli`); the test covers no arguments, no device, unknown switches, `-c`, `-dNOSAFER`, `-dDELAYSAFER`, an unknown device, stdin, `@file`, and a missing input.
 
 ### 2.2 Families
 
-- [ ] The scanner accepts `-sDEVICE` with `raster -format`, `-sOutputFile`, `-dFirstPage` and `-dLastPage`, `-r`, the point-size switches, the accept-and-ignore switches, and one input or `-f`, and routes them to the existing commands. The `-s`/`-d` value parser allows only known names. Proof: `go test -count=1 ./internal/cli -run TestGSDevice`, `TestRasterFormatFlag`, `TestGSOutputFile`, `TestGSPageRange`, `TestGSResolution`, `TestGSPageSize`, `TestGSIgnoredSwitches`, `TestGSInputFile`, and `TestGSParamSyntax`.
+- [x] The scanner accepts `-sDEVICE` with `raster -format`, `-sOutputFile`, `-dFirstPage` and `-dLastPage`, `-r`, the point-size switches, the accept-and-ignore switches, and one input or `-f`, and routes them to the existing commands. The `-s`/`-d` value parser allows only known names. Proof (2026-09-25): `go test -count=1 ./internal/cli -run TestGSDevice`, `TestRasterFormatFlag`, `TestGSOutputFile`, `TestGSPageRange`, `TestGSResolution`, `TestGSPageSize`, `TestGSIgnoredSwitches`, `TestGSInputFile`, and `TestGSParamSyntax` each exited 0 (`ok github.com/chinmay-sawant/spectrePS/internal/cli`).
 
 ### 2.3 Page list subset
 
-- [ ] `-sPageList` accepts a simple comma list of pages and ranges and maps it onto the `-pages` grammar. Even and odd selections, reverse order, and `LastPage < FirstPage` stay rejected. Proof: `go test -count=1 ./internal/cli -run TestGSPageList`.
+- [x] `-sPageList` accepts a simple comma list of pages and ranges and maps it onto the `-pages` grammar. Even and odd selections, reverse order, and `LastPage < FirstPage` stay rejected. Proof (2026-09-25): `go test -count=1 ./internal/cli -run TestGSPageList` exited 0 (`ok github.com/chinmay-sawant/spectrePS/internal/cli`); the rejected table covers `even`, `odd`, `3-1`, gaps, overlaps, open ranges, page 0, `@pages`, and the `-dFirstPage` combination.
 
 ## Phase 3: Closure
 
