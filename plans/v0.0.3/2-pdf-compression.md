@@ -37,6 +37,7 @@ Levels are a Spectre policy, not a Ghostscript clone. Level 1 is lossless: Flate
 ### 1.3 Image XObjects
 
 - [ ] The reader opens `/Subtype /Image` XObjects with Flate and DCT streams. A DCT stream decodes through `image/jpeg` and re-encodes at the level's quality. Proof: `go test -count=1 ./internal/pdf -run TestImageXObject`.
+  - [x] Writer half. `ScaleImage`, `EncodeDCT`, and `EncodeFlateRGB` are in `internal/pdfout/scale.go`, with `golang.org/x/image` v0.46.0 for CatmullRom. Proof: `go test -count=1 ./internal/pdfout -run 'TestScale|TestEncode'` exited 0 on 2026-09-25. `make lint` and `make test` exited 0 the same day.
 
 ### 1.4 Levels
 
@@ -52,6 +53,7 @@ Levels are a Spectre policy, not a Ghostscript clone. Level 1 is lossless: Flate
 
 - Proof: `go test -count=1 ./internal/cli -run TestRewriteLevels`.
 - A missing `-level` keeps today's behavior. Level 5 does not promise a size, only the smallest of the five on the sample set.
+  - [x] Writer half. The helpers above are the image column of the table: level 2 Flates the packed rows, and levels 3 to 5 resample to the target dpi and DCT-encode at the level's quality. Proof: the same `go test -count=1 ./internal/pdfout -run 'TestScale|TestEncode'` run exited 0 on 2026-09-25. The `-level` flag and the reader wiring are the CLI half.
 
 ### 1.5 Stable bytes
 
