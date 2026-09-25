@@ -33,9 +33,6 @@ const (
 	keyID             = "ID"
 	keyStructParents  = "StructParents"
 	keyMCR            = "MCR"
-	keyToUnicode      = "ToUnicode"
-	keyEncoding       = "Encoding"
-	keyBaseEncoding   = "BaseEncoding"
 
 	// The standard structure namespace names. NamespaceDefault is the
 	// default (PDF 1.7) namespace and NamespacePDF20 is the PDF 2.0 namespace.
