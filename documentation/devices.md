@@ -38,10 +38,11 @@ Ink output is RGB occupancy: the fraction of pixels marked in each of R, G, and 
 
 The reader walks the xref for in-use objects whose dictionary has `/Subtype /Image`. `ImageObjectNums` returns their object numbers in ascending order. `DecodeImage` returns an `image.Image` or an error. It never returns a blank image for a failed decode.
 
-Two stream forms decode at 8 bits per component:
+Three stream forms decode:
 
-- `/FlateDecode` with `/DeviceRGB` or `/DeviceGray`, through the same zlib path as content streams. A predictor above 1 is rejected.
+- `/FlateDecode` with `/DeviceRGB` or `/DeviceGray` at 8 bits per component, through the same zlib path as content streams. A predictor above 1 is rejected.
 - `/DCTDecode` through `image/jpeg`.
+- `/CCITTFaxDecode` with `/DeviceGray` at 1 bit per component, through `golang.org/x/image/ccitt`. `/K < 0` is Group 4, `/K == 0` with `/EndOfLine true` is Group 3, and `/K > 0` is undefined. `/Columns` and `/Rows` default to `/Width` and `/Height`, `/BlackIs1` inverts the samples, and `/EncodedByteAlign` byte-aligns the codes. `Columns * Rows` above the 32 MiB decoded cap returns `limitcheck` before allocation.
 
 Any other filter, color space, or bit depth returns `undefined`, as does a Flate stream whose byte count does not match width by height by components. JPEG is lossy, so decoded pixels are not a byte oracle for the source.
 
@@ -61,7 +62,7 @@ The level table:
 | --- | --- | --- | --- |
 | 0 | Path subset | re-emitted, Flate when `CompressStreams` is true | unchanged |
 | 1 | Light | Flate every uncompressed stream | unchanged |
-| 2 | Balanced | Flate | Flate and raw image streams re-encoded losslessly, no resample |
+| 2 | Balanced | Flate | Flate, raw, and CCITT image streams re-encoded losslessly, no resample |
 | 3 | Medium | Flate | re-encoded as DCT, longest side capped at 1754 px, quality 80 |
 | 4 | Strong | Flate | re-encoded as DCT, longest side capped at 1123 px, quality 60 |
 | 5 | Hard | Flate | re-encoded as DCT, longest side capped at 842 px, quality 40 |
