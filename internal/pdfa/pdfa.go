@@ -34,7 +34,7 @@ func ExtraObjects(mode Mode, firstNum int) [][]byte {
 		"Subtype": pdf.NameVal("XML"),
 	}, packet))
 	profile := pdf.SerializeValue(pdf.StreamVal(map[string]pdf.Value{
-		"N": pdf.IntVal(3),
+		"N": pdf.IntVal(iccComponentNum),
 	}, ICCProfile()))
 	intent := pdf.SerializeValue(pdf.DictVal(map[string]pdf.Value{
 		"Type":                      pdf.NameVal("OutputIntent"),
@@ -49,7 +49,7 @@ func ExtraObjects(mode Mode, firstNum int) [][]byte {
 // Catalog returns a replacement catalog body with /Metadata and
 // /OutputIntents set to the appended objects. Every other entry is kept.
 func Catalog(catalog pdf.Value, metadataNum, intentNum int) []byte {
-	entries := make(map[string]pdf.Value, len(catalog.Dict)+2)
+	entries := make(map[string]pdf.Value, len(catalog.Dict)+iccExtraEntries)
 	for key, entry := range catalog.Dict {
 		entries[key] = entry
 	}

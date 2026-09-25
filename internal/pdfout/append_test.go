@@ -51,13 +51,28 @@ func checkAppendedCatalog(t *testing.T, file *pdf.File, metadataNum, intentNum i
 	if err != nil || !ok {
 		t.Fatalf("catalog ok %v err %v", ok, err)
 	}
+	checkCatalogPages(t, catalog)
+	checkCatalogMetadata(t, catalog, metadataNum)
+	checkCatalogIntents(t, catalog, intentNum)
+}
+
+func checkCatalogPages(t *testing.T, catalog pdf.Value) {
+	t.Helper()
 	if pages, found := catalog.ValueEntry("Pages"); !found || pages.Kind != pdf.KindRef {
 		t.Fatalf("catalog /Pages = %#v", pages)
 	}
+}
+
+func checkCatalogMetadata(t *testing.T, catalog pdf.Value, metadataNum int) {
+	t.Helper()
 	metadata, found := catalog.ValueEntry("Metadata")
 	if !found || metadata.Kind != pdf.KindRef || metadata.RefNum != metadataNum {
 		t.Fatalf("catalog /Metadata = %#v", metadata)
 	}
+}
+
+func checkCatalogIntents(t *testing.T, catalog pdf.Value, intentNum int) {
+	t.Helper()
 	intents, found := catalog.ArrayEntry("OutputIntents")
 	if !found || len(intents) != 1 || intents[0].Kind != pdf.KindRef || intents[0].RefNum != intentNum {
 		t.Fatalf("catalog /OutputIntents = %#v", intents)

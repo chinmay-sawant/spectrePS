@@ -35,8 +35,18 @@ func checkICCHeader(t *testing.T, profile []byte) {
 	if string(profile[36:40]) != iccSignature {
 		t.Fatalf("signature %q", profile[36:40])
 	}
-	if got := int32(binary.BigEndian.Uint32(profile[68:])); got != s15Fixed16(srgbWhite) {
-		t.Fatalf("PCS illuminant X %d", got)
+	checkIlluminant(t, profile, 68, srgbWhiteX)
+	checkIlluminant(t, profile, 72, srgbWhiteY)
+	checkIlluminant(t, profile, 76, srgbWhiteZ)
+}
+
+// checkIlluminant compares one header XYZ field with the s15Fixed16 encoding.
+func checkIlluminant(t *testing.T, profile []byte, at int, value float64) {
+	t.Helper()
+	want := make([]byte, iccWordSize)
+	putS15(want, value)
+	if !bytes.Equal(profile[at:at+iccWordSize], want) {
+		t.Fatalf("illuminant at %d = %x, want %x", at, profile[at:at+iccWordSize], want)
 	}
 }
 

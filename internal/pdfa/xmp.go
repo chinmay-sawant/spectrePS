@@ -33,6 +33,8 @@ const (
 // A mode other than Mode4 or Mode4F returns nil.
 func XMP(mode Mode) []byte {
 	switch mode {
+	case ModeNone:
+		return nil
 	case Mode4:
 		return []byte(xmpHead + xmpTail)
 	case Mode4F:

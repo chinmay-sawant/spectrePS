@@ -50,7 +50,7 @@ type pageStream struct {
 // compress wraps each content stream in zlib and sets /Filter /FlateDecode.
 // A canceled context returns ctx.Err() and a nil slice. A nil context panics with "pdfout: nil context".
 func Write(ctx context.Context, pages []Page, compress bool) ([]byte, error) {
-	return WriteWithOptions(ctx, pages, WriteOptions{Compress: compress})
+	return WriteWithOptions(ctx, pages, WriteOptions{Compress: compress, PDFA: false})
 }
 
 // WriteWithOptions builds a level 0 file from pages, in order.

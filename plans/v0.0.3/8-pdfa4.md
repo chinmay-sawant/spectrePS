@@ -44,7 +44,7 @@ PDF/A-4 base is the default claim, with 4f offered only when the input already c
 
 ### 3.1 Refusals
 
-- [ ] The preflight refuses a missing embedded font, `LZWDecode`, filters outside the ISO 32000-2 table, `DeviceCMYK` without a matching profile, `Alternates` and `OPI` image keys, and unsupported blend modes. Each refusal is a `JobError` with the failed rule. Proof: `go test -count=1 ./internal/pdfa -run 'TestPreflightFonts|TestPreflightFilters|TestPreflightColors'`.
+- [x] The preflight refuses a missing embedded font, `LZWDecode`, filters outside the ISO 32000-2 table, `DeviceCMYK` without a matching profile, `Alternates` and `OPI` image keys, and unsupported blend modes. Each refusal is a `JobError` with the failed rule. Proof: `go test -count=1 ./internal/pdfa -run 'TestPreflightFonts|TestPreflightFilters|TestPreflightColors'`. 2026-09-25: pass. `TestPreflightEmbeddedFiles` also covers the 4 and 4f embedded-file rules.
 
 ## Phase 4: Command and stability
 
