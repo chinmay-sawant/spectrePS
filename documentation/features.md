@@ -2,7 +2,7 @@
 
 This file is the product inventory: what Spectre supports today and what waits. `documentation/covered-and-not-covered.md` maps the same ground against Ghostscript. `plans/v0.0.1/10-deferred.md` is the ledger for the work that waits, with a next gate on each row.
 
-The released tag is v0.0.1. The v0.0.2 work adds the page summaries, JPEG raster, and the bitmap PDF. `spectreps version` prints `0.0.1` until a tag bumps that constant.
+The released tag is v0.0.1. The v0.0.2 work adds the page summaries, JPEG raster, and the bitmap PDF. The v0.0.3 quick wins add TIFF raster, page selection, PDF inputs in `compare raster`, and gray and CMYK image PDF. `spectreps version` prints `0.0.1` until a tag bumps that constant.
 
 ## Input
 
@@ -14,9 +14,11 @@ The released tag is v0.0.1. The v0.0.2 work adds the page summaries, JPEG raster
 
 ## Raster output
 
-- `spectreps raster` writes PPM raw (P6) for any suffix other than `.png`, `.jpg`, or `.jpeg`.
+- `spectreps raster` writes PPM raw (P6) for any suffix other than `.png`, `.jpg`, `.jpeg`, `.tif`, or `.tiff`.
 - A `.png` path encodes the pixmap with `image/png`.
 - A `.jpg` or `.jpeg` path encodes the same pixmap with `image/jpeg`. `-jpegq` takes 1 through 100 and defaults to 75. JPEG is lossy, and its file bytes are not an equality oracle.
+- A `.tif` or `.tiff` path encodes the pixmap with `golang.org/x/image/tiff`. `-tiffcompress none|deflate` picks the compression and defaults to `deflate`. TIFF file bytes are not an equality oracle.
+- `-pages` selects a 1-based inclusive range for `raster`, `bbox`, `inkcov`, `pdfimage`, and `compare raster`. A single `N` selects one page, `A-B` a range, `A-` from page A to the last page, and `-B` from page 1 to B. An output path with `%d` numbers the emitted pages from 1. A start past the last page returns `rangecheck`, an end past it clamps to the last page, and omitting the flag selects every page.
 - The pixmap is RGB8, row 0 at the top, stride `Width * 3`. Default media is 612 by 792 points and the default resolution is 72 dpi.
 
 ## Page measurement
@@ -28,13 +30,13 @@ The released tag is v0.0.1. The v0.0.2 work adds the page summaries, JPEG raster
 ## PDF output
 
 - `spectreps rewrite` writes a new PDF from a path-only PDF. Content streams carry the same path subset. `-compress` selects Flate content streams and defaults to true. Bytes are stable across two calls, and the file carries no wall-clock date.
-- `spectreps pdfimage` wraps each painted page in a new PDF as one 24-bit RGB image XObject, 8 bits per component, `/Filter /FlateDecode`. `/MediaBox` comes from the pixel size and the paint dpi. A `.pdf` input paints every page with `RasterizePage`; any other input uses `RunPostScript`. Bytes are stable, and the trailer `/ID` is the SHA-256 of the image streams.
+- `spectreps pdfimage` wraps each painted page in a new PDF as one image XObject, 8 bits per component, `/Filter /FlateDecode`. `-colorspace rgb|gray|cmyk` picks `/DeviceRGB` at 24 bits, `/DeviceGray` at 8 bits, or `/DeviceCMYK` at 32 bits, and defaults to `rgb`. `/MediaBox` comes from the pixel size and the paint dpi. A `.pdf` input paints the selected pages with `RasterizePage`; any other input uses `RunPostScript`. Bytes are stable, and the trailer `/ID` is the SHA-256 of the image streams.
 - The bitmap PDF says nothing about `Do` on the reading side. Spectre still returns `undefined` for `Do`, so it cannot rasterize its own image PDF yet.
 
 ## Compare and validate
 
 - `spectreps compare bytes` compares two files byte by byte and prints `mismatch byte N` or `mismatch length N` on a mismatch. Exit 0 when equal, exit 1 on a mismatch.
-- `spectreps compare raster` rasterizes both inputs with one `RunOptions` value and compares the pixmaps with `CompareRaster`. It prints `mismatch pixel N` or `mismatch width` or `mismatch height`.
+- `spectreps compare raster` rasterizes both inputs with one `RunOptions` value and compares the pixmaps with `CompareRaster`. A `.pdf` input opens with `OpenPDF` and `RasterizePage`, and `-pages` applies to both sides. It prints `mismatch pixel N` or `mismatch width` or `mismatch height`.
 - `spectreps validate` runs the interpreter in stop-on-first-error mode. A bad xref, a bad stream, an encrypted file, or an unsupported operator fails the command with that error. It does not claim PDF/A conformance.
 
 ## Library and CLI
@@ -57,16 +59,12 @@ The released tag is v0.0.1. The v0.0.2 work adds the page summaries, JPEG raster
 | Images inside a PDF, `Do` | The PDF interpreter has no image XObject model. | A plan file for image XObjects. |
 | DCT, CCITT, and downsampling on rewrite | Rewrite has no image samples to resample. | `Do` support in the PDF interpreter, then `plans/v0.0.3/2-pdf-compression.md` (rows 1.3 and 1.4). |
 | PDF compression levels 1 to 5 over arbitrary PDFs | Levels need text, images, and a policy. Today `rewrite` re-emits the path subset only and has one Flate switch. | `plans/v0.0.3/2-pdf-compression.md`. |
-| TIFF raster | The encoder is `golang.org/x/image/tiff`, not the standard library. The encoder supports none and Deflate only. | `plans/v0.0.3/1-quick-wins.md` (phase 2). |
 | Text extraction, `show`, `Tj` | Fonts are a separate machine from the path engine. | A new plan file after the font decision. |
 | PDF/A-1b, PDF/A-2b, PDF/A-3b creation | Needs a named level, a named policy, and metadata. The file is not a conformance certificate. | A plan file that states the level and the policy. |
 | PDF to PostScript (`ps2write` style) | It is another high-level device on the same marks. | A plan file. |
-| Gray and CMYK image PDF (`pdfimage8`, `pdfimage32` style) | Only the 24-bit RGB path exists, and the conversions need a named policy. | `plans/v0.0.3/1-quick-wins.md` (phase 3). |
 | PCLm | A different image-PDF flavor. | A plan file. |
 | Spot-color separations (`tiffsep`) | No separation model. | A plan file. |
 | `gs` argv compatibility mode | The subcommands map to library methods, and a second flag grammar would fork the CLI. | A bounded switch map in `plans/v0.0.3/1-quick-wins.md` (phase 4). |
-| Page selection for raster and PDF jobs | Out of the current tags. | `plans/v0.0.3/1-quick-wins.md` (phase 1). |
-| PDF inputs in `compare raster` | `rasterPair` sends both files through `RunPostScript`. | `plans/v0.0.3/1-quick-wins.md` (phase 1). |
 | `ink_cov` weighted ink amounts | Ghostscript prints `ink_cov` as a percent and its manual example disagrees with its source. | A written weighting model. |
 | PDF info, linearization, output encryption | Out of the current tags. | A new plan file. |
 | Full PDF 1.7 and PDF 2.0, including transparency and optional content | The current reader is a path-only subset. | A new plan file. |
