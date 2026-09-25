@@ -15,23 +15,27 @@ go.sum
 cmd/spectreps/main.go
 internal/cli/
 internal/engine/
+internal/font/
 internal/graphics/
 internal/pdf/
+internal/pdfa/
 internal/pdfout/
 internal/ps/
+internal/psout/
 spectreps/
 sampledata/
 testdata/
 documentation/
 plans/v0.0.1/
 plans/v0.0.2/
+plans/v0.0.3/
 skills/phase-wise-checklist/SKILLS.md
 skills/unslop/SKILL.md
 skills/PR/
 scripts/
 ```
 
-`documentation/` is the prose folder for this repository. `plans/v0.0.1/` and `plans/v0.0.2/` are the execution ledgers. `sampledata/` holds the PDFs the compression plan measures. `skills/` holds agent instructions that already live in this repo.
+`documentation/` is the prose folder for this repository. `plans/v0.0.1/`, `plans/v0.0.2/`, and `plans/v0.0.3/` are the execution ledgers. `sampledata/` holds the PDFs the compression plan measures. `skills/` holds agent instructions that already live in this repo.
 
 ## Public library
 
@@ -64,7 +68,7 @@ The test files use `package spectreps_test`. Another module imports `github.com/
 
 ## Private code
 
-`internal/engine` holds the session and file byte compare. `internal/ps` is the PostScript interpreter, `internal/graphics` the device, matrix, and pixmap layer, `internal/pdf` the PDF reader, `internal/pdfout` the PDF writers, and `internal/cli` the command layer. Add a directory when its first `.go` file or fixture is real. Do not add `pkg/`, `api/`, `util/`, or empty placeholder packages.
+`internal/engine` holds the session and file byte compare. `internal/ps` is the PostScript interpreter, `internal/graphics` the device, matrix, and pixmap layer, `internal/pdf` the PDF reader, `internal/pdfout` the PDF writers, `internal/pdfa` the PDF/A and PDF/UA-2 metadata and preflight, `internal/font` the font metrics, encodings, and glyph-name tables, `internal/psout` the PDF-to-PostScript writer, and `internal/cli` the command layer. Add a directory when its first `.go` file or fixture is real. Do not add `pkg/`, `api/`, `util/`, or empty placeholder packages.
 
 `testdata/` holds input files and expected PPM bytes. `sampledata/` holds the PDFs the compression plan measures, separate from test fixtures. Golden files are written by the test that first locks a case, then checked in. They are not copied from Ghostscript output. Matching Ghostscript byte for byte is not a success criterion.
 
