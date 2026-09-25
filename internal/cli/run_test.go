@@ -1103,3 +1103,33 @@ func TestInkcov(t *testing.T) {
 	pdf := writeTemp(t, "red.pdf", onePagePDF(t, "1 0 0 rg 0 0 20 20 re f"))
 	want(t, []string{"inkcov", "-w", "20", "-h", "20", "-r", "72", pdf}, 0, red, "")
 }
+
+func TestInkCov(t *testing.T) {
+	square := "0 0 moveto 10 0 lineto 10 10 lineto 0 10 lineto closepath fill"
+	cyan := "0 1 1 setrgbcolor " + square
+	white := "Page 1\n0.00000 0.00000 0.00000 RGB\n"
+	quarter := "Page 1\n25.00000 0.00000 0.00000 RGB\n"
+
+	path := writeTemp(t, "cyan.ps", []byte(cyan))
+	want(t, []string{"ink_cov", "-w", "20", "-h", "20", "-r", "72", path}, 0, quarter, "")
+
+	missing := filepath.Join(t.TempDir(), "missing.ps")
+	wantCode(t, []string{"ink_cov", "-w", "20", "-h", "20", "-r", "72", missing}, 2)
+
+	blank := writeTemp(t, "blank.ps", []byte(""))
+	want(t, []string{"ink_cov", "-w", "20", "-h", "20", "-r", "72", blank}, 0, white, "")
+
+	gray := writeTemp(t, "gray.ps", []byte(
+		"0.5 setgray 0 0 moveto 20 0 lineto 20 20 lineto 0 20 lineto closepath fill"))
+	want(t, []string{"ink_cov", "-w", "20", "-h", "20", "-r", "72", gray}, 0,
+		"Page 1\n49.80392 49.80392 49.80392 RGB\n", "")
+
+	two := writeTemp(t, "two.ps", []byte("showpage "+cyan+" showpage"))
+	want(t, []string{"ink_cov", "-w", "20", "-h", "20", "-r", "72", two}, 0,
+		white+"Page 2\n25.00000 0.00000 0.00000 RGB\n", "")
+	want(t, []string{"ink_cov", "-w", "20", "-h", "20", "-r", "72", "-pages", "2", two}, 0, quarter, "")
+
+	red := "Page 1\n0.00000 100.00000 100.00000 RGB\n"
+	pdf := writeTemp(t, "red.pdf", onePagePDF(t, "1 0 0 rg 0 0 20 20 re f"))
+	want(t, []string{"ink_cov", "-w", "20", "-h", "20", "-r", "72", pdf}, 0, red, "")
+}

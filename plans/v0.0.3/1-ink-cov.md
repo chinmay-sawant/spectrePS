@@ -30,7 +30,7 @@ The weighted amount is the continuous refinement of occupancy: the mean compleme
 
 ### 2.2 ink_cov command
 
-- [ ] `spectreps ink_cov [-w points] [-h points] [-r dpi] [-pages range] file` prints `Page N` and three five-decimal percentages ending in `RGB`, with the same exit codes as `inkcov`. Proof: `go test -count=1 ./internal/cli -run TestInkCov` covers a quarter cyan square (`25.00000 0.00000 0.00000 RGB`), byte-128 gray, a blank page, two PostScript pages, a red PDF, `-pages`, and a missing file.
+- [x] `spectreps ink_cov [-w points] [-h points] [-r dpi] [-pages range] file` prints `Page N` and three five-decimal percentages ending in `RGB`, with the same exit codes as `inkcov`. Proof: `go test -count=1 ./internal/cli -run TestInkCov` exited 0 on 2026-09-25, covering a quarter cyan square (`25.00000 0.00000 0.00000 RGB`), byte-128 gray, a blank page, two PostScript pages, `-pages`, a red PDF, and a missing file.
 
 ## Phase 3: Docs and closure
 
