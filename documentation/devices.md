@@ -53,6 +53,8 @@ The writer omits a wall-clock creation date and uses a fixed trailer id derived 
 
 The output is not a copy of the input xref, and it is not expected to match `pdfwrite` from any Ghostscript version.
 
+The pass-through writer (`WriteCopy`) copies every object it does not rewrite: the page tree, `/Resources`, fonts, annotations, and metadata. An object stored in an object stream is written uncompressed through `SerializeValue`. An override replaces a whole object body by number. The trailer uses the source `/Root`, `/Size` as the highest in-use object number plus one, and `/ID` as the SHA-256 of the written object bodies. Two calls on the same source return equal buffers, and the file carries no `/Info` and no dates.
+
 This tag compresses content streams. It does not downsample images, and it does not DCT-encode them. Those are image-model features and they are deferred.
 
 The image side of the compression levels is three helpers in `internal/pdfout`. `ScaleImage` takes any `image.Image` and returns RGBA resampled with the CatmullRom kernel from `golang.org/x/image/draw`; width and height below 1 clamp to 1. `EncodeDCT` wraps `image/jpeg` with the quality clamped to 1 through 100, and `EncodeFlateRGB` writes tightly packed RGB rows, top row first, inside zlib. All three are deterministic, so the same input returns the same bytes. `spectreps rewrite` does not call them until the level wiring lands.
