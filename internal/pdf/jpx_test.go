@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	jpxRGBPath  = "testdata/jpx-rgb.j2k"
-	jpxGrayPath = "testdata/jpx-gray.jp2"
+	jpxRGBPath  = "../../sampledata/fixtures/jpx-rgb.j2k"
+	jpxGrayPath = "../../sampledata/fixtures/jpx-gray.jp2"
 	jpxSide     = 8
 
 	jpxLimitSide = 60000
@@ -44,8 +44,8 @@ func TestImageXObjectJPX(t *testing.T) {
 	})
 }
 
-// jpxFixture reads one checked-in fixture. See testdata/README.md for the
-// generation command and the SHA-256 of each file.
+// jpxFixture reads one checked-in fixture. See sampledata/fixtures/README.md
+// for the generation command and the SHA-256 of each file.
 func jpxFixture(t *testing.T, path string) []byte {
 	t.Helper()
 	raw, err := os.ReadFile(path)

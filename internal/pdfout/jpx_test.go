@@ -31,7 +31,7 @@ func checkJPXLevelRGB(t *testing.T) {
 	t.Helper()
 	dict := "/Type /XObject /Subtype /Image /Width 8 /Height 8 " +
 		"/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /JPXDecode"
-	file := levelImagePDF(t, levelStreamBody(dict, jpxLevelFixture(t, "../pdf/testdata/jpx-rgb.j2k")))
+	file := levelImagePDF(t, levelStreamBody(dict, jpxLevelFixture(t, "../../sampledata/fixtures/jpx-rgb.j2k")))
 
 	// Level 2 re-encodes Flate and raw streams only, so the JPX stream stays.
 	levelTwo, err := LevelOverrides(t.Context(), file, 2)
@@ -60,7 +60,7 @@ func checkJPXLevelGray(t *testing.T) {
 	t.Helper()
 	dict := "/Type /XObject /Subtype /Image /Width 8 /Height 8 " +
 		"/ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /JPXDecode"
-	file := levelImagePDF(t, levelStreamBody(dict, jpxLevelFixture(t, "../pdf/testdata/jpx-gray.jp2")))
+	file := levelImagePDF(t, levelStreamBody(dict, jpxLevelFixture(t, "../../sampledata/fixtures/jpx-gray.jp2")))
 	for _, level := range []int{3, 4, 5} {
 		reopened := jpxLevelOverride(t, file, level)
 		checkLevelFilter(t, reopened, levelImageNum, filterDCT)
@@ -76,7 +76,7 @@ func checkJPXLevelCopy(t *testing.T) {
 		"/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /JPXDecode"
 	file := levelImagePDF(t,
 		levelStreamBody(dict, []byte("not a JPEG2000 stream")),
-		levelStreamBody(dict, jpxLevelFixture(t, "../pdf/testdata/jpx-gray.jp2")[:64]),
+		levelStreamBody(dict, jpxLevelFixture(t, "../../sampledata/fixtures/jpx-gray.jp2")[:64]),
 	)
 	for level := 2; level <= 5; level++ {
 		overrides, err := LevelOverrides(t.Context(), file, level)

@@ -32,4 +32,4 @@ The module started with no third-party requirements. `golang.org/x/image v0.46.0
 
 ## Reference install
 
-System Ghostscript at `/usr/bin/gs` is a behavior reference for the docs. Tests do not call it. Fixtures are Spectre output, checked in under `testdata/` when phase 04 adds the first one.
+System Ghostscript at `/usr/bin/gs` is a behavior reference for the docs. Tests do not call it. Fixtures are Spectre output, checked in under `sampledata/fixtures/`.

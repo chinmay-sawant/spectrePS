@@ -26,7 +26,7 @@ Implement the ten phases of `plans/v0.0.3`: weighted `ink_cov`, CCITT and JPEG20
 - `/CCITTFaxDecode` decodes through `golang.org/x/image/ccitt` in `internal/pdf/ccitt.go`. `/K < 0` selects Group 4, `/K == 0` with `/EndOfLine true` selects Group 3, and `/K > 0`, a missing end-of-line marker, an 8-bit depth, `DeviceRGB`, and a stream truncated inside a row are refused with `undefined` or `syntaxerror`. `Columns * Rows` above the 32 MiB decoded cap is `limitcheck` before allocation.
 - `/JPXDecode` decodes through the new pure-Go `github.com/mrjoshuak/go-jpeg2000 v1.5.12` in `internal/pdf/jpx.go`. The branch runs before the shared parameter checks because the codestream carries color and precision. A failed decode is `syntaxerror`, a declared size past the 32 MiB cap is `limitcheck`, and neither is a blank image.
 - Level 2 decodes CCITT and re-encodes it as Flate RGB. Levels 3 to 5 decode CCITT and JPEG2000 and re-encode them as DCT. DCT and JPX streams copy through at level 2, and any stream Spectre cannot decode copies through at every level.
-- Fixtures under `internal/pdf/testdata/` hold the JPX codestream and container written by Pillow with OpenJPEG, a `README.md` with the JPX generation commands and SHA-256 digests, and the CCITT binary streams with the `gen_ccitt.py` generator script.
+- Fixtures under `sampledata/fixtures/` hold the JPX codestream and container written by Pillow with OpenJPEG, a `README.md` with the JPX generation commands and SHA-256 digests, and the CCITT binary streams with the `gen_ccitt.py` generator script.
 
 ### Painting images
 
@@ -54,7 +54,7 @@ Implement the ten phases of `plans/v0.0.3`: weighted `ink_cov`, CCITT and JPEG20
 - Devices accepted: `ppmraw`, `png16m`, `jpeg`, `tiff24nc`, `bbox`, `inkcov`, `pdfimage24`, and `pdfwrite`. The rest of the switch set is `-sOutputFile`, `-dFirstPage`, `-dLastPage`, `-sPageList`, `-r`, `-dDEVICEWIDTHPOINTS`, `-dDEVICEHEIGHTPOINTS`, `-g` at 72 dpi, and `-dJPEGQ`.
 - `-sPageList` accepts a contiguous ascending comma list of pages and ranges and maps it onto one `-pages` value. Even and odd selections, open or reversed ranges, overlaps, gaps, and page 0 stay rejected.
 - `-dBATCH`, `-dNOPAUSE`, `-q`, `-dSAFER`, and `-dFIXEDMEDIA` are accepted and ignored. `-c`, `-dNOSAFER`, `-dDELAYSAFER`, stdin, and `@file` are refused with exit 2, as is every switch without a mapping.
-- `raster -format ppm|png|jpeg|tiff` selects the encoder, and a `-sDEVICE` wins over the `-o` suffix. The end-to-end proof is a `-sDEVICE=pdfwrite` run against `testdata/gs-argv-input.pdf` that writes a PDF which reopens and rasterizes both pages.
+- `raster -format ppm|png|jpeg|tiff` selects the encoder, and a `-sDEVICE` wins over the `-o` suffix. The end-to-end proof is a `-sDEVICE=pdfwrite` run against `sampledata/fixtures/gs-argv-input.pdf` that writes a PDF which reopens and rasterizes both pages.
 
 ### PDF/A-4
 
@@ -186,7 +186,7 @@ Page 1
 0.00000 100.00000 100.00000 RGB
 Page 2
 100.00000 0.00000 100.00000 RGB
-$ bin/spectreps gs -sDEVICE=pdfwrite -sOutputFile=/tmp/opencode/pr-v003/gs-out.pdf testdata/gs-argv-input.pdf
+$ bin/spectreps gs -sDEVICE=pdfwrite -sOutputFile=/tmp/opencode/pr-v003/gs-out.pdf sampledata/fixtures/gs-argv-input.pdf
 $ bin/spectreps validate /tmp/opencode/pr-v003/gs-out.pdf
 $ echo $?
 0
@@ -194,8 +194,8 @@ $ bin/spectreps pdfimage -o /tmp/opencode/pr-v003/path_img.pdf sampledata/compre
 $ bin/spectreps raster -o /tmp/opencode/pr-v003/path_img.ppm /tmp/opencode/pr-v003/path_img.pdf
 $ echo $?
 0
-$ bin/spectreps pdfimage -w 20 -h 20 -r 72 -o /tmp/opencode/pr-v003/gs_img.pdf testdata/gs-argv-input.pdf
-$ bin/spectreps compare raster -w 20 -h 20 -r 72 testdata/gs-argv-input.pdf /tmp/opencode/pr-v003/gs_img.pdf
+$ bin/spectreps pdfimage -w 20 -h 20 -r 72 -o /tmp/opencode/pr-v003/gs_img.pdf sampledata/fixtures/gs-argv-input.pdf
+$ bin/spectreps compare raster -w 20 -h 20 -r 72 sampledata/fixtures/gs-argv-input.pdf /tmp/opencode/pr-v003/gs_img.pdf
 $ echo $?
 0
 $ go test -count=1 -v ./spectreps -run TestExtractTextGolden
@@ -209,7 +209,7 @@ $ make pdfua2-check
 pdfua2-check: verapdf not installed, skipping
 ```
 
-`sampledata/compress/path.pdf` is a 200 by 200 point page whose content repeats one 0.5 pt red stroke at y=100 400 times. At `-w 20 -h 20` the mark falls outside the 20 by 20 point device, so `ink_cov` reports a blank page and exits 0. The nonzero witness is the image PDF written from `testdata/gs-argv-input.pdf`: `pdfimage` wrote 1,295 bytes, `raster` on that file exited 0, and `compare raster` against the source exited 0 with no output. The direct and round-trip PPMs are byte-equal for both pages (`cmp` exit 0); page 1 has 400 red pixels and page 2 has 400 green pixels on a 20 by 20 point page. This is the `Do` path against Spectre's own image PDF, which v0.0.2 could not rasterize.
+`sampledata/compress/path.pdf` is a 200 by 200 point page whose content repeats one 0.5 pt red stroke at y=100 400 times. At `-w 20 -h 20` the mark falls outside the 20 by 20 point device, so `ink_cov` reports a blank page and exits 0. The nonzero witness is the image PDF written from `sampledata/fixtures/gs-argv-input.pdf`: `pdfimage` wrote 1,295 bytes, `raster` on that file exited 0, and `compare raster` against the source exited 0 with no output. The direct and round-trip PPMs are byte-equal for both pages (`cmp` exit 0); page 1 has 400 red pixels and page 2 has 400 green pixels on a 20 by 20 point page. This is the `Do` path against Spectre's own image PDF, which v0.0.2 could not rasterize.
 
 `bin/spectreps gs -sDEVICE=pdfwrite` wrote a 901-byte, 2-page PDF that `validate` accepts with no output and exit 0. `bin/spectreps pdfimage -o` on `path.pdf` wrote a 2,254-byte PDF that `raster` accepts with exit 0; the page is white, matching the direct raster of `path.pdf`. `bin/spectreps version` prints `0.0.2`, the same string `documentation/cli.md` states.
 
@@ -258,19 +258,19 @@ pdfua2-check: verapdf not installed, skipping
 
 ## Diff stat by extension
 
-Generated with `bash scripts/pr-diff-stat.sh master` on 2026-09-25 at `4e6b2cc`, before this note was committed, so the note's own `.md` lines are not in the table. It matches `git diff master...HEAD --shortstat` at that commit: 142 files changed, 20,006 insertions, 325 deletions.
+Generated with `bash scripts/pr-diff-stat.sh master` after the fixture move at `8fae858`, before this last table refresh, so the refresh's own `.md` lines are not in the table.
 
 | Extension | Files | Insertions | Deletions |
 | --- | ---: | ---: | ---: |
 | `.bin` | 2 | Binary | Binary |
-| `.go` | 102 | 18449 | 235 |
+| `.go` | 102 | 18450 | 236 |
 | `.j2k` | 1 | Binary | Binary |
 | `.jp2` | 1 | Binary | Binary |
-| `.md` | 27 | 1450 | 89 |
+| `.md` | 29 | 1753 | 92 |
 | `.mod` | 1 | 9 | 0 |
 | `.pdf` | 4 | Binary | Binary |
-| `.ppm` | 1 | Binary | Binary |
+| `.ppm` | 2 | Binary | Binary |
 | `.py` | 1 | 59 | 0 |
 | `.sum` | 1 | 6 | 0 |
 | No extension | 1 | 33 | 1 |
-| **Total** | **142** | **20006** | **325** |
+| **Total** | **145** | **20310** | **329** |

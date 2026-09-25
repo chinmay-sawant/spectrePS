@@ -111,7 +111,7 @@ func TestFixturePPM(t *testing.T) {
 		ResolutionDPI: 72,
 	})
 	got := encodePPM(pages[0])
-	want, err := os.ReadFile("../testdata/line-bottom.ppm")
+	want, err := os.ReadFile("../sampledata/fixtures/line-bottom.ppm")
 	if err != nil {
 		t.Fatal(err)
 	}

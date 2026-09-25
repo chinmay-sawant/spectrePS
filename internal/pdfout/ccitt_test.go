@@ -19,7 +19,7 @@ const (
 // through 5 as DCT, and an undecodable stream copies through at every level.
 func TestLevelCCITTImage(t *testing.T) {
 	t.Parallel()
-	raw, err := os.ReadFile("../pdf/testdata/ccitt-g4.bin")
+	raw, err := os.ReadFile("../../sampledata/fixtures/ccitt-g4.bin")
 	if err != nil {
 		t.Fatal(err)
 	}

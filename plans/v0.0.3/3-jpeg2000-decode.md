@@ -30,7 +30,7 @@ For JPX, `/ColorSpace` is optional and ignored; the codestream carries the color
 
 ### 2.2 Fixtures and reject matrix
 
-- [x] One `.j2k` and one `.jp2` fixture are checked in under `internal/pdf/testdata/` with the generation command and SHA-256 recorded in `testdata/README.md`. `opj_compress` is not installed, so Pillow 12.3.0 with OpenJPEG 2.5.4 wrote both. Cases: RGB, gray, no `/ColorSpace`, `/Filter [/JPXDecode]`, malformed, and an undecodable stream that copies through. Proof: the same `TestImageXObjectJPX` run exited 0 on 2026-09-25 for the decode cases, and `go test -count=1 ./internal/pdfout -run TestLevelJPXImage` exited 0 on 2026-09-25 for the copy-through case.
+- [x] One `.j2k` and one `.jp2` fixture are checked in under `sampledata/fixtures/` with the generation command and SHA-256 recorded in `sampledata/fixtures/README.md`. `opj_compress` is not installed, so Pillow 12.3.0 with OpenJPEG 2.5.4 wrote both. Cases: RGB, gray, no `/ColorSpace`, `/Filter [/JPXDecode]`, malformed, and an undecodable stream that copies through. Proof: the same `TestImageXObjectJPX` run exited 0 on 2026-09-25 for the decode cases, and `go test -count=1 ./internal/pdfout -run TestLevelJPXImage` exited 0 on 2026-09-25 for the copy-through case.
 
 ## Phase 3: Rewrite, docs, and closure
 

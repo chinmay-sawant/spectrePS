@@ -677,7 +677,7 @@ func gsListCombination(t *testing.T) {
 // TestGSEndToEnd runs a ps2pdf shaped job against the checked-in fixture and
 // opens and rasterizes the PDF it writes.
 func TestGSEndToEnd(t *testing.T) {
-	fixture := filepath.Join("..", "..", "testdata", "gs-argv-input.pdf")
+	fixture := filepath.Join("..", "..", "sampledata", "fixtures", "gs-argv-input.pdf")
 	out := filepath.Join(t.TempDir(), "out.pdf")
 	args := []string{
 		"gs", "-q", "-dBATCH", "-dNOPAUSE",

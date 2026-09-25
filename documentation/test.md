@@ -2,7 +2,7 @@
 
 These are the tests for the jobs in `documentation/covered-and-not-covered.md`. Each bullet is one case. The expected result is the contract in `documentation/language.md`, `documentation/devices.md`, `documentation/cli.md`, and `documentation/public-api.md`.
 
-Tests call package `spectreps` or the `spectreps` binary. They do not run `/usr/bin/gs`. Fixtures are Spectre output, checked in under `testdata/` when the first raster or PDF case lands. PNG file bytes are not an equality oracle. The oracle is `PageImage`, or a PPM raw body when the header is part of the case. Text extraction is not a raster test either: the oracle is the text and the geometry, because text pixels never byte-match Ghostscript.
+Tests call package `spectreps` or the `spectreps` binary. They do not run `/usr/bin/gs`. Fixtures are Spectre output or hand-built, checked in under `sampledata/fixtures/`. PNG file bytes are not an equality oracle. The oracle is `PageImage`, or a PPM raw body when the header is part of the case. Text extraction is not a raster test either: the oracle is the text and the geometry, because text pixels never byte-match Ghostscript.
 
 External tests use `package spectreps_test`, so they only see the exported API.
 

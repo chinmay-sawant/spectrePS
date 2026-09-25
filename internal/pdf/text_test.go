@@ -271,7 +271,7 @@ func checkGlyphBox(t *testing.T, box Box, minX, minY, maxX, maxY float64) {
 func TestTjGlyphPixels(t *testing.T) {
 	t.Parallel()
 	base := paintTextPage(t, "BT /F1 12 Tf 1 1 Td (A) Tj ET")
-	checkPPM(t, "testdata/text-tj.ppm", base)
+	checkPPM(t, "../../sampledata/fixtures/text-tj.ppm", base)
 	minCol, minRow, maxCol, maxRow, ok := markedBounds(base)
 	if !ok {
 		t.Fatal("the glyph painted nothing")

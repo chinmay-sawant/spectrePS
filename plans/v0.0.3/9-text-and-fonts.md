@@ -73,7 +73,7 @@ One glyph source serves both front ends: advances in 1/1000 em, outlines, encodi
 ### 3.2 Tj outlines
 
 - [x] `Tj` transforms glyph outlines through the text rendering matrix and blends coverage into the pixmap. Proof: `go test -count=1 ./internal/pdf -run TestTjGlyphPixels` against a checked-in PPM fixture.
-  Run 2026-09-25: `ok github.com/chinmay-sawant/spectrePS/internal/pdf 0.004s`. The fixture is `internal/pdf/testdata/text-tj.ppm`, locked by the test with `UPDATE_FIXTURES=1`; the translated page moves the marked box by four pixels. `Pixmap.DrawGlyph` blends the `x/image/vector` coverage mask.
+  Run 2026-09-25: `ok github.com/chinmay-sawant/spectrePS/internal/pdf 0.004s`. The fixture is `sampledata/fixtures/text-tj.ppm`, locked by the test with `UPDATE_FIXTURES=1`; the translated page moves the marked box by four pixels. `Pixmap.DrawGlyph` blends the `x/image/vector` coverage mask.
 
 ### 3.3 Standard 14 painting
 

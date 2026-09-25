@@ -24,7 +24,6 @@ internal/ps/
 internal/psout/
 spectreps/
 sampledata/
-testdata/
 documentation/
 plans/v0.0.1/
 plans/v0.0.2/
@@ -70,7 +69,7 @@ The test files use `package spectreps_test`. Another module imports `github.com/
 
 `internal/engine` holds the session and file byte compare. `internal/ps` is the PostScript interpreter, `internal/graphics` the device, matrix, and pixmap layer, `internal/pdf` the PDF reader, `internal/pdfout` the PDF writers, `internal/pdfa` the PDF/A and PDF/UA-2 metadata and preflight, `internal/font` the font metrics, encodings, and glyph-name tables, `internal/psout` the PDF-to-PostScript writer, and `internal/cli` the command layer. Add a directory when its first `.go` file or fixture is real. Do not add `pkg/`, `api/`, `util/`, or empty placeholder packages.
 
-`testdata/` holds input files and expected PPM bytes. `sampledata/` holds the PDFs the compression plan measures, separate from test fixtures. Golden files are written by the test that first locks a case, then checked in. They are not copied from Ghostscript output. Matching Ghostscript byte for byte is not a success criterion.
+`sampledata/` holds the fixtures and samples. Scenario folders (`compress/`, `pdfa/`, `pdfua2/`) hold the PDFs the plans measure. `sampledata/fixtures/` holds the unit-test inputs and expected PPM bytes. Golden files are written by the test that first locks a case, then checked in. They are not copied from Ghostscript output. Matching Ghostscript byte for byte is not a success criterion.
 
 Package `spectreps` calls `internal/engine`, `internal/ps`, `internal/graphics`, `internal/pdf`, and `internal/pdfout`. `internal/cli` stays on the public library, which is the same boundary an external program has.
 

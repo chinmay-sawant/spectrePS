@@ -11,14 +11,14 @@ import (
 // row 2 alternating black and white. With /BlackIs1 false they decode to
 // that pattern.
 //
-//	testdata/ccitt-g4.bin  Group 4, 14 bytes
-//	                       SHA-256 b9ea02cafa44593fb4b3b56e159e00c98a533b69f5176ae5ce03b8205f9f0274
-//	testdata/ccitt-g3.bin  Group 3, 13 bytes
-//	                       SHA-256 1e41f54b7b17df07b8316c7c06b3902908591cab0f6f2b7e008370cd3d1b9743
+//	sampledata/fixtures/ccitt-g4.bin  Group 4, 14 bytes
+//	                                  SHA-256 b9ea02cafa44593fb4b3b56e159e00c98a533b69f5176ae5ce03b8205f9f0274
+//	sampledata/fixtures/ccitt-g3.bin  Group 3, 13 bytes
+//	                                  SHA-256 1e41f54b7b17df07b8316c7c06b3902908591cab0f6f2b7e008370cd3d1b9743
 //
 // Regenerate with Pillow 12.3.0:
 //
-//	python3 internal/pdf/testdata/gen_ccitt.py internal/pdf/testdata
+//	python3 sampledata/fixtures/gen_ccitt.py sampledata/fixtures
 //
 // A TIFF strip carries the fax codes with the opposite polarity to a PDF
 // stream, so the generator feeds Pillow the inverse image.
@@ -211,7 +211,7 @@ func TestImageXObjectCCITTLimit(t *testing.T) {
 
 func ccittFixture(t *testing.T, name string) []byte {
 	t.Helper()
-	raw, err := os.ReadFile("testdata/" + name)
+	raw, err := os.ReadFile("../../sampledata/fixtures/" + name)
 	if err != nil {
 		t.Fatal(err)
 	}
