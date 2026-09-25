@@ -35,27 +35,33 @@ One glyph source serves both front ends: advances in 1/1000 em, outlines, encodi
 
 ### 2.1 Resource lookup and the text seam
 
-- [ ] `File.PageResources` and a font lookup by page and name, plus a `TextOptions` seam on `Paint` that carries the font source and the sink. Proof: `go test -count=1 ./internal/pdf -run TestFontResource`.
+- [x] `File.PageResources` and a font lookup by page and name, plus a `TextOptions` seam on `Paint` that carries the font source and the sink. Proof: `go test -count=1 ./internal/pdf -run TestFontResource`.
+  Run 2026-09-25: `ok github.com/chinmay-sawant/spectrePS/internal/pdf 0.002s`. `Resources.Font` and `File.PageFont` do the lookup; `PaintOptions.Text` carries `Fonts` and `Sink`, and `TextOptions.Fonts` overrides the page fonts.
 
 ### 2.2 Simple fonts
 
-- [ ] A simple font dictionary reads `/Widths`, `/FirstChar`, `/MissingWidth`, `/FontDescriptor`, and `/BaseFont` with the standard-14 fallback, and `/Encoding` with `/Differences`. Proof: `go test -count=1 ./internal/pdf -run TestSimpleFont`.
+- [x] A simple font dictionary reads `/Widths`, `/FirstChar`, `/MissingWidth`, `/FontDescriptor`, and `/BaseFont` with the standard-14 fallback, and `/Encoding` with `/Differences`. Proof: `go test -count=1 ./internal/pdf -run TestSimpleFont`.
+  Run 2026-09-25: `ok github.com/chinmay-sawant/spectrePS/internal/pdf 0.002s`. `/Widths` and `/MissingWidth` cover a code, the standard 14 metrics cover a font without `/Widths`, `/Differences` renames codes, and a symbolic flag or a Symbol base font starts from the empty built-in table.
 
 ### 2.3 ToUnicode
 
-- [ ] `bfchar` and `bfrange` CMaps override the encoding for extraction. Proof: `go test -count=1 ./internal/pdf -run TestToUnicode`.
+- [x] `bfchar` and `bfrange` CMaps override the encoding for extraction. Proof: `go test -count=1 ./internal/pdf -run TestToUnicode`.
+  Run 2026-09-25: `ok github.com/chinmay-sawant/spectrePS/internal/pdf 0.003s`. The test covers a `bfchar` override, a two-code-point destination, an incrementing `bfrange`, an array `bfrange`, and the encoding fallback for a code the CMap does not list.
 
 ### 2.4 Embedded TrueType and OpenType
 
-- [ ] `/FontFile2` and `/FontFile3` OpenType parse through `sfnt`, mapping character codes to glyph IDs and advances. Proof: `go test -count=1 ./internal/pdf -run TestTrueTypeGlyph`.
+- [x] `/FontFile2` and `/FontFile3` OpenType parse through `sfnt`, mapping character codes to glyph IDs and advances. Proof: `go test -count=1 ./internal/pdf -run TestTrueTypeGlyph`.
+  Run 2026-09-25: `ok github.com/chinmay-sawant/spectrePS/internal/pdf 0.003s`. The glyph names of the program map a code to a glyph ID, `/Widths` wins when present, the program advance is the fallback, and the outline bounds come back in font units. The fixture is a synthetic TrueType program built in the test helper, so the repository carries no third-party font bytes.
 
 ### 2.5 Type0 Identity-H
 
-- [ ] A Type0 font with Identity-H and a `CIDToGIDMap` maps two-byte codes to glyphs. Proof: `go test -count=1 ./internal/pdf -run TestIdentityHText`.
+- [x] A Type0 font with Identity-H and a `CIDToGIDMap` maps two-byte codes to glyphs. Proof: `go test -count=1 ./internal/pdf -run TestIdentityHText`.
+  Run 2026-09-25: `ok github.com/chinmay-sawant/spectrePS/internal/pdf 0.003s`. A stream map swaps two glyph IDs, `/Identity` maps CID to glyph, `/W` and `/DW` give the advances, and `Tj` reads two-byte codes through the sink.
 
 ### 2.6 Rewrite stays gated
 
-- [ ] Level 0 still returns `undefined` on text, so rewrite does not silently outline text. Proof: `go test -count=1 ./internal/pdfout -run TestRewriteTextUndefined`.
+- [x] Level 0 still returns `undefined` on text, so rewrite does not silently outline text. Proof: `go test -count=1 ./internal/pdfout -run TestRewriteTextUndefined`.
+  Run 2026-09-25: `ok github.com/chinmay-sawant/spectrePS/internal/pdfout 0.003s`. The rewrite recorder does not implement the glyph seam, so `Tj` returns `undefined` and `EmitPage` writes nothing.
 
 ## Phase 3: Painting and positioning
 
