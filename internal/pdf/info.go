@@ -2,6 +2,7 @@ package pdf
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -49,6 +50,10 @@ func (file *File) Info() (InfoReport, error) {
 	if file == nil {
 		return InfoReport{}, NewError(opInfo, errType)
 	}
+	version, err := file.version()
+	if err != nil {
+		return InfoReport{}, err
+	}
 	sizes, err := file.pageSizes()
 	if err != nil {
 		return InfoReport{}, err
@@ -62,7 +67,7 @@ func (file *File) Info() (InfoReport, error) {
 		return InfoReport{}, err
 	}
 	return InfoReport{
-		Version:   file.version(),
+		Version:   version,
 		Pages:     len(sizes),
 		PageSizes: sizes,
 		Tagged:    file.HasStructTree(),
@@ -71,9 +76,37 @@ func (file *File) Info() (InfoReport, error) {
 	}, nil
 }
 
-// version returns the header version, for example "1.4". A file without a
-// header returns an empty string.
-func (file *File) version() string {
+// version returns the effective PDF version. A catalog /Version name can
+// increase the header version, including after an incremental update.
+func (file *File) version() (string, error) {
+	headerVersion := file.headerVersion()
+	if headerVersion == "" {
+		return "", nil
+	}
+	catalog, err := file.catalogValue()
+	if err != nil {
+		return "", err
+	}
+	value, ok := catalog.ValueEntry("Version")
+	if !ok {
+		return headerVersion, nil
+	}
+	if value.Kind != KindName {
+		return "", NewError(opInfo, errSyntax)
+	}
+	catalogMajor, catalogMinor, catalogOK := parsePDFVersion(value.Name)
+	if !catalogOK {
+		return "", NewError(opInfo, errSyntax)
+	}
+	headerMajor, headerMinor, headerOK := parsePDFVersion(headerVersion)
+	if !headerOK || catalogMajor > headerMajor ||
+		(catalogMajor == headerMajor && catalogMinor > headerMinor) {
+		return value.Name, nil
+	}
+	return headerVersion, nil
+}
+
+func (file *File) headerVersion() string {
 	header := file.Header()
 	end := len(header)
 	for i, cur := range header {
@@ -92,6 +125,19 @@ func (file *File) version() string {
 		digits++
 	}
 	return text[:digits]
+}
+
+func parsePDFVersion(version string) (int, int, bool) {
+	majorText, minorText, ok := strings.Cut(version, ".")
+	if !ok || majorText == "" || minorText == "" {
+		return 0, 0, false
+	}
+	major, majorErr := strconv.Atoi(majorText)
+	minor, minorErr := strconv.Atoi(minorText)
+	if majorErr != nil || minorErr != nil || major < 0 || minor < 0 {
+		return 0, 0, false
+	}
+	return major, minor, true
 }
 
 // PageSize returns one page's resolved /MediaBox in points, inheriting from

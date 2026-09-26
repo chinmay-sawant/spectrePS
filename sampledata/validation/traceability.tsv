@@ -192,6 +192,7 @@ test.md-pdf-open	level 2 lzw re-encode	TestLevelLZWImage	live
 test.md-pdf-open	rasterize page rangecheck	TestRasterizePage	live
 test.md-pdf-open	raster pdf ppm	TestRasterPDF	live
 test.md-pdf-info	info output	TestPDFInfoCLI	live
+test.md-pdf-info	effective PDF versions and compatibility samples	TestValidationPDFVersionCorpus	live
 test.md-pdf-info	info font block	TestPageFontDict	live
 test.md-pdf-info	info encrypt and mediabox errors	TestPDFInfo	live
 test.md-pdf-info	info exit codes	TestPDFInfoCLI	live

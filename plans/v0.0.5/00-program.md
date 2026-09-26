@@ -1,16 +1,16 @@
-# v0.0.5 - Benchmark coverage
+# v0.0.5 - Benchmark coverage and PDF compatibility
 
 > **Parent:** `plans/v0.0.4/00-program.md` - the previous tag
-> **Status:** planned. No row is checked. Phase 1 through 5 add benchmarks and re-record the baseline. Phase 5 is the cut line.
-> **Estimated effort:** about a week for phase 1 and 2, about three days for phase 3 and 4, about two days for phase 5.
+> **Status:** open development ledger. Phases 1 through 5 cover benchmarks; phases 6 and 7 record PDF compatibility work. No new tag has been cut.
+> **Estimated effort for the benchmark phases:** about a week for phase 1 and 2, about three days for phase 3 and 4, about two days for phase 5.
 
 ---
 
 ## Overview
 
-v0.0.4 shipped a benchmark suite in `plans/v0.0.4/6-performance-profiling.md` phase 1. It holds 35 `Benchmark` functions across six packages, and `documentation/performance.md` records the baseline those produced. That suite is the accepted record and this file does not change it.
+v0.0.4 shipped a benchmark suite in `plans/v0.0.4/6-performance-profiling.md` phase 1. It holds 35 `Benchmark` functions across six packages, and `documentation/performance.md` records the baseline those produced. That suite is the accepted record and the benchmark phases do not change it.
 
-The suite is a map of the work that was easy to reach. It covers the six packages that already had a natural entry point and leaves eight packages with no benchmark at all, and it leaves nine hot paths unmeasured inside the packages it does cover. This file closes those holes and re-records the baseline. It changes no production code.
+The suite is a map of the work that was easy to reach. It covers the six packages that already had a natural entry point and leaves eight packages with no benchmark at all, and it leaves nine hot paths unmeasured inside the packages it does cover. Phases 1 through 5 close those holes and re-record the baseline. Those phases change no production code. Phases 6 and 7 add the PDF version and PDF/A compatibility corpora; phase 6 also corrects the version reported by `info`.
 
 The count, measured rather than estimated. The tree had 35 benchmark functions producing 40 result rows before this file and has 67 producing 86 after, so 32 functions were added and they account for 46 rows, because sub-benchmarks expand. Five packages had no `bench_test.go` at all: `internal/engine`, `internal/font`, `internal/pdfa`, `internal/psout`, and `internal/tag`.
 
@@ -27,13 +27,15 @@ Phase 1 benchmarks the graphics device paths the current suite barely touches. `
 | `3-font-and-metadata.md` | 3 | First benchmarks for `internal/font`, `internal/pdfa`, and `internal/engine`. |
 | `4-reading-and-writing.md` | 4 | `internal/tag`, `internal/psout`, and the unbenchmarked `spectreps` jobs. |
 | `5-baseline-and-budget.md` | 5 | Re-record the baseline and set the new allocation ceilings. |
+| `6-pdf-compatibility.md` | 6 | Add pinned PDF version and feature-gap samples; report the effective PDF version. |
+| `7-pdfa-profiles.md` | 7 | Check representative samples for every PDF/A profile with veraPDF. |
 | `v0.0.5-closure.md` | gate | `make lint` and `make test` transcripts for the merged tree. |
 
-## What is not in v0.0.5
+## What the benchmark phases exclude
 
 | Item | Why |
 | --- | --- |
-| Any change to production Go code | This file adds `_test.go` files and one documentation update. A fix that a benchmark motivates is its own row in a later file. |
+| Any production Go change motivated by a benchmark | Phases 1 through 5 add `_test.go` files and update benchmark documentation. Phase 6 separately changes `info` version reporting. |
 | Editing the 35 existing benchmarks | Their numbers are the accepted baseline in `documentation/performance.md`. Changing them invalidates the recorded comparison for no gain. |
 | Installing `benchstat`, or adding a CI workflow | `benchstat` is not on PATH, so `make bench-check` writes a skip line, and the repository has no CI. Both are real gaps. Neither is a coverage gap, and both need a tool decision this file does not make. |
 | Wall-clock assertions in `make test` | Timing is machine-specific. Only allocation counts gate, in the shape of `spectreps/alloc_test.go`. |

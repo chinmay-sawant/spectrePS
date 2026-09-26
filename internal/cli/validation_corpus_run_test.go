@@ -359,7 +359,7 @@ func TestValidationCorpusPostScript(t *testing.T) {
 // 2.0 container when the fetched tier is present.
 func TestValidationCorpusPDF(t *testing.T) {
 	manifest := corpusManifest(t)
-	rows := corpusRows(t, manifest, "structural", "paths")
+	rows := corpusRows(t, manifest, "structural", "paths", "compatibility")
 	rows = append(rows, corpusExternalRows(t, manifest, "external/pdf20examples/simple-pdf-2.0.pdf")...)
 	for _, row := range rows {
 		corpusSubtest(t, row)

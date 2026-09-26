@@ -6,7 +6,7 @@ NPROC := $(shell nproc 2>/dev/null || echo 1)
 # BENCH_PKGS is the packages with Benchmark functions. make test never runs them.
 BENCH_PKGS := ./spectreps ./internal/cli ./internal/engine ./internal/font ./internal/pdf ./internal/pdfa ./internal/pdfout ./internal/graphics ./internal/ps ./internal/psout ./internal/tag
 
-.PHONY: help build test lint fmt tidy clean size-check pdfa-check pdfua2-check refs-gs-check validation-run bench bench-profile bench-check
+.PHONY: help build test lint fmt tidy clean size-check pdfa-check pdfa-corpus-check pdfua2-check refs-gs-check validation-run bench bench-profile bench-check
 
 help:
 	@printf '%s\n' \
@@ -15,6 +15,7 @@ help:
 		'lint        gofmt check, golangci-lint, and size-check' \
 		'size-check  Go files over 2000 lines must be allowlisted' \
 		'pdfa-check  run veraPDF over sampledata/pdfa when installed' \
+		'pdfa-corpus-check  check each PDF/A profile sample with veraPDF' \
 		'pdfua2-check run veraPDF over sampledata/pdfua2 when installed' \
 		'refs-gs-check run the Ghostscript reference proofs when gs is installed' \
 		'validation-run run the acceptance harness over sampledata/validation' \
@@ -56,8 +57,8 @@ pdfa-check:
 		exit 0; \
 	fi; \
 	roots='sampledata/pdfa sampledata/validation/pdfa'; \
-	base=$$(find $$roots -name '*.pdf' ! -path '*/negative/*' ! -name '4f-*' 2>/dev/null); \
-	foured=$$(find $$roots -name '4f-*.pdf' ! -path '*/negative/*' 2>/dev/null); \
+	base=$$(find $$roots -name '*.pdf' ! -path '*/negative/*' ! -path '*/profiles/*' ! -name '4f-*' 2>/dev/null); \
+	foured=$$(find $$roots -name '4f-*.pdf' ! -path '*/negative/*' ! -path '*/profiles/*' 2>/dev/null); \
 	if [ -z "$$base" ] && [ -z "$$foured" ]; then \
 		printf '%s\n' 'pdfa-check: no samples under sampledata/pdfa or sampledata/validation/pdfa, skipping'; \
 		exit 0; \
@@ -66,6 +67,11 @@ pdfa-check:
 	if [ -n "$$base" ]; then "$$verapdf" --flavour 4 $$base || status=1; fi; \
 	if [ -n "$$foured" ]; then "$$verapdf" --flavour 4f $$foured || status=1; fi; \
 	exit $$status
+
+# pdfa-corpus-check validates one compliant PDF for each PDF/A profile and
+# three known noncompliant controls. It reads the verdict from veraPDF JSON.
+pdfa-corpus-check:
+	python3 scripts/check-pdfa-profiles.py
 
 # pdfua2-check runs veraPDF as a proof tool over the sampled PDF/UA-2 writes.
 # It is not a dependency and it skips when the CLI is absent. veraPDF is Java,
