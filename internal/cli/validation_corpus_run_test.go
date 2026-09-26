@@ -12,8 +12,7 @@ package cli
 //   - struct: `info` for a PDF, `rewrite -level 2 -o out.pdf` for a rewrite/
 //     row, and `text` for a text/ row.
 //
-// corpusPending is the one table of rows that fail on this base because another
-// agent owns the root cause. Every row outside it passes.
+// Every committed row is asserted; the external tier skips cleanly when absent.
 
 import (
 	"bytes"
@@ -39,50 +38,6 @@ const (
 	// corpusUpdateEnv writes the expected text instead of comparing it.
 	corpusUpdateEnv = "UPDATE_FIXTURES"
 )
-
-// corpusPendingRow names one corpus row that fails on this base, the sibling
-// worktree that owns the fix, and the measured error. The owner names follow
-// the fix worktrees on this machine: fix-ccitt, fix-content, fix-fonts,
-// fix-psops, fix-stream, and fix-xref.
-type corpusPendingRow struct {
-	path  string
-	owner string
-	// measured is the stderr this base prints, or the manifest delta when the
-	// command succeeds but the verdict disagrees.
-	measured string
-}
-
-// corpusPending is the single table of rows to enable after the owning fixes
-// merge. The integrator deletes a row and reruns
-// `go test -count=1 ./internal/cli -run TestValidationCorpus` after that
-// owner's branch lands; UPDATE_FIXTURES=1 writes the text golden for a text
-// row the first time it runs.
-var corpusPending = []corpusPendingRow{
-	{"images/UnknownFilter-xrefstm.pdf", "fix-stream",
-		"exit 1, stderr `Error: /syntaxerror in xref`, want `undefined in Predictor`"},
-	{"images/bug_jpx.pdf", "fix-xref", "exit 1, stderr `Error: /syntaxerror in xref`"},
-	{"images/ccitt_EndOfBlock_false.pdf", "fix-ccitt", "exit 1, stderr `Error: /undefined in Do`"},
-	{"images/cmykjpeg.pdf", "fix-content", "exit 1, stderr `Error: /undefined in gs`"},
-	{"paths/xobject-image.pdf", "fix-stream", "exit 1, stderr `Error: /syntaxerror in endstream`"},
-	{"rewrite/UA1_Tpdf-G5_03.pdf", "fix-xref", "exit 1, stderr `Error: /syntaxerror in xref`"},
-	{"rewrite/bug_jpx.pdf", "fix-xref", "exit 1, stderr `Error: /syntaxerror in xref`"},
-	{"rewrite/xobject-image.pdf", "fix-stream", "exit 1, stderr `Error: /syntaxerror in endstream`"},
-	{"postscript/cups-smiley.ps", "fix-psops", "exit 1, stderr `Error: /undefined in rectstroke`"},
-	{"postscript/cups-testfile.ps", "fix-psops", "exit 1, stderr `Error: /undefined in bind`"},
-	{"tagged/8.4.5.8-t01-pass-a.pdf", "fix-stream", "exit 1, stderr `Error: /syntaxerror in Length`"},
-	{"tagged/8.4.5.8-t01-pass-b.pdf", "fix-stream", "exit 1, stderr `Error: /syntaxerror in Length`"},
-	{"tagged/8.4.5.8-t01-pass-c.pdf", "fix-stream", "exit 1, stderr `Error: /syntaxerror in Length`"},
-	{"tagged/8.4.5.8-t02-pass-a.pdf", "fix-stream", "exit 1, stderr `Error: /syntaxerror in Length`"},
-	{"tagged/negative/8.4.5.8-t01-fail-a.pdf", "fix-stream", "exit 1, stderr `Error: /syntaxerror in Length`"},
-	{"tagged/negative/8.4.5.8-t02-fail-a.pdf", "fix-stream", "exit 1, stderr `Error: /syntaxerror in Length`"},
-	{"tagged/negative/8.4.5.8-t02-fail-b.pdf", "fix-stream", "exit 1, stderr `Error: /syntaxerror in Length`"},
-	{"tagged/negative/8.4.5.8-t02-fail-c.pdf", "fix-stream", "exit 1, stderr `Error: /syntaxerror in Length`"},
-	{"text/UA1_Tpdf-G5_03.pdf", "fix-xref", "exit 1, stderr `Error: /syntaxerror in xref`"},
-	{"text/Embedded_font.pdf", "fix-fonts", "exit 1, stderr `Error: /invalidfont in font`"},
-	{"text/mixedfonts.pdf", "fix-content", "exit 1, stderr `Error: /undefined in d`"},
-	{"text/standard_fonts.pdf", "fix-content", "exit 1, stderr `Error: /undefined in d`"},
-	{"text/simpletype3font.pdf", "fix-stream", "exit 1, stderr `Error: /syntaxerror in Length`"},
-}
 
 // corpusRows loads and checks the manifest once per test run and returns the
 // committed rows under the named folders. Every returned row is sorted as the
@@ -155,8 +110,7 @@ func corpusUnder(path string, dirs []string) bool {
 	return false
 }
 
-// corpusSubtest runs one row in its own subtest so a pending skip leaves the
-// rest of the folder green.
+// corpusSubtest runs one row in its own subtest.
 func corpusSubtest(t *testing.T, row validation.Row) {
 	t.Helper()
 	t.Run(row.Path, func(t *testing.T) {
@@ -167,7 +121,6 @@ func corpusSubtest(t *testing.T, row validation.Row) {
 // corpusRunRow dispatches one manifest row to its command class.
 func corpusRunRow(t *testing.T, row validation.Row) {
 	t.Helper()
-	corpusSkipPending(t, row)
 	path := corpusRowPath(t, row)
 	work := t.TempDir()
 	switch {
@@ -181,16 +134,6 @@ func corpusRunRow(t *testing.T, row validation.Row) {
 		corpusRunPaint(t, row, path, work)
 	default:
 		corpusRunInfo(t, row, path)
-	}
-}
-
-// corpusSkipPending skips one row whose owning fix has not landed.
-func corpusSkipPending(t *testing.T, row validation.Row) {
-	t.Helper()
-	for _, pending := range corpusPending {
-		if pending.path == row.Path {
-			t.Skipf("pending corpus fix: %s owns %s (measured: %s)", pending.owner, row.Path, pending.measured)
-		}
 	}
 }
 
@@ -483,7 +426,6 @@ func TestValidationCorpusGS(t *testing.T) {
 // corpusRunGSRewrite runs gs -sDEVICE=pdfwrite and reopens the output.
 func corpusRunGSRewrite(t *testing.T, row validation.Row) {
 	t.Helper()
-	corpusSkipPending(t, row)
 	path := corpusRowPath(t, row)
 	out := filepath.Join(t.TempDir(), corpusRewriteName)
 	code, stdout, stderr := callRun(t, "gs", "-sDEVICE=pdfwrite", "-sOutputFile="+out, path)

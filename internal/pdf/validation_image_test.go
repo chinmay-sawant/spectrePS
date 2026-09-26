@@ -32,13 +32,16 @@ func validationDCTError(t *testing.T) {
 	}
 }
 
+// validationImageChainError locks the shape an unknown stage in an image
+// filter chain reports: undefined with that stage's filter name, the same
+// contract the generic stream chain uses.
 func validationImageChainError(t *testing.T) {
 	t.Helper()
 	dict := "/Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB " +
 		"/BitsPerComponent 8 /Filter [/FlateDecode /BogusDecode]"
 	file, num := oneImageDoc(t, dict, flateRaw(t, rgbPixels()))
 	pic, err := file.DecodeImage(num)
-	wantErr(t, err, opImage, errUndefined)
+	wantErr(t, err, "BogusDecode", errUndefined)
 	if pic != nil {
 		t.Fatalf("decode returned an image with %v", err)
 	}

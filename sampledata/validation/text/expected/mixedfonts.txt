@@ -1,0 +1,11 @@
+Font Types
+Original Example From: http://www.tcpdf.org/examples/example_033.php
+[Core font] : abcdefghijklmnopqrstuvwxyzABCDEFG
+HIJKLMNOPQRSTUVWXYZ0123456789
+[True Type Unicode font] : abcdefghijklmno
+pqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVW
+XYZ0123456789
+[CID-0 font] : abcdefghijklmnopqrstuvwxyzABCDEFGHI
+JKLMNOPQRSTUVWXYZ0123456789
+                               page 1 / 1
+Powered by TCPDF (www.tcpdf.org)
