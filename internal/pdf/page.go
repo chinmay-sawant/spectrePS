@@ -263,11 +263,36 @@ func (file *File) joinContents(items []Value) ([]byte, error) {
 }
 
 func (file *File) oneContent(val Value) ([]byte, error) {
-	stream, err := file.deref(val)
+	stream, err := file.streamEntry(val)
 	if err != nil {
 		return nil, err
 	}
 	return decodeStream(stream)
+}
+
+// streamEntry resolves one stream entry. A parsed stream whose /Length is a
+// direct integer is returned as it stands. An indirect /Length, or a plain
+// parse that failed, goes through the xref-aware reparse, so a body that
+// contains the bytes endstream still reads its declared span.
+func (file *File) streamEntry(val Value) (Value, error) {
+	stream, err := file.deref(val)
+	if err == nil && !streamIndirectLength(stream) {
+		return stream, nil
+	}
+	if fixed, ok := file.resolvedStream(val); ok {
+		return fixed, nil
+	}
+	return stream, err
+}
+
+// streamIndirectLength reports whether a parsed stream still needs an indirect
+// /Length resolved. A direct length was already read by the plain parse.
+func streamIndirectLength(stream Value) bool {
+	if stream.Kind != KindStream {
+		return false
+	}
+	length, ok := stream.ValueEntry(wordLength)
+	return ok && length.Kind == KindRef
 }
 
 func decodeStream(val Value) ([]byte, error) {

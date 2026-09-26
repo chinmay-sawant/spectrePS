@@ -211,13 +211,17 @@ measures these differences, and the phase files own the fixes:
   the current interpreter stops at `/undefined in bind` and
   `/undefined in rectstroke`. Phase 3 row 3.8 owns the CUPS pair.
 - `paths/xobject-image.pdf`, `images/ccitt_EndOfBlock_false.pdf`, and
-  `images/bug_jpx.pdf` target `paint`; the current decoders stop at
-  `/syntaxerror in endstream`, `/undefined in Do`, and
-  `/undefined in Predictor`. Phase 5 owns the decoder cases.
+  `images/bug_jpx.pdf` target `paint`; the current tree stops before painting:
+  `paths/xobject-image.pdf` at `/undefined in Do` for its two-name filter
+  chain, `images/ccitt_EndOfBlock_false.pdf` at `/undefined in Do`, and
+  `images/bug_jpx.pdf` at `/undefined in Predictor`. Phase 5 owns the decoder
+  cases.
 - `images/cmykjpeg.pdf` targets `paint`; the current content scan stops at
   `/undefined in BDC` until the tags phase reads marked content.
-- `images/UnknownFilter-xrefstm.pdf` expects `/undefined in Predictor`; the
-  file's design is an unknown xref filter (`/XXXDecode`), and the filter error
-  precedence belongs to the Phase 5 rows.
+- `images/UnknownFilter-xrefstm.pdf` expects `/undefined in XXXDecode`. The
+  newest xref stream chains through `/Prev` to an older xref stream whose
+  `/Filter` is the unknown `/XXXDecode`, and the refusal names that filter.
+  The verdict replaced the earlier `/undefined in Predictor`, which named a
+  predictor the unknown filter never reads.
 - Every `text/` row is `struct`. `spectreps text` and `spectreps raster` on a
   tagged source need marked content reading, which the tags phase adds.

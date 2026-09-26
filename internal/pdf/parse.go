@@ -1,7 +1,6 @@
 package pdf
 
 import (
-	"bytes"
 	"math"
 )
 
@@ -22,13 +21,21 @@ func ParseValue(src []byte, offset int) (Value, int, error) {
 // ParseIndirect reads "num gen obj value endobj" at offset.
 // A stream object is KindStream: Dict is the stream dictionary and Stream is the raw
 // bytes between stream and endstream.
-// /Length must be a direct integer. An indirect Length returns NewError("Length", "syntaxerror").
+// /Length may be a direct integer or an indirect reference. This function
+// cannot resolve a reference, so it scans for endstream; parseIndirect with a
+// resolver reads the declared span first and scans when it disagrees.
 // next is the first byte after endobj.
 func ParseIndirect(src []byte, offset int) (int, int, Value, int, error) {
+	return parseIndirect(src, offset, nil)
+}
+
+// parseIndirect reads one indirect object with an optional /Length resolver.
+func parseIndirect(src []byte, offset int, resolve lengthResolver) (int, int, Value, int, error) {
 	lex, err := newLexer(src, offset)
 	if err != nil {
 		return 0, 0, NullVal(), 0, err
 	}
+	lex.resolveLength = resolve
 	num, gen, err := lex.objectHeader()
 	if err != nil {
 		return 0, 0, NullVal(), 0, err
@@ -195,86 +202,6 @@ func (lex *lexer) atDictClose() bool {
 		return false
 	}
 	return lex.src[lex.pos] == '>' && lex.src[lex.pos+1] == '>'
-}
-
-func (lex *lexer) attachStream(val *Value) error {
-	if val.Kind != KindDict {
-		return nil
-	}
-	mark := lex.pos
-	tok, err := lex.take()
-	if err != nil {
-		return err
-	}
-	if tok.kind != tokWord || tok.text != wordStream {
-		lex.pos = mark
-		return nil
-	}
-	raw, err := lex.streamBytes(val.Dict)
-	if err != nil {
-		return err
-	}
-	*val = StreamVal(val.Dict, raw)
-	return nil
-}
-
-// streamBytes reads Length encoded bytes. It does not search that span for endstream.
-func (lex *lexer) streamBytes(dict map[string]Value) ([]byte, error) {
-	if !lex.skipOneEOL() {
-		return nil, syntaxErr(wordStream)
-	}
-	length, err := directLength(dict)
-	if err != nil {
-		return nil, err
-	}
-	end, ok := streamEnd(lex.pos, length, len(lex.src))
-	if !ok {
-		return nil, syntaxErr(wordStream)
-	}
-	raw := bytes.Clone(lex.src[lex.pos:end])
-	lex.pos = end
-	if err = lex.expectWord(wordEndStream); err != nil {
-		return nil, err
-	}
-	return raw, nil
-}
-
-func streamEnd(pos, length, size int) (int, bool) {
-	end := pos + length
-	if length < 0 || end < pos || end > size {
-		return 0, false
-	}
-	return end, true
-}
-
-func directLength(dict map[string]Value) (int, error) {
-	entry, ok := dict[wordLength]
-	if !ok || entry.Kind != KindInt || entry.Int < 0 {
-		return 0, syntaxErr(wordLength)
-	}
-	length, ok := fitInt(entry.Int)
-	if !ok {
-		return 0, syntaxErr(wordLength)
-	}
-	return length, nil
-}
-
-// skipOneEOL consumes LF, CR, or CRLF. Any other byte is refused.
-func (lex *lexer) skipOneEOL() bool {
-	if lex.pos >= len(lex.src) {
-		return false
-	}
-	cur := lex.src[lex.pos]
-	if cur == '\n' {
-		lex.pos++
-		return true
-	}
-	if cur != '\r' {
-		return false
-	}
-	lex.pos++
-	lex.skipLF()
-	return true
 }
 
 func (lex *lexer) expectWord(word string) error {
