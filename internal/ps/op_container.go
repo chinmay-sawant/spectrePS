@@ -36,6 +36,7 @@ func registerFlowOps(interp *Interp) {
 
 func registerContainerOps(interp *Interp) {
 	interp.Install("array", opArray)
+	interp.Install("string", opString)
 	interp.Install("dict", opDict)
 	interp.Install("def", opDef)
 	interp.Install("load", opLoad)
@@ -44,10 +45,28 @@ func registerContainerOps(interp *Interp) {
 	interp.Install("known", opKnown)
 	interp.Install("begin", opBegin)
 	interp.Install("end", opEnd)
+	interp.Install("bind", opBind)
 	interp.Install("[", opMark)
 	interp.Install("]", opEndArray)
 	interp.Install("<<", opMark)
 	interp.Install(opEndDictOp, opEndDict)
+}
+
+// opBind accepts a procedure and pushes it back unchanged. Name lookup happens
+// at execution time in this interpreter, so there is nothing to bind: a name
+// inside a procedure still sees the definition current when it runs.
+func opBind(ctx context.Context, interp *Interp) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	obj, err := interp.Pop()
+	if err != nil {
+		return err
+	}
+	if _, ok := procOf(obj); !ok {
+		return errOf(errTypeCheck, "bind")
+	}
+	return interp.Push(obj)
 }
 
 func opArray(ctx context.Context, interp *Interp) error {
@@ -70,6 +89,22 @@ func nullArray(count int32) []Object {
 		elems[i] = NullObj()
 	}
 	return elems
+}
+
+// opString allocates a string of the popped byte count, filled with zero
+// bytes. A negative count is rangecheck.
+func opString(ctx context.Context, interp *Interp) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	count, err := interp.PopInt()
+	if err != nil {
+		return err
+	}
+	if count < 0 {
+		return errOf(errRangeCheck, "string")
+	}
+	return interp.Push(StringObj(make([]byte, count), false))
 }
 
 func opDict(ctx context.Context, interp *Interp) error {

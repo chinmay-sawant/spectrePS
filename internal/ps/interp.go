@@ -76,6 +76,11 @@ func (ip *Interp) UsePixmap(pm *graphics.Pixmap, scale float64) {
 	state := gsFor(ip)
 	state.pix = pm
 	state.scale = scale
+	if pm != nil {
+		width, height := pm.PageSize()
+		state.pageW = float64(width)
+		state.pageH = float64(height)
+	}
 }
 
 func (ip *Interp) finishPage() error {

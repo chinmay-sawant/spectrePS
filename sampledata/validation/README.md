@@ -84,7 +84,7 @@ upstream path; the commit is the full commit the URL pins.
 | `pdfa/negative/4-6-1-8-t01-fail-b.pdf` | veraPDF/veraPDF-corpus PDF_A-4/6.1 File structure/6.1.8 Indirect objects/veraPDF test suite 6-1-8-t01-fail-b.pdf | `bb75f4f` | CC-BY-4.0 | `5485315331a04633bb2fc0a3297610ddfb197bf2b8811507222e3d9a73f1a8f4` | PDF/A-4 indirect objects, fail b | `struct` |
 | `pdfa/negative/4f-6-7-3-t01-fail-a.pdf` | veraPDF/veraPDF-corpus PDF_A-4f/6.7 Metadata/6.7.3 Version identification/veraPDF test suite 6-7-3-t01-fail-a.pdf | `bb75f4f` | CC-BY-4.0 | `ab9e5e4244ced310c6168465c8e2725b2c03007e15b23f406be5d9cf30c614da` | PDF/A-4f version identification, fail a | `struct` |
 | `postscript/cups-smiley.ps` | OpenPrinting/cups data/smiley.ps | `e72b702` | Apache-2.0 | `1d3bf1f1f3f6426591e696660ff1cbf2f70d1307721e0cb999926cc80c977bb9` | CUPS smiley page, arc and rectstroke | `paint` |
-| `postscript/cups-testfile.ps` | OpenPrinting/cups examples/testfile.ps | `e72b702` | Apache-2.0 | `858d4c9ac31128ae7ef634d3d8b4a870d2ba34d76ca9357e9104c85bc5f99523` | CUPS test page, text and graphics | `paint` |
+| `postscript/cups-testfile.ps` | OpenPrinting/cups examples/testfile.ps | `e72b702` | Apache-2.0 | `858d4c9ac31128ae7ef634d3d8b4a870d2ba34d76ca9357e9104c85bc5f99523` | CUPS test page, graphics; standard 14 text needs an outline program | `refuse:invalidfont` |
 | `postscript/curve.ps` | repo-authored | `repo` | repo-authored | `62c8bde9c35c2f91f42743fcd916d136db4b5b9761b096ec0032108b9eb0d763` | PostScript cubic curve | `paint` |
 | `postscript/eofill.ps` | repo-authored | `repo` | repo-authored | `43b8821a29d0d45034084111abf110b04e399f105801ff4f67e1a67ecdb454b1` | PostScript even-odd fill | `paint` |
 | `postscript/gray.ps` | repo-authored | `repo` | repo-authored | `a477fb71d1ea8be88711eddf9801bb2c12ff0f4a544132a1d7524e7c2ef9e7a2` | PostScript setgray levels | `paint` |
@@ -224,9 +224,14 @@ producers and the pdf.js suite mixes in fonts from unrelated products.
 The `expect` column is the target verdict. The tree that added this corpus
 measures these differences, and the phase files own the fixes:
 
-- `postscript/cups-testfile.ps` and `postscript/cups-smiley.ps` target `paint`;
-  the current interpreter stops at `/undefined in bind` and
-  `/undefined in rectstroke`. Phase 3 row 3.8 owns the CUPS pair.
+- `postscript/cups-smiley.ps` targets `paint` and now paints: it uses `arc`,
+  `rectstroke`, and `setlinecap`, which the interpreter implements.
+  `postscript/cups-testfile.ps` targets `refuse:invalidfont`: its text uses the
+  standard 14 fonts, and `documentation/language.md` and
+  `documentation/fonts.md` refuse a standard 14 `show` on a device because the
+  tree ships no substitute outlines. Every other operator the file uses now
+  runs, so a standard 14 outline program is the one remaining gate. Phase 3 row
+  3.8 owns the CUPS pair.
 - `paths/xobject-image.pdf`, `images/ccitt_EndOfBlock_false.pdf`, and
   `images/bug_jpx.pdf` target `paint`; the current tree stops before painting:
   `paths/xobject-image.pdf` at `/undefined in Do` for its two-name filter
