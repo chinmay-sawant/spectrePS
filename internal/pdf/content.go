@@ -317,6 +317,9 @@ func (run *runner) take(ctx context.Context, tok ctok) error {
 	if handled, err := run.takeText(tok.text); handled {
 		return err
 	}
+	if handled, err := run.takeStateText(tok.text); handled {
+		return err
+	}
 	if tok.text == "EX" {
 		return nil
 	}
@@ -446,9 +449,23 @@ func (run *runner) takeStateLine(opName string) (bool, error) {
 		return true, run.discardNum(opName)
 	case "ri":
 		return true, run.discardName(opName)
+	case "d":
+		return true, run.discardDash(opName)
 	default:
 		return false, nil
 	}
+}
+
+// takeStateText is the fallback for the text rendering mode. The text machine
+// does not read Tr, and this subset paints glyphs in fill mode only, so the
+// operand is accepted as a no-op with a documented deviation. The fallback
+// runs after takeText, so a text-state implementation takes precedence when
+// one lands.
+func (run *runner) takeStateText(opName string) (bool, error) {
+	if opName == "Tr" {
+		return true, run.discardNum(opName)
+	}
+	return false, nil
 }
 
 // takeStateColor dispatches the color operators. The stroke and non-stroking
@@ -1407,10 +1424,12 @@ func (run *runner) setExtGState(ctx context.Context) error {
 
 // applyExtGState validates every entry before it changes the state, so a
 // refusal leaves the previous state intact. /LW, /CA, /ca, /BM, and /SMask
-// apply through the optional marker seams. /LC, /LJ, /ML, and /RI are no-ops
-// under the capsule stroke. Any other entry refuses with undefined in gs
-// instead of skipping the state, and so does an alpha or mask entry when the
-// marker cannot host the seam, which keeps the rewrite recorder honest.
+// apply through the optional marker seams. /Type, /LC, /LJ, /ML, /RI, /OPM,
+// and /SA are no-ops, and so are /AIS false, /OP false, and /op false. Any
+// other entry, and any true overprint or alpha-is-shape flag, refuses with
+// undefined in gs instead of skipping the state, and so does an alpha or mask
+// entry when the marker cannot host the seam, which keeps the rewrite
+// recorder honest.
 //
 //nolint:cyclop // one case per ExtGState entry
 func (run *runner) applyExtGState(ctx context.Context, entry Value, opName string) error {
@@ -1426,6 +1445,12 @@ func (run *runner) applyExtGState(ctx context.Context, entry Value, opName strin
 		var err error
 		switch key {
 		case keyType, "LC", "LJ", "ML", "RI":
+		case "AIS", "OP", "op":
+			err = defaultOff(item, opName)
+		case "OPM":
+			err = overprintMode(item, opName)
+		case "SA":
+			err = strokeAdjust(item, opName)
 		case "LW":
 			err = state.setWidth(item, opName)
 		case "CA":
@@ -1508,6 +1533,36 @@ func (state *extGState) setBlend(item Value, opName string) error {
 	return nil
 }
 
+// defaultOff accepts a boolean entry whose default is false, /AIS, /OP, and
+// /op, as a no-op. The true value changes compositing in a way the RGB
+// preview cannot honor, so it refuses in gs like any other unsupported entry.
+func defaultOff(item Value, opName string) error {
+	if item.Kind == KindBool && !item.Bool {
+		return nil
+	}
+	return NewError(opName, errUndefined)
+}
+
+// overprintMode accepts /OPM 0 and 1 as a no-op. The mode only changes a
+// compositing path that /OP true and /op true already refuse, so the operand
+// is inert here. Any other value refuses.
+func overprintMode(item Value, opName string) error {
+	mode, ok := valueNum(item)
+	if ok && (mode == 0 || mode == 1) {
+		return nil
+	}
+	return NewError(opName, errUndefined)
+}
+
+// strokeAdjust accepts /SA as a no-op. The capsule stroke has no automatic
+// stroke adjustment, a deviation recorded in documentation/devices.md.
+func strokeAdjust(item Value, opName string) error {
+	if item.Kind == KindBool {
+		return nil
+	}
+	return NewError(opName, errUndefined)
+}
+
 // identityTransfer accepts /TR /Identity and the absent default. Any other
 // transfer function is undefined in gs, because this subset builds only an
 // identity state soft mask.
@@ -1559,7 +1614,8 @@ func (run *runner) syncState() {
 }
 
 // discardNum pops and ignores one numeric operand. J, j, M, and i are line
-// parameters the capsule stroke cannot honor, so they are accepted as no-ops.
+// parameters the capsule stroke cannot honor, and Tr is the text rendering
+// mode the fill-only text painter ignores, so all are accepted as no-ops.
 func (run *runner) discardNum(opName string) error {
 	_, err := run.popNum(opName)
 	return err
@@ -1568,6 +1624,17 @@ func (run *runner) discardNum(opName string) error {
 // discardName pops and ignores one name operand. ri is a no-op.
 func (run *runner) discardName(opName string) error {
 	_, err := run.popName(opName)
+	return err
+}
+
+// discardDash pops the setdash operands and ignores them. The stroke model is
+// a solid capsule with no dash support, so d is accepted as a no-op. The
+// operands are still checked: a phase number, then the dash array.
+func (run *runner) discardDash(opName string) error {
+	if _, err := run.popNum(opName); err != nil {
+		return err
+	}
+	_, err := run.popItems(opName)
 	return err
 }
 

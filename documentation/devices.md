@@ -134,9 +134,9 @@ A missing name, an entry whose `/Subtype` is not `/Image`, and a decode error al
 
 `graphics.ClipMarker` is the optional seam. `graphics.Marker` keeps its three methods, so a marker that cannot write a clip refuses `W` and `W*` with `undefined`. The level 0 recorder and the PostScript recorder keep that refusal.
 
-`gs` resolves a name in `/Resources /ExtGState`. `/LW` sets the stroke width, and `q`/`Q` restore it. `/LC`, `/LJ`, `/ML`, and `/RI` are accepted as no-ops. Any other entry refuses with `undefined in gs` rather than skipping the state, and an unknown name is `undefined in gs`.
+`gs` resolves a name in `/Resources /ExtGState`. `/LW` sets the stroke width, and `q`/`Q` restore it. `/Type`, `/LC`, `/LJ`, `/ML`, `/RI`, `/OPM`, and `/SA` are accepted as no-ops, and so are `/AIS false`, `/OP false`, and `/op false`. The overprint mode is inert because a true overprint refuses. Any other entry, a true `/AIS`, `/OP`, or `/op` flag, and an unknown name refuse with `undefined in gs` rather than skipping the state.
 
-`J`, `j`, `M`, `i`, and `ri` are accepted as no-ops. The stroke model is a capsule with round caps and joins, so a cap, join, miter limit, flatness, or rendering intent has nowhere to land. This is a deviation from ISO 32000-2, which lets those operators shape the stroke.
+`J`, `j`, `M`, `i`, `ri`, `d`, and `Tr` are accepted as no-ops. The stroke model is a capsule with round caps and joins and no dash pattern, so a cap, join, miter limit, flatness, rendering intent, or dash array has nowhere to land. Text always paints in fill mode, so the text rendering mode is ignored too. `d` still checks its operand shape, a phase number and a dash array, and so do the others. These are deviations from ISO 32000-2, which lets those operators shape the stroke and the text.
 
 `BMC`, `BDC`, `EMC`, `MP`, and `DP` parse. Nesting caps at 64 with `limitcheck`, an unmatched `EMC` is `syntaxerror in content`, and `BX` skips content through the matching `EX`. An unterminated compatibility section is `syntaxerror in content`, and an `EX` outside a section is ignored. A page with marked content rasterizes and extracts as if the markers were absent.
 
@@ -360,7 +360,7 @@ Phase 06 reads:
   wins per object number, an older section fills the gaps, and a `/Prev` cycle
   or a chain longer than 64 sections is `syntaxerror in xref`.
 - Content streams through the stream filters in this file: Flate, LZW, ASCII85, ASCIIHex, and RunLength, with predictors 2 and 10 through 15.
-- Page content operators `m l c h re S s f f* B B* b b* W W* n q Q cm w J j M i ri gs RG rg g G Do BT ET Tf Td TD Tm T* Tc Tw Tz TL Ts Tj TJ ' " BMC BDC EMC MP DP BX EX`.
+- Page content operators `m l c h re S s f f* B B* b b* W W* n q Q cm w J j M i ri gs d Tr RG rg g G Do BT ET Tf Td TD Tm T* Tc Tw Tz TL Ts Tj TJ ' " BMC BDC EMC MP DP BX EX`.
 
 Those operators map to the same path and color operations as `moveto` `lineto` `curveto` `closepath` `stroke` `fill` `eofill` `gsave` `grestore` `concat` `setlinewidth` `setrgbcolor` `setgray`.
 
