@@ -28,28 +28,44 @@ The device does not see user space. Operators transform the path by the current 
 
 A PDF rewrite device receives the same device-space marks and emits PDF operators. It does not round-trip the original content stream bytes.
 
-## Where code will live
+## Where code lives
 
-Package `spectreps` stays small: options, results, errors, and methods that delegate to `internal/engine`.
+Package `spectreps` stays small: options, results, errors, and methods that delegate to the interpreter packages under `internal/`.
 
-| Path | Appears in | Owns |
-| --- | --- | --- |
-| `spectreps/` | phase 02 | Exported API. |
-| `internal/engine/` | phase 02 | Session, file byte compare, not-implemented jobs. |
-| `internal/cli/` | phase 02 | Flags, exit codes. |
-| `cmd/spectreps/main.go` | phase 02 | Process entry. Calls `internal/cli`. |
-| `internal/ps/` | phase 03 | Scanner, stacks, operators. |
-| `internal/graphics/` | phase 04 | Matrix, path, color, line style. |
-| `internal/raster/` | phase 04 | RGB pixmap and PPM writer. PNG encode can sit beside it. |
-| `internal/pdf/` | phase 06 | Xref, objects, content stream, Flate decode. |
-| `internal/pdfout/` | phase 07 | New PDF, Flate encode. |
+| Path | Owns |
+| --- | --- |
+| `spectreps/` | The exported API: 16 implementation files. |
+| `internal/engine/` | The session handle and the file byte compare. |
+| `internal/cli/` | Flags, exit codes, the `gs` argv scanner, and the output encoders. |
+| `cmd/spectreps/main.go` | The process entry. Calls `internal/cli` and nothing else. |
+| `internal/ps/` | The PostScript scanner, object model, stacks, and operators. |
+| `internal/graphics/` | Matrix, path, color, blend, clip, and the RGB pixmap device. |
+| `internal/pdf/` | Xref, objects, stream filters, images, color spaces, fonts, the content interpreter, and the structure tree reader. |
+| `internal/pdfout/` | The PDF writers: the level 0 path writer, the level 1 to 5 pass-through writer, the packed writer, and the bitmap PDF writer. |
+| `internal/psout/` | The PDF-to-PostScript writer. |
+| `internal/pdfa/` | The PDF/A-4 and PDF/UA-2 metadata, ICC profile, and preflights. |
+| `internal/tag/` | The structure tree recorder, reading order inference, and the tagged write. |
+| `internal/font/` | Advances, encodings, glyph names, the Type 1 program decoder, and TrueType subsetting. |
+| `internal/type1synth/` | A synthetic Type 1 program the tests embed. |
+| `internal/truetypesynth/` | A synthetic TrueType program the tests embed. |
+| `internal/validation/` | The validation corpus manifest reader and the corpus checker. |
+
+There is no `internal/raster`. The RGB pixmap and every output encoder live in `internal/graphics` and `internal/cli`, and the level 0 PDF writer lives in `internal/pdfout`.
 
 Directories are created with their first file. `internal/` is the right place for the interpreter because other modules must not import it. The public methods are what make that legal. A tree that is only `internal/` plus a main package would force a future caller to shell out.
+
+## Interpreter state
+
+The interpreter holds its whole mutable state on the `Interp` value: the operand, dictionary, and execution stacks, the graphics state, the loop depth, and the step counter. Nothing is stored in a package-level map keyed by interpreter, so two interpreters share nothing and nothing outlives the interpreter that owns it. A test covers this by running two interpreters and checking that the second one does not see the first one's definitions or transformation.
+
+The `exit` stop condition is a private error type and not `*Error`. The interpreter re-tags every `*Error` with the operator the program invoked, so a shared `*Error` would be rewritten by every `exit` in every interpreter.
 
 ## Safety
 
 Banned operators are installed and return `invalidaccess`, so a test can tell "disabled" from "unknown name". The list is in `documentation/language.md`.
 
-Every job takes a `context.Context`. A cancelled context stops the job and returns `ctx.Err()`. Stack depth, pixel count, and path points have hard caps in the same language file. Crossing a cap returns `limitcheck`.
+Every job takes a `context.Context`. A cancelled context stops the job and returns `ctx.Err()`. The hard caps are in the same language file: stack depth, procedure nesting, path points, array and string size, executed objects, retained page bytes, pixel count, and page side. Crossing a cap returns `limitcheck`, except an oversized `array` or `string`, which returns `rangecheck` because the size is an operand.
+
+The caps are a floor on what a program can consume, not a substitute for a deadline. A caller that cannot trust its input should also cancel the context.
 
 Encrypted PDFs, unknown stream filters, and unsupported content operators return a `JobError`. The page is not replaced with a blank success.

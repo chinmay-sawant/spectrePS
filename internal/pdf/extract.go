@@ -34,7 +34,7 @@ func (file *File) ExtractText(ctx context.Context, index int) (string, error) {
 		return "", err
 	}
 	collector := &textCollector{glyphs: nil}
-	opt := PaintOptions{Resources: res, Text: TextOptions{Fonts: nil, Sink: collector}}
+	opt := PaintOptions{Resources: res, Text: TextOptions{Fonts: nil, Sink: collector, Runs: nil}, MarkedContent: nil}
 	if err := PaintWith(ctx, content, nil, 1, opt); err != nil {
 		return "", err
 	}

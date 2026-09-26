@@ -11,11 +11,12 @@ import (
 )
 
 type recorder struct {
-	buf bytes.Buffer
+	buf      bytes.Buffer
+	sawImage bool
 }
 
 func newRecorder() *recorder {
-	return &recorder{buf: bytes.Buffer{}}
+	return &recorder{buf: bytes.Buffer{}, sawImage: false}
 }
 
 func (rec *recorder) Stroke(pts []graphics.Point, width, red, green, blue float64) {
@@ -41,12 +42,13 @@ func (rec *recorder) Fill(pts []graphics.Point, red, green, blue float64, evenOd
 	rec.writeOp(opName)
 }
 
-// DrawImage records that an image was seen. Emission waits for the image
-// operators in the PostScript interpreter, so the body records nothing yet.
+// DrawImage records that an image was seen. The PostScript writer emits path
+// operators only, so Emit refuses the page instead of dropping the image.
 func (rec *recorder) DrawImage(pic image.Image, ctm graphics.Matrix, scale float64) {
 	_ = pic
 	_ = ctm
 	_ = scale
+	rec.sawImage = true
 }
 
 // writeColor picks setgray when the three channels match, and setrgbcolor

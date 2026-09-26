@@ -19,8 +19,8 @@ func TestImagePDFStable(t *testing.T) {
 	if len(pages) != 1 {
 		t.Fatalf("pages = %d", len(pages))
 	}
-	first := imagePDFBytes(t, in, pages, 72)
-	second := imagePDFBytes(t, in, pages, 72)
+	first := imagePDFBytes(t, in, pages)
+	second := imagePDFBytes(t, in, pages)
 	if res := spectreps.CompareFiles(first, second); !res.Equal {
 		t.Fatalf("CompareFiles = %+v", res)
 	}
@@ -72,9 +72,10 @@ func TestRasterizeOwnImagePDF(t *testing.T) {
 	}
 }
 
-func imagePDFBytes(t *testing.T, in *spectreps.Instance, pages []spectreps.PageImage, dpi float64) []byte {
+// imagePDFBytes wraps ImagePDF at the 72 dpi the image tests share.
+func imagePDFBytes(t *testing.T, in *spectreps.Instance, pages []spectreps.PageImage) []byte {
 	t.Helper()
-	got, err := in.ImagePDF(t.Context(), pages, dpi)
+	got, err := in.ImagePDF(t.Context(), pages, 72)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +95,7 @@ func checkStableMismatch(t *testing.T, in *spectreps.Instance, page spectreps.Pa
 	t.Helper()
 	changed := clonePageImage(page)
 	changed.Pixels[0] ^= 0xFF
-	out := imagePDFBytes(t, in, []spectreps.PageImage{changed}, 72)
+	out := imagePDFBytes(t, in, []spectreps.PageImage{changed})
 	if res := spectreps.CompareFiles(stable, out); res.Equal {
 		t.Fatal("one changed pixel did not change the bytes")
 	}

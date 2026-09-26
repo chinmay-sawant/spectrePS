@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"math"
-	"sync"
 )
 
 const (
@@ -24,13 +23,17 @@ const (
 
 // errExit is the private signal caught by loop, repeat, for, and forall.
 // It does not escape those operators. exit outside them returns invalidexit.
-var errExit = errOf(exitErrName, exitErrName)
+// It is an exitError and not an *Error on purpose: tagOp rewrites the Op of
+// every *Error it sees, so one shared *Error would be rewritten by every exit
+// in every interpreter.
+var errExit error = exitError{}
 
-//nolint:gochecknoglobals // loop depth is not an Interp field
-var (
-	loopMu     sync.Mutex
-	loopDepths = map[*Interp]int{}
-)
+// exitError is the exit stop condition. It is deliberately a different type
+// from Error, so it can never be mistaken for a reportable PostScript error and
+// so tagOp leaves it alone.
+type exitError struct{}
+
+func (exitError) Error() string { return exitErrName }
 
 func registerControlOps(interp *Interp) {
 	interp.Install("exec", opExec)
@@ -373,27 +376,21 @@ func callProc(ctx context.Context, interp *Interp, proc Object) (bool, error) {
 }
 
 func enterLoop(interp *Interp) {
-	loopMu.Lock()
-	defer loopMu.Unlock()
-	loopDepths[interp]++
+	interp.loopDepth++
 }
 
 func leaveLoop(interp *Interp) {
-	loopMu.Lock()
-	defer loopMu.Unlock()
-	if loopDepths[interp] > 0 {
-		loopDepths[interp]--
+	if interp.loopDepth > 0 {
+		interp.loopDepth--
 	}
 }
 
 func insideLoop(interp *Interp) bool {
-	loopMu.Lock()
-	defer loopMu.Unlock()
-	return loopDepths[interp] > 0
+	return interp.loopDepth > 0
 }
 
 func isExitErr(err error) bool {
-	return isErrName(err, exitErrName)
+	return errors.Is(err, errExit)
 }
 
 func isErrName(err error, name string) bool {

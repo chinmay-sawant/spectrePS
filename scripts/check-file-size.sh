@@ -45,16 +45,7 @@ fi
 prune_dirs=(
 	./.git
 	./verapdf
-	./compliance
-	./.pdf-validators
-	./pen
-	./temps
 	./bin
-	./dist
-	./docs
-	./frontend
-	./scripts/puppeteer
-	./bindings/python
 )
 
 find_expr=(-path "${prune_dirs[0]}")

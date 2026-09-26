@@ -8,6 +8,9 @@ import (
 	"strings"
 )
 
+// spaceByte pads a cvs destination past the written text.
+const spaceByte = ' '
+
 func registerTypeOps(interp *Interp) {
 	interp.Install("type", opType)
 	interp.Install("xcheck", opXCheck)
@@ -295,15 +298,42 @@ func parseRealToken(text []byte, opName string) (float64, error) {
 	return value, nil
 }
 
+// opCvs converts one object to a string. With a string just above the value
+// on the stack it writes into that string and pushes a substring of it, the
+// destination form in the Level 2 contract; otherwise it allocates a string.
 func opCvs(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	obj, err := interp.Pop()
+	top, err := interp.Pop()
 	if err != nil {
 		return err
 	}
-	return interp.Push(StringObj([]byte(cvsText(obj)), false))
+	if top.Kind == KindString && top.Str != nil && len(interp.stack) > 0 {
+		return cvsInto(ctx, interp, top)
+	}
+	return interp.Push(StringObj([]byte(cvsText(top)), false))
+}
+
+// cvsInto writes the value under the destination string into the destination.
+// The rest of the destination is spaces, and the result is the written part.
+func cvsInto(ctx context.Context, interp *Interp, dest Object) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	value, err := interp.Pop()
+	if err != nil {
+		return err
+	}
+	text := cvsText(value)
+	if len(text) > len(dest.Str.Bytes) {
+		return errOf(errRangecheck, "cvs")
+	}
+	written := copy(dest.Str.Bytes, text)
+	for i := written; i < len(dest.Str.Bytes); i++ {
+		dest.Str.Bytes[i] = spaceByte
+	}
+	return interp.Push(StringObj(dest.Str.Bytes[:written], false))
 }
 
 func cvsText(obj Object) string {

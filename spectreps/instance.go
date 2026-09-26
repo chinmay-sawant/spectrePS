@@ -4,7 +4,7 @@ import "github.com/chinmay-sawant/spectrePS/internal/engine"
 
 // Version is the current tag.
 func Version() string {
-	return "0.0.3"
+	return "0.0.4"
 }
 
 // Instance is one Spectre session. There is no process-wide singleton.

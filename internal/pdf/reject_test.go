@@ -10,7 +10,7 @@ func TestPDFReject(t *testing.T) {
 	rejectTj(t)
 	rejectDo(t)
 	rejectEncrypt(t)
-	rejectLZW(t)
+	badLZW(t)
 }
 
 func rejectTj(t *testing.T) {
@@ -36,14 +36,16 @@ func rejectEncrypt(t *testing.T) {
 	wantJob(t, err, opEncrypt, errAccess)
 }
 
-func rejectLZW(t *testing.T) {
+// badLZW proves a malformed LZW stream fails as a decode error with the
+// filter name, not as an unknown filter.
+func badLZW(t *testing.T) {
 	t.Helper()
 	src := filteredPage(t, "/Filter /LZWDecode", []byte("hi"))
 	file, err := Open(t.Context(), src)
 	if err == nil {
 		_, err = file.Content(0)
 	}
-	wantJob(t, err, "LZWDecode", "undefined")
+	wantJob(t, err, opLZW, errSyntax)
 }
 
 func textPage(t *testing.T, marks string) []byte {
@@ -56,7 +58,7 @@ func textPageTrailer(t *testing.T, marks, extra string) []byte {
 	doc := newDoc()
 	doc.object("<< /Type /Catalog /Pages 2 0 R >>")
 	doc.object("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
-	doc.object("<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>")
+	doc.object(pageBody)
 	doc.object(streamBody("", []byte(marks)))
 	return doc.classic(extra)
 }
@@ -66,7 +68,7 @@ func filteredPage(t *testing.T, dict string, raw []byte) []byte {
 	doc := newDoc()
 	doc.object("<< /Type /Catalog /Pages 2 0 R >>")
 	doc.object("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
-	doc.object("<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>")
+	doc.object(pageBody)
 	doc.object(streamBody(dict, raw))
 	return doc.classic("")
 }

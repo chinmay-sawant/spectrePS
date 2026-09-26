@@ -73,7 +73,7 @@ func (file *File) contentNumPages() ([][]int, error) {
 	}
 	pages, ok := catalog.ValueEntry(keyPages)
 	if !ok || pages.Kind == KindNull {
-		return nil, NewError(opPDF, errSyntax)
+		return nil, NewError(opPDF, errUndefined)
 	}
 	return file.walkRefNums(pages, map[int]bool{})
 }
@@ -81,7 +81,7 @@ func (file *File) contentNumPages() ([][]int, error) {
 func (file *File) walkRefNums(val Value, seen map[int]bool) ([][]int, error) {
 	if val.Kind == KindRef {
 		if seen[val.RefNum] {
-			return nil, NewError(opPDF, errSyntax)
+			return nil, NewError(opPDF, errLimit)
 		}
 		seen[val.RefNum] = true
 	}
@@ -157,8 +157,9 @@ func (file *File) PaintPage(ctx context.Context, index int, marker graphics.Mark
 		return err
 	}
 	return PaintWith(ctx, content, marker, scale, PaintOptions{
-		Resources: res,
-		Text:      TextOptions{Fonts: nil, Sink: nil},
+		Resources:     res,
+		Text:          TextOptions{Fonts: nil, Sink: nil, Runs: nil},
+		MarkedContent: nil,
 	})
 }
 
@@ -173,7 +174,7 @@ func (file *File) walkRoot() ([]pageLeaf, error) {
 	}
 	pages, ok := catalog.ValueEntry(keyPages)
 	if !ok || pages.Kind == KindNull {
-		return nil, NewError(opPDF, errSyntax)
+		return nil, NewError(opPDF, errUndefined)
 	}
 	return file.walkRef(pages, map[int]bool{}, NullVal())
 }
@@ -181,7 +182,7 @@ func (file *File) walkRoot() ([]pageLeaf, error) {
 func (file *File) walkRef(val Value, seen map[int]bool, resources Value) ([]pageLeaf, error) {
 	if val.Kind == KindRef {
 		if seen[val.RefNum] {
-			return nil, NewError(opPDF, errSyntax)
+			return nil, NewError(opPDF, errLimit)
 		}
 		seen[val.RefNum] = true
 	}
@@ -262,11 +263,36 @@ func (file *File) joinContents(items []Value) ([]byte, error) {
 }
 
 func (file *File) oneContent(val Value) ([]byte, error) {
-	stream, err := file.deref(val)
+	stream, err := file.streamEntry(val)
 	if err != nil {
 		return nil, err
 	}
 	return decodeStream(stream)
+}
+
+// streamEntry resolves one stream entry. A parsed stream whose /Length is a
+// direct integer is returned as it stands. An indirect /Length, or a plain
+// parse that failed, goes through the xref-aware reparse, so a body that
+// contains the bytes endstream still reads its declared span.
+func (file *File) streamEntry(val Value) (Value, error) {
+	stream, err := file.deref(val)
+	if err == nil && !streamIndirectLength(stream) {
+		return stream, nil
+	}
+	if fixed, ok := file.resolvedStream(val); ok {
+		return fixed, nil
+	}
+	return stream, err
+}
+
+// streamIndirectLength reports whether a parsed stream still needs an indirect
+// /Length resolved. A direct length was already read by the plain parse.
+func streamIndirectLength(stream Value) bool {
+	if stream.Kind != KindStream {
+		return false
+	}
+	length, ok := stream.ValueEntry(wordLength)
+	return ok && length.Kind == KindRef
 }
 
 func decodeStream(val Value) ([]byte, error) {

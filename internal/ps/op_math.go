@@ -18,6 +18,8 @@ func registerMathOps(interp *Interp) {
 	interp.Install("floor", opFloor)
 	interp.Install("round", opRound)
 	interp.Install("sqrt", opSqrt)
+	interp.Install("cos", opCos)
+	interp.Install("sin", opSin)
 }
 
 func opAdd(ctx context.Context, interp *Interp) error {
@@ -228,4 +230,24 @@ func opSqrt(ctx context.Context, interp *Interp) error {
 		return errOf(errUndefinedResult, "sqrt")
 	}
 	return interp.Push(RealObj(math.Sqrt(value)))
+}
+
+// opCos and opSin take an angle in degrees and push the real sine or cosine.
+func opCos(ctx context.Context, interp *Interp) error {
+	return trigDegrees(ctx, interp, "cos", math.Cos)
+}
+
+func opSin(ctx context.Context, interp *Interp) error {
+	return trigDegrees(ctx, interp, "sin", math.Sin)
+}
+
+func trigDegrees(ctx context.Context, interp *Interp, _ string, fn func(float64) float64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	degrees, _, err := interp.PopNum()
+	if err != nil {
+		return err
+	}
+	return interp.Push(RealObj(fn(degrees * math.Pi / halfTurnDegrees)))
 }

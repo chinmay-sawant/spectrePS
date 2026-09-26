@@ -62,27 +62,35 @@ Dictionary `forall` walks entries in insertion order so tests are stable. PostSc
 
 Stack: `pop` `dup` `exch` `index` `roll` `clear` `count` `mark` `cleartomark` `counttomark`. `copy` is the count form only. A non-integer top operand to `copy` is `typecheck` in this tag. The composite destination form of `copy` is deferred.
 
-Math: `add` `sub` `mul` `div` `idiv` `mod` `neg` `abs` `ceiling` `floor` `round` `sqrt`. `div` always pushes a real. `idiv` pushes an int32. Division by zero is `undefinedresult`. Integer overflow is `rangecheck`.
+Math: `add` `sub` `mul` `div` `idiv` `mod` `neg` `abs` `ceiling` `floor` `round` `sqrt` `cos` `sin`. `div` always pushes a real. `idiv` pushes an int32. Division by zero is `undefinedresult`. Integer overflow is `rangecheck`. `cos` and `sin` take an angle in degrees and push a real.
 
 Compare and logic: `eq` `ne` `gt` `ge` `lt` `le` `and` `or` `not` `xor` `true` `false`.
 
-Types: `type` `xcheck` `cvi` `cvr` `cvs` `cvn` `cvx` `cvlit` `length` `get` `put`.
+Types: `type` `xcheck` `cvi` `cvr` `cvs` `cvn` `cvx` `cvlit` `length` `get` `put`. `cvs` allocates a string, or writes into the string operand just above the value and pushes the written part.
 
-Arrays and dictionaries: `array` `dict` `def` `load` `store` `where` `known` `begin` `end` `[` `]` `<<` `>>`.
+Arrays, strings, and dictionaries: `array` `string` `dict` `def` `load` `store` `where` `known` `begin` `end` `[` `]` `<<` `>>`. `string` allocates a zero-filled string of the popped length. `bind` pops a procedure and returns it unchanged: name lookup happens at execution time, so a name inside a procedure still sees the definition current when it runs. A test must redefine a name after building a procedure and observe the new value.
 
 Control: `exec` `if` `ifelse` `repeat` `for` `loop` `forall` `exit`.
 
-Path and paint: `moveto` `rmoveto` `lineto` `rlineto` `curveto` `rcurveto` `closepath` `newpath` `currentpoint` `stroke` `fill` `eofill` `setlinewidth` `setrgbcolor` `setgray` `gsave` `grestore` `showpage`.
+Path and paint: `moveto` `rmoveto` `lineto` `rlineto` `curveto` `rcurveto` `closepath` `newpath` `currentpoint` `arc` `arcn` `rectfill` `rectstroke` `stroke` `fill` `eofill` `clip` `initclip` `clippath` `pathbbox` `setlinewidth` `setlinecap` `setrgbcolor` `setgray` `gsave` `grestore` `showpage`.
 
-Text and fonts: `findfont` `scalefont` `setfont` `show`.
+Text and fonts: `findfont` `scalefont` `setfont` `show` `stringwidth`.
 
-`findfont` knows the standard 14 names. Any other name, and a font operand that is not a font dictionary, is `invalidfont`. `setfont` makes one font current, and `gsave` and `grestore` save it. `show` takes a string, advances the current point by the StandardEncoding width of each code, and needs a current point; a show with none is `nocurrentpoint`. The standard 14 fonts have metrics but no outline program, so `show` on a pixmap returns `invalidfont` and does not change the page. Metrics and advances still work. `documentation/fonts.md` has the font model.
+`findfont` knows the standard 14 names. Any other name, and a font operand that is not a font dictionary, is `invalidfont`. `setfont` makes one font current, and `gsave` and `grestore` save it. `show` takes a string, advances the current point by the StandardEncoding width of each code, and needs a current point; a show with none is `nocurrentpoint`. The standard 14 fonts have metrics but no outline program, so `show` on a pixmap returns `invalidfont` and does not change the page. Metrics and advances still work. `documentation/fonts.md` has the font model. `stringwidth` pushes the user-space width of a string in the current font and size and a vertical displacement of 0, without needing or moving a current point.
 
 Graphics defaults: line width 1, line cap 0, line join 0, miter limit 10, solid dash, gray 0. `gsave` depth max 32. Path point max 100000.
 
 `showpage` finishes the current page and starts a blank one. If the program paints and never calls `showpage`, the job finishes one page at the end. If it paints nothing and never calls `showpage`, the job still finishes one blank page.
 
-Matrix operators `translate` `scale` `rotate` `concat` `setmatrix` `currentmatrix` are in this tag. The default matrix is the identity in user points, origin lower left, one unit equal to one point.
+`arc` and `arcn` append a circular arc to the current path, counterclockwise for `arc` and clockwise for `arcn`. A negative radius is `rangecheck`. A current point connects to the arc start with a line; without one the arc starts a subpath. A sweep of more than one full circle is one full circle. The device stores line segments, so the arc is a chord approximation at five-degree steps.
+
+`rectfill` and `rectstroke` take `x y width height`, use the current color, and use the current line width for the stroke. Both leave the current path and current point in place, as the Level 2 operators do. A negative width or height extends the rectangle in the negative direction.
+
+`clip` intersects the current path, under the nonzero winding rule, into the clip applied to later marks. The current path is left in place. `gsave` and `grestore` save the clip, `initclip` resets it to the page, and `clippath` replaces the current path with the stored clip subpaths, or with the page rectangle when no clip is set. `pathbbox` pushes the bounding box of the current path in user space as `llx lly urx ury`, or `0 0 0 0` for an empty path. `setlinecap` accepts 0, 1, or 2 and stores the value. The stroke device draws a capsule, which is the round cap, so codes 0 and 2 carry the capsule-stroke deviation recorded in `documentation/devices.md`.
+
+The interpreter identification operators `languagelevel` (2), `version`, `revision`, `product`, and `serialnumber` answer for this interpreter.
+
+Matrix operators `translate` `scale` `rotate` `concat` `setmatrix` `currentmatrix` `dtransform` are in this tag. The default matrix is the identity in user points, origin lower left, one unit equal to one point. `dtransform` transforms a distance vector by the CTM.
 
 ## Errors
 
@@ -118,11 +126,23 @@ Pipe paths such as `%pipe%...` never run, because `file` returns `invalidaccess`
 | `gsave` depth | 32 |
 | Procedure nesting while scanning | 128 |
 | Path points | 100000 |
+| Array elements | 1048576 |
+| String bytes | 33554432 |
+| Executed objects and procedure entries | 67108864 |
+| Retained page bytes for one run | 1073741824 |
 | Pixels per page | 40000000 |
 | Side of a page, pixels | 20000 |
 
-A default letter page at 72 dpi is 612 by 792 pixels. A letter page at 300 dpi is under the pixel cap. A letter page at 600 dpi is over the cap and returns `limitcheck`.
+A default letter page at 72 dpi is 612 by 792 pixels. A letter page at 300 dpi is under the pixel cap. A letter page at 600 dpi is 5100 by 6600, which is 33,660,000 pixels and still under the 40,000,000 cap. The area cap is crossed at 655 dpi, and a letter page there returns `limitcheck`.
+
+An `array` or a `string` past its cap returns `rangecheck`, not `limitcheck`, because the requested size is an operand rather than a resource the interpreter accumulated. Without the cap, a program asking for 2147483647 elements would ask the Go runtime for a very large allocation and crash instead of reporting a PostScript error.
+
+The executed-object cap is what stops a loop with no `exit`. It counts an object each time one runs and a procedure entry each time one is called, because a body of `{ }` has no object to count and would otherwise loop forever with the counter standing still. The interpreter retires about 22 million objects a second, so the cap is roughly three seconds of runaway execution. The heaviest file in the validation corpus uses 53,000 objects, so the headroom is over a thousand.
+
+The retained-page-byte cap is what stops a program that only calls `showpage`. Every `showpage` copies the whole page buffer, so an unbounded page count is an unbounded allocation. The budget is in bytes rather than pages because the page count that fills it depends on the caller's page geometry: a letter page at 72 dpi is 1,454,208 bytes a page, so the budget allows 738 pages, and a small page allows more.
+
+The interpreter polls the context on every object it runs, so a cancelled context stops the job promptly. The caps above are a floor on what a program can consume and are not a substitute for a caller deadline.
 
 ## Out of this tag
 
-Images, `clip`, `save`, `restore`, `bind`, filters, and file I/O. `bind` is omitted on purpose, so a name inside a procedure sees the definition from execution time. A test must redefine a name after building a procedure and observe the new value.
+Images, `save`, `restore`, `eoclip`, PostScript filters, and file I/O. PDF stream filters are a different syntax and are in `documentation/devices.md`.

@@ -9,8 +9,8 @@ import (
 )
 
 func TestVersion(t *testing.T) {
-	if got := spectreps.Version(); got != "0.0.3" {
-		t.Fatalf("Version() = %q, want %q", got, "0.0.3")
+	if got := spectreps.Version(); got != "0.0.4" {
+		t.Fatalf("Version() = %q, want %q", got, "0.0.4")
 	}
 }
 
@@ -61,7 +61,7 @@ func TestJobErrorText(t *testing.T) {
 	}
 }
 
-func TestNotImplemented(t *testing.T) {
+func TestNilInputJobErrors(t *testing.T) {
 	in, err := spectreps.New()
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
@@ -74,8 +74,8 @@ func TestNotImplemented(t *testing.T) {
 	var opt spectreps.RunOptions
 	rewrite := spectreps.DefaultRewriteOptions()
 
-	t.Run("background", func(t *testing.T) {
-		checkNotImplemented(t, in, src, opt, rewrite)
+	t.Run("nil document", func(t *testing.T) {
+		checkNilInputJobErrors(t, in, src, opt, rewrite)
 	})
 	t.Run("canceled", func(t *testing.T) {
 		checkCanceled(t, in, src, opt, rewrite)
@@ -85,7 +85,7 @@ func TestNotImplemented(t *testing.T) {
 	})
 }
 
-func checkNotImplemented(
+func checkNilInputJobErrors(
 	t *testing.T,
 	in *spectreps.Instance,
 	src []byte,
@@ -96,7 +96,7 @@ func checkNotImplemented(
 
 	doc, err := in.OpenPDF(t.Context(), src)
 	var job spectreps.JobError
-	if errors.Is(err, spectreps.ErrNotImplemented) || !errors.As(err, &job) {
+	if !errors.As(err, &job) {
 		t.Fatalf("OpenPDF() error = %v, want JobError", err)
 	}
 	if doc != nil {
@@ -104,7 +104,7 @@ func checkNotImplemented(
 	}
 
 	img, err := in.RasterizePage(t.Context(), nil, 0, opt)
-	if errors.Is(err, spectreps.ErrNotImplemented) || !errors.As(err, &job) || job.Msg != rangecheckMsg {
+	if !errors.As(err, &job) || job.Msg != rangecheckMsg {
 		t.Fatalf("RasterizePage() error = %v, want rangecheck", err)
 	}
 	requireZeroPageImage(t, img)

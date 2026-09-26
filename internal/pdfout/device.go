@@ -74,11 +74,11 @@ func formatNum(value float64) string {
 }
 
 // bytes returns the operators. An empty recording is a non-nil empty slice.
+// The slice aliases the recorder buffer, which the caller owns after the
+// recording stops, so no copy is needed.
 func (rec *recorder) bytes() []byte {
 	if rec.buf.Len() == 0 {
 		return []byte{}
 	}
-	out := make([]byte, rec.buf.Len())
-	copy(out, rec.buf.Bytes())
-	return out
+	return rec.buf.Bytes()
 }

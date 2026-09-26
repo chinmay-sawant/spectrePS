@@ -1,0 +1,9 @@
+%!PS-Adobe-3.0
+% Repo-authored validation corpus program.
+% The path point cap is 100000. This program starts a path, then adds
+% 100002 points and must fail with limitcheck before it paints.
+newpath
+0 0 moveto
+0 1 100001 { pop 0 0 rlineto } for
+stroke
+showpage

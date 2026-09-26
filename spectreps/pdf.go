@@ -66,11 +66,14 @@ func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOp
 		return nil, err
 	}
 	_ = in
-	if doc == nil || doc.file == nil {
+	if !rewriteDocOK(doc) {
 		return nil, rewriteJobError("rangecheck")
 	}
 	if !rewriteRangeOK(opt) {
 		return nil, rewriteJobError("rangecheck")
+	}
+	if opt.Tag {
+		return rewriteTaggedRequest(ctx, doc, opt)
 	}
 	if opt.PDFA != PDFANone {
 		return rewritePDFA(ctx, doc.file, opt)
@@ -81,7 +84,12 @@ func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOp
 	if opt.Level == 0 {
 		return rewriteEmitted(ctx, doc.file, opt.CompressStreams)
 	}
-	return rewriteLevel(ctx, doc.file, opt.Level)
+	return rewriteLevel(ctx, doc.file, opt)
+}
+
+// rewriteDocOK reports whether one document can take a rewrite.
+func rewriteDocOK(doc *Document) bool {
+	return doc != nil && doc.file != nil
 }
 
 // rewriteRangeOK reports whether the option values are in range.
@@ -109,19 +117,26 @@ func rewriteEmitted(ctx context.Context, file *pdf.File, compress bool) ([]byte,
 	return out, nil
 }
 
-func rewriteLevel(ctx context.Context, file *pdf.File, level int) ([]byte, error) {
-	overrides, err := pdfout.LevelOverrides(ctx, file, level)
+// rewriteLevel maps a level above 0 to its stream and image overrides, then
+// adds the subset font objects when the caller opted in.
+func rewriteLevel(ctx context.Context, file *pdf.File, opt RewriteOptions) ([]byte, error) {
+	overrides, err := pdfout.LevelOverrides(ctx, file, opt.Level)
 	if err != nil {
 		return nil, asPDFJobError(err)
 	}
-	opt := pdfout.CopyOptions{
+	extra, appended, err := subsetObjects(ctx, file, opt.SubsetFonts, file.ObjectCount()+1)
+	if err != nil {
+		return nil, err
+	}
+	mergeOverrides(overrides, extra)
+	copyOpt := pdfout.CopyOptions{
 		Overrides:       overrides,
 		PackObjects:     false,
-		AppendObjects:   nil,
+		AppendObjects:   appended,
 		CatalogOverride: nil,
 		PDFA:            false,
 	}
-	out, err := pdfout.WriteCopy(ctx, file, opt)
+	out, err := pdfout.WriteCopy(ctx, file, copyOpt)
 	if err != nil {
 		return nil, asPDFJobError(err)
 	}
@@ -159,6 +174,7 @@ func (in *Instance) WritePostScript(
 func writePostScript(ctx context.Context, file *pdf.File) ([]byte, error) {
 	count := file.PageCount()
 	pages := make([]psout.Page, 0, count)
+	boxWidth, boxHeight := 0.0, 0.0
 	for i := range count {
 		content, err := file.Content(i)
 		if err != nil {
@@ -169,12 +185,27 @@ func writePostScript(ctx context.Context, file *pdf.File) ([]byte, error) {
 			return nil, asPDFJobError(err)
 		}
 		pages = append(pages, psout.Page{Content: emitted})
+		if i == 0 {
+			boxWidth, boxHeight = pageBox(file, i)
+		}
 	}
-	out, err := psout.Write(ctx, pages, psout.WriteOptions{})
+	out, err := psout.Write(ctx, pages, psout.WriteOptions{WidthPt: boxWidth, HeightPt: boxHeight})
 	if err != nil {
 		return nil, asPDFJobError(err)
 	}
 	return out, nil
+}
+
+// pageBox returns one page's real /MediaBox in points so the PostScript header
+// carries the document's own page instead of a fixed letter box. A page whose
+// box will not resolve falls back to zero, which psout.Write reads as the 612
+// by 792 reader default.
+func pageBox(file *pdf.File, index int) (float64, float64) {
+	size, err := file.PageSize(index)
+	if err != nil {
+		return 0, 0
+	}
+	return size.Width, size.Height
 }
 
 func asPDFJobError(err error) error {

@@ -2,7 +2,7 @@
 
 Package `spectreps`. Import path `github.com/chinmay-sawant/spectrePS/spectreps`.
 
-These are the current signatures. Every method below is implemented. `CompareFiles`, `New`, `Close`, and `Version` landed first; the interpreter methods followed in the phases named in `plans/v0.0.1/00-program.md`, `plans/v0.0.2/00-program.md`, and `plans/v0.0.3/00-program.md`.
+These are the current signatures. Every method below is implemented. `CompareFiles`, `New`, `Close`, and `Version` landed first; the interpreter methods followed in the phases named in `plans/v0.0.1/00-program.md`, `plans/v0.0.2/00-program.md`, `plans/v0.0.3/00-program.md`, and `plans/v0.0.4/00-program.md`.
 
 Signatures may change while the module is below `v1`. Callers in this repo are the CLI and `spectreps_test`.
 
@@ -51,11 +51,16 @@ type RewriteOptions struct {
     CompressStreams bool
     Level           int // 0 re-emits the path subset, 1 through 5 pass through
     PDFA            PDFAMode // zero leaves the claim off
+    SubsetFonts     bool // off by default, subsets embedded TrueType at levels 1 through 5
+    Tag             bool     // generate a PDF/UA-2 structure tree
+    Claim           bool     // write pdfuaid after a passing tag preflight
+    Title           string   // dc:title of the tagged write
+    Lang            string   // catalog /Lang of the tagged write
 }
 
 func DefaultRewriteOptions() RewriteOptions // CompressStreams true at level 0
 
-type PostScriptOptions struct{} // fixed 612 by 792 box, no compression
+type PostScriptOptions struct{} // no options yet; the page box comes from the document
 
 type CompareResult struct {
     Equal  bool
@@ -74,6 +79,25 @@ type Ink struct {
     R float64
     G float64
     B float64
+}
+
+type PDFPageSize struct {
+    Width  float64
+    Height float64
+}
+
+type PDFFontInfo struct {
+    Name     string
+    Embedded bool
+}
+
+type PDFInfo struct {
+    Version   string
+    Pages     int
+    PageSizes []PDFPageSize
+    Tagged    bool
+    Fonts     []PDFFontInfo
+    Images    int
 }
 
 var ErrNotImplemented = errors.New("spectreps: not implemented")
@@ -102,9 +126,11 @@ func (in *Instance) RunPostScript(ctx context.Context, src []byte, opt RunOption
 func (in *Instance) OpenPDF(ctx context.Context, src []byte) (*Document, error)
 func (doc *Document) PageCount() int // page leaves, 0 when doc is nil
 func (doc *Document) Tagged() bool   // structure tree or /MarkInfo /Marked true, false when doc is nil
+func (doc *Document) Info() (PDFInfo, error)
 func (in *Instance) RasterizePage(ctx context.Context, doc *Document, pageIndex int, opt RunOptions) (PageImage, error)
 func (in *Instance) ExtractText(ctx context.Context, doc *Document, pageIndex int) (string, error)
 func (in *Instance) RewritePDF(ctx context.Context, doc *Document, opt RewriteOptions) ([]byte, error)
+func (in *Instance) PreflightUA2(ctx context.Context, doc *Document) error
 func (in *Instance) WritePostScript(ctx context.Context, doc *Document, opt PostScriptOptions) ([]byte, error)
 func (in *Instance) ImagePDF(ctx context.Context, pages []PageImage, dpi float64) ([]byte, error)
 func (in *Instance) ImagePDFColor(ctx context.Context, pages []PageImage, dpi float64, color ImageColor) ([]byte, error)
@@ -164,10 +190,18 @@ A cancelled `ctx` returns `ctx.Err()` and no partial success. `nil` context is a
 
 `ImagePDF` calls `ImagePDFColor` with `ImageColorRGB`, so its bytes do not change. `ImageColorGray` writes one 8-bit sample per pixel with `/DeviceGray`. `ImageColorCMYK` writes four 8-bit samples per pixel with `/DeviceCMYK`. Both use `/Filter /FlateDecode`. The conversion formulas and the pure red example are in `documentation/devices.md`.
 
+`Document.Info` reads the document summary behind `spectreps info`. It resolves objects and writes nothing. `Version` is the `%PDF-` header version, `Pages` is the page tree leaf count, and `PageSizes` holds one resolved `/MediaBox` per page in points, inherited from the nearest `/Pages` ancestor and defaulting to 612 by 792. `Tagged` is the same flag as `Document.Tagged`. `Fonts` lists every in-use `/Type /Font` dictionary except CIDFont descendants, sorted by name, and `Embedded` is true when the descriptor carries `/FontFile`, `/FontFile2`, or `/FontFile3`, when the font is Type 3, or when every descendant of a Type0 font carries a program. `Images` counts the in-use image XObjects. A nil document returns a `JobError` with `Op` `Info` and `Msg` `rangecheck`; a malformed `/MediaBox` returns `Error: /syntaxerror in Info`. The command's lines are in `documentation/cli.md`.
+
 `DefaultRewriteOptions` turns stream compression on at level 0. The zero `RewriteOptions` leaves it off, so a test can ask for uncompressed streams on purpose. The CLI uses `DefaultRewriteOptions` when no flag is given.
 
 `RewritePDF` at level 0 refuses a tagged document with `Error: /tagged in RewritePDF`, because the path-only writer cannot keep the tree. Levels 1 through 5 keep the tags and the source header version. `Document.Tagged` reads the catalog `/StructTreeRoot` or a true `/MarkInfo /Marked`. The claim for this work is preflight only, never certification.
 
+`RewriteOptions.SubsetFonts` is off by default. At levels 1 through 5 it replaces every embedded `/FontFile2` TrueType font a page showed with a stable-glyph-index subset, appends the new program and a synthesized `/ToUnicode` stream, and rewrites the font dictionary. Glyph indices do not change, so content streams, `/Widths`, `/Differences`, `/Encoding`, and `/CIDToGIDMap` stay valid without a page re-encode. A `/FontFile3 /OpenType` program and a Type 1 `/FontFile` program are copied whole, and a font with no program is copied unchanged, so the PDF/A `font-not-embedded` rule still refuses it whether or not the option ran. Level 0 ignores the option and still refuses text. Two calls with the option on return equal bytes. `documentation/fonts.md` has the scope.
+
+`RewriteOptions.Tag` builds the tagged write: one recorder per page at 72 dpi, a reading order derived from device geometry, and a PDF/UA-2 structure tree. `Claim` writes `pdfuaid:part 2` and `pdfuaid:rev 2024` only after the built bytes pass `pdfa.PreflightUA2`; `Title` and `Lang` fill `dc:title` and the catalog `/Lang`, with the source XMP and catalog as fallbacks. A refusal keeps the tree and writes no claim, so `RewritePDF` returns the bytes with a `JobError` in that case: `ua2-title` when no title exists, and another `ua2-<rule>` when the preflight fails elsewhere. A tagged input returns `Error: /tagged in RewritePDF`, an image with no `/Alt` source returns `Error: /alt in Tag`, and `Tag` with `PDFA` set returns `Error: /unsupported in RewritePDF`. The reading-order thresholds and the whole refusal matrix are in `documentation/devices.md`. The result is generate and preflight, never certification.
+
+`PreflightUA2` runs the PDF/UA-2 machine checks on an open document and returns a `JobError` with `Op` `PDFUA` and the failed rule in `Msg`. It is the request `validate` makes for a tagged input. A nil document returns `rangecheck`. The result is preflight only, never certification.
+
 `RewriteOptions.PDFA` appends a PDF/A-4 claim. `PDFA4` is the base claim and `PDFA4F` is the embedded-file claim. A claim uses the pass-through writer at the selected level, runs the profile preflight, and returns a `JobError` with `Op` `PDFA` and the failed rule in `Msg` when the input carries a known violation. The claim is a profile preflight, not a certificate. The rules and the writer changes are in `documentation/devices.md`.
 
-`WritePostScript` writes one date-free PostScript program from a path-only document. The marks match `RewritePDF` level 0: `setrgbcolor` or `setgray`, `setlinewidth`, `m` and `l`, and `S`, `f`, or `f*` in 72 dpi points. A prolog defines the short names in terms of the long operators, each page ends in `showpage`, and the header carries a fixed 612 by 792 box. Two calls return equal bytes. Text and images are not emitted, so a content operator Spectre cannot emit returns `undefined` with its operator name; a text page returns `undefined in Tj`. A nil document returns `rangecheck`. The zero `PostScriptOptions` is the only supported shape in this tag; media options wait.
+`WritePostScript` writes one date-free PostScript program from a path-only document. The marks match `RewritePDF` level 0: `setrgbcolor` or `setgray`, `setlinewidth`, `m` and `l`, and `S`, `f`, or `f*` in 72 dpi points. A prolog defines the short names in terms of the long operators, each page ends in `showpage`, and the header carries the first page's resolved `/MediaBox` as its `%%BoundingBox`, floored at the minimum and ceiled at the maximum because DSC wants integers. A page with no resolvable box falls back to the 612 by 792 reader default. Two calls return equal bytes. Text and images are not emitted, so a content operator Spectre cannot emit returns `undefined` with its operator name; a text page returns `undefined in Tj`. A nil document returns `rangecheck`. The zero `PostScriptOptions` is the only supported shape in this tag; media options wait.

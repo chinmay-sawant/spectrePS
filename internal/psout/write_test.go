@@ -8,6 +8,42 @@ import (
 	"testing"
 )
 
+func TestWriteOptionsBox(t *testing.T) {
+	pages := []Page{{Content: []byte("S\n")}}
+	cases := []struct {
+		name string
+		opts WriteOptions
+		want string
+	}{
+		{"zero falls back to the default", WriteOptions{}, "%%BoundingBox: 0 0 612 792\n"},
+		{"explicit size", WriteOptions{WidthPt: 200, HeightPt: 100}, "%%BoundingBox: 0 0 200 100\n"},
+		{"a4 portrait", WriteOptions{WidthPt: 595.28, HeightPt: 841.89}, "%%BoundingBox: 0 0 595 842\n"},
+		{"negative width only", WriteOptions{WidthPt: -5, HeightPt: 100}, "%%BoundingBox: 0 0 612 100\n"},
+		{"negative height only", WriteOptions{WidthPt: 200, HeightPt: -5}, "%%BoundingBox: 0 0 200 792\n"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			got, err := Write(t.Context(), pages, testCase.opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Contains(got, []byte(testCase.want)) {
+				t.Fatalf("box = %q, want %q in %q", boxOf(got), testCase.want, got)
+			}
+		})
+	}
+}
+
+// boxOf returns the %%BoundingBox line so a failure names the real value.
+func boxOf(program []byte) string {
+	_, after, ok := bytes.Cut(program, []byte("%%BoundingBox: "))
+	if !ok {
+		return ""
+	}
+	line, _, _ := bytes.Cut(after, []byte("\n"))
+	return "%%BoundingBox: " + string(line)
+}
+
 func TestWritePS(t *testing.T) {
 	line := mustEmit(t, lineSrc)
 	fill := mustEmit(t, fillSrc)
@@ -37,8 +73,9 @@ func checkHeader(t *testing.T, got []byte, pageCount int) {
 	if !bytes.HasPrefix(got, []byte(headerLine)) {
 		t.Fatalf("prefix %q, want %q", got, headerLine)
 	}
-	if !bytes.Contains(got, []byte(boxLine)) {
-		t.Fatalf("missing %q in %q", boxLine, got)
+	// The zero options fall back to the 612 by 792 reader default.
+	if !bytes.Contains(got, []byte("%%BoundingBox: 0 0 612 792\n")) {
+		t.Fatalf("missing the default box in %q", got)
 	}
 	if !bytes.Contains(got, []byte("%%Pages: "+strconv.Itoa(pageCount)+"\n")) {
 		t.Fatalf("missing page count %d in %q", pageCount, got)

@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"image/draw"
 	"math"
+	"slices"
 
 	"github.com/chinmay-sawant/spectrePS/internal/graphics"
 	"golang.org/x/image/font/sfnt"
@@ -62,6 +63,44 @@ type Glyph struct {
 	Box Box
 }
 
+// TextRun is one show operator as an event sink sees it. Bytes holds the shown
+// text: for TJ the string elements concatenated, with the numbers omitted.
+type TextRun struct {
+	FontName    string
+	Size        float64
+	TextMatrix  graphics.Matrix
+	LineMatrix  graphics.Matrix
+	Rise        float64
+	CharSpacing float64
+	WordSpacing float64
+	HScale      float64
+	Bytes       []byte
+	// Codes holds the character codes the run shows, one per glyph. A Type0
+	// font reads two-byte codes and drops a trailing odd byte.
+	Codes []uint32
+	// Unicode holds the /ToUnicode result per code. An entry is empty when
+	// the font has no mapping for that code.
+	Unicode []string
+	// CTM is the current transformation matrix at show time, and Scale is
+	// the paint scale in device pixels per user unit. Together they let a
+	// recorder reproduce device placement through cm and Tm.
+	CTM   graphics.Matrix
+	Scale float64
+	// Box is the device-space advance box of the whole run, baseline at the
+	// text matrix origin. The vertical extent is the nominal ascent and
+	// descent of the text size.
+	Box Box
+}
+
+// TextRunSink receives one TextRun per show operator, in stream order, before
+// the operator paints its glyphs. A nil sink keeps the old behavior.
+type TextRunSink interface {
+	TextRun(r TextRun)
+}
+
+// codeSize is the byte length of one two-byte character code.
+const codeSize = 2
+
 // TextOptions carries the text seam for one content run.
 type TextOptions struct {
 	// Fonts resolves a /Font resource name. A nil map uses the fonts in
@@ -69,6 +108,8 @@ type TextOptions struct {
 	Fonts map[string]*Font
 	// Sink receives positioned glyphs. A nil sink discards them.
 	Sink GlyphSink
+	// Runs receives one event per show operator. A nil sink discards them.
+	Runs TextRunSink
 }
 
 // glyphMarker is implemented by markers that blend glyph coverage. A marker
@@ -125,7 +166,8 @@ func (run *runner) takeTextSetup(opName string) (bool, error) {
 	}
 }
 
-// takeTextSpacing dispatches the text state parameters.
+// takeTextSpacing dispatches the text state parameters. Tr is handled by
+// setRenderMode because extraction and the recorder treat it differently.
 func (run *runner) takeTextSpacing(opName string) (bool, error) {
 	switch opName {
 	case "Tc":
@@ -138,6 +180,8 @@ func (run *runner) takeTextSpacing(opName string) (bool, error) {
 		return true, run.setTextLeading()
 	case "Ts":
 		return true, run.setTextRise()
+	case "Tr":
+		return true, run.setRenderMode()
 	default:
 		return false, nil
 	}
@@ -279,11 +323,27 @@ func (run *runner) setTextRise() error {
 	return nil
 }
 
+// setRenderMode reads the text rendering mode. Extraction and the pixmap
+// painter keep the fill mode, so a run with no marker or with a glyph marker
+// accepts the operand. A marker without glyph support, such as the level 0
+// recorder, refuses the mode instead of dropping it, the same policy as the
+// other state effects it cannot reproduce.
+func (run *runner) setRenderMode() error {
+	const opName = "Tr"
+	if activeSink(run.marker) {
+		if _, ok := run.marker.(glyphMarker); !ok {
+			return NewError(opName, errUndefined)
+		}
+	}
+	return run.discardNum(opName)
+}
+
 func (run *runner) showString() error {
 	text, err := run.popStr(opShow)
 	if err != nil {
 		return err
 	}
+	run.fireRun(text)
 	return run.showBytes(opShow, text)
 }
 
@@ -294,6 +354,11 @@ func (run *runner) showArray() error {
 	if err != nil {
 		return err
 	}
+	shown, err := arrayText(items)
+	if err != nil {
+		return err
+	}
+	run.fireRun(shown)
 	for _, element := range items {
 		if element.kind == itemString {
 			if err := run.showBytes(opShowArray, element.str); err != nil {
@@ -310,6 +375,22 @@ func (run *runner) showArray() error {
 	return nil
 }
 
+// arrayText concatenates the string elements of one TJ array and validates the
+// other elements.
+func arrayText(items []item) ([]byte, error) {
+	var out []byte
+	for _, element := range items {
+		if element.kind == itemString {
+			out = append(out, element.str...)
+			continue
+		}
+		if element.kind != itemNumber {
+			return nil, NewError(opShowArray, errType)
+		}
+	}
+	return out, nil
+}
+
 func (run *runner) quoteShow() error {
 	text, err := run.popStr(opShowQuote)
 	if err != nil {
@@ -318,6 +399,7 @@ func (run *runner) quoteShow() error {
 	if err := run.nextLine(); err != nil {
 		return err
 	}
+	run.fireRun(text)
 	return run.showBytes(opShowQuote, text)
 }
 
@@ -341,7 +423,80 @@ func (run *runner) doubleQuoteShow() error {
 	if err := run.nextLine(); err != nil {
 		return err
 	}
+	run.fireRun(text)
 	return run.showBytes(opShowDQuote, text)
+}
+
+// fireRun delivers one show operator to the run sink with the current text
+// state, before the operator paints its glyphs. A nil sink discards it. The
+// run carries the decoded codes, their Unicode mappings, the CTM, the paint
+// scale, and the device advance box.
+func (run *runner) fireRun(text []byte) {
+	if !activeSink(run.runs) {
+		return
+	}
+	codes := run.runCodes(text)
+	run.runs.TextRun(TextRun{
+		FontName:    run.text.fontName,
+		Size:        run.text.size,
+		TextMatrix:  run.textMatrix,
+		LineMatrix:  run.textLine,
+		Rise:        run.text.rise,
+		CharSpacing: run.text.charSpacing,
+		WordSpacing: run.text.wordSpacing,
+		HScale:      run.text.hscale,
+		Bytes:       slices.Clone(text),
+		Codes:       codes,
+		Unicode:     run.runUnicode(codes),
+		CTM:         run.ctm,
+		Scale:       run.scale,
+		Box:         run.runBox(codes),
+	})
+}
+
+// runCodes splits one shown string into character codes the way showBytes
+// reads them.
+func (run *runner) runCodes(text []byte) []uint32 {
+	fnt := run.text.font
+	if fnt != nil && fnt.twoByteCodes() {
+		codes := make([]uint32, 0, (len(text)+1)/codeSize)
+		for idx := 0; idx+1 < len(text); idx += 2 {
+			codes = append(codes, uint32(text[idx])<<byteShift|uint32(text[idx+1]))
+		}
+		return codes
+	}
+	codes := make([]uint32, len(text))
+	for idx, code := range text {
+		codes[idx] = uint32(code)
+	}
+	return codes
+}
+
+// runUnicode maps every code through the font. A font with no mapping leaves
+// the entry empty.
+func (run *runner) runUnicode(codes []uint32) []string {
+	fnt := run.text.font
+	out := make([]string, len(codes))
+	if fnt == nil {
+		return out
+	}
+	for idx, code := range codes {
+		out[idx], _ = fnt.Unicode(code)
+	}
+	return out
+}
+
+// runBox is the device advance box of one whole run. The advances follow the
+// current text state, so the box holds the run origin and its advanced end.
+func (run *runner) runBox(codes []uint32) Box {
+	fnt := run.text.font
+	total := 0.0
+	if fnt != nil {
+		for _, code := range codes {
+			total += run.advance(fnt, code)
+		}
+	}
+	return run.glyphBox(total)
 }
 
 // showBytes shows one string. A Type0 font reads two-byte codes and ignores a
@@ -368,13 +523,22 @@ func (run *runner) showBytes(opName string, text []byte) error {
 	return nil
 }
 
-// showCode paints one glyph, delivers it to the sink, and advances. The
-// device check runs first, so a device without glyph support reports
+// showCode paints one glyph, delivers it to the sink, and advances. A marker
+// without glyph support keeps the old refusal, unless it accepts text runs,
+// because a recorder with the run seam re-emits text instead of painting it.
+// The device check runs first, so a device without glyph support reports
 // undefined before the font's outline source is consulted.
 func (run *runner) showCode(opName string, fnt *Font, code uint32) error {
-	if run.marker != nil {
-		if err := run.paintGlyph(opName, fnt, code); err != nil {
-			return err
+	if activeSink(run.marker) {
+		painter, isGlyph := run.marker.(glyphMarker)
+		runs, isRuns := run.marker.(TextRunSink)
+		switch {
+		case isGlyph && activeSink(painter):
+			if err := run.paintGlyph(opName, fnt, code); err != nil {
+				return err
+			}
+		case !isRuns || !activeSink(runs):
+			return NewError(opName, errUndefined)
 		}
 	}
 	advance := run.advance(fnt, code)
@@ -428,32 +592,40 @@ func (run *runner) advance(fnt *Font, code uint32) float64 {
 
 // paintGlyph blends one glyph into the marker. A marker without glyph support
 // refuses text with undefined. A font without an outline source is
-// invalidfont, the policy in documentation/fonts.md.
+// invalidfont, the policy in documentation/fonts.md, and a mask over the
+// glyph side or pixel cap is limitcheck.
 func (run *runner) paintGlyph(opName string, fnt *Font, code uint32) error {
 	painter, ok := run.marker.(glyphMarker)
 	if !ok {
 		return NewError(opName, errUndefined)
 	}
-	mask, origin, ok := run.glyphMask(fnt, code)
-	if !ok {
-		return NewError(opName, errInvalidFont)
+	mask, origin, err := run.glyphMask(opName, fnt, code)
+	if err != nil {
+		return err
+	}
+	if len(run.clips) > 0 {
+		if target, ok := run.marker.(graphics.ClipMarker); ok {
+			target.DrawGlyphClipped(run.clips, mask, origin.X, origin.Y, run.red, run.green, run.blue)
+			return nil
+		}
 	}
 	painter.DrawGlyph(mask, origin.X, origin.Y, run.red, run.green, run.blue)
 	return nil
 }
 
 // glyphMask rasterizes one glyph outline to device coverage. The origin is
-// the device pixel of the mask's bottom-left corner. The bool is false when
-// the font has no outline for the code.
-func (run *runner) glyphMask(fnt *Font, code uint32) (*image.Alpha, image.Point, bool) {
+// the device pixel of the mask's bottom-left corner. A font without an
+// outline for the code returns invalidfont; a mask over the 20,000 side or
+// 40,000,000 pixel cap returns limitcheck before any allocation.
+func (run *runner) glyphMask(opName string, fnt *Font, code uint32) (*image.Alpha, image.Point, error) {
 	segments, ok := fnt.outline(code)
 	if !ok {
-		return nil, image.Point{X: 0, Y: 0}, false
+		return nil, image.Point{X: 0, Y: 0}, NewError(opName, errInvalidFont)
 	}
 	mat := run.glyphMatrix()
 	minX, minY, maxX, maxY, hasBox := glyphBounds(mat, segments)
 	if !hasBox {
-		return nil, image.Point{X: 0, Y: 0}, true
+		return nil, image.Point{X: 0, Y: 0}, nil
 	}
 	left := int(math.Floor(minX)) - glyphPadding
 	bottom := int(math.Floor(minY)) - glyphPadding
@@ -462,17 +634,17 @@ func (run *runner) glyphMask(fnt *Font, code uint32) (*image.Alpha, image.Point,
 	width := right - left
 	height := top - bottom
 	if width <= 0 || height <= 0 {
-		return nil, image.Point{X: 0, Y: 0}, true
+		return nil, image.Point{X: 0, Y: 0}, nil
 	}
 	if width > maxGlyphSide || height > maxGlyphSide || width*height > maxGlyphPixels {
-		return nil, image.Point{X: 0, Y: 0}, false
+		return nil, image.Point{X: 0, Y: 0}, NewError(opName, errLimit)
 	}
 	mask := image.NewAlpha(image.Rect(0, 0, width, height))
 	raster := vector.NewRasterizer(width, height)
 	raster.DrawOp = draw.Src
 	rasterizeGlyph(raster, mat, segments, left, top)
 	raster.Draw(mask, mask.Bounds(), image.NewUniform(color.Alpha{A: maxAlpha}), image.Point{X: 0, Y: 0})
-	return mask, image.Pt(left, bottom), true
+	return mask, image.Pt(left, bottom), nil
 }
 
 // glyphMatrix maps glyph space, 1/1000 em with Y up, to device pixels.

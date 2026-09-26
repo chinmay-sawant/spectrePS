@@ -193,6 +193,9 @@ func TestRewriteStable(t *testing.T) {
 // rangecheckMsg is the JobError message for an out-of-range index.
 const rangecheckMsg = "rangecheck"
 
+// undefinedMsg is the JobError message for an undefined operator.
+const undefinedMsg = "undefined"
+
 func TestRewriteLevelsStable(t *testing.T) {
 	in := newInst(t)
 	src := textImagePDF(t)
@@ -321,7 +324,7 @@ func assertRewriteTj(t *testing.T, in *spectreps.Instance) {
 	}
 	out, err := in.RewritePDF(t.Context(), doc, spectreps.DefaultRewriteOptions())
 	var job spectreps.JobError
-	if !errors.As(err, &job) || job.Msg != "undefined" || job.Op != "Tj" {
+	if !errors.As(err, &job) || job.Msg != undefinedMsg || job.Op != "Tj" {
 		t.Fatalf("RewritePDF() error = %v, want undefined in Tj", err)
 	}
 	if out != nil {

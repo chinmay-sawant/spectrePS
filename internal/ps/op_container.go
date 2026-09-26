@@ -3,28 +3,12 @@ package ps
 
 import (
 	"context"
-	"sync"
 )
 
 const (
 	dictPair    = 2
 	opEndDictOp = ">>"
 )
-
-// dictFrames mirrors the dictionary stack for where.
-// begin and end keep it aligned. Interp does not expose that stack.
-//
-//nolint:gochecknoglobals // where needs the stack and Interp has no dict-stack field
-var (
-	dictMu     sync.Mutex
-	dictFrames = map[*Interp]*dictFrame{}
-)
-
-// dictFrame is the shadow dictionary stack for one interpreter.
-type dictFrame struct {
-	dicts  []*Dict
-	seeded bool
-}
 
 // registerFlowOps installs container, control, banned, and graphics operators.
 func registerFlowOps(interp *Interp) {
@@ -36,6 +20,7 @@ func registerFlowOps(interp *Interp) {
 
 func registerContainerOps(interp *Interp) {
 	interp.Install("array", opArray)
+	interp.Install("string", opString)
 	interp.Install("dict", opDict)
 	interp.Install("def", opDef)
 	interp.Install("load", opLoad)
@@ -44,12 +29,34 @@ func registerContainerOps(interp *Interp) {
 	interp.Install("known", opKnown)
 	interp.Install("begin", opBegin)
 	interp.Install("end", opEnd)
+	interp.Install("bind", opBind)
 	interp.Install("[", opMark)
 	interp.Install("]", opEndArray)
 	interp.Install("<<", opMark)
 	interp.Install(opEndDictOp, opEndDict)
 }
 
+// opBind accepts a procedure and pushes it back unchanged. Name lookup happens
+// at execution time in this interpreter, so there is nothing to bind: a name
+// inside a procedure still sees the definition current when it runs.
+func opBind(ctx context.Context, interp *Interp) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	obj, err := interp.Pop()
+	if err != nil {
+		return err
+	}
+	if _, ok := procOf(obj); !ok {
+		return errOf(errTypeCheck, "bind")
+	}
+	return interp.Push(obj)
+}
+
+// opArray allocates a null-filled array of the popped element count.
+// A negative count and a count past maxArrayElems are both rangecheck, so a
+// program asking for 2147483647 elements gets a PostScript error rather than
+// an allocation failure from the Go runtime.
 func opArray(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -58,7 +65,7 @@ func opArray(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	if count < 0 {
+	if count < 0 || int64(count) > maxArrayElems {
 		return errOf(errRangeCheck, "array")
 	}
 	return interp.Push(ArrayObj(nullArray(count), false))
@@ -70,6 +77,23 @@ func nullArray(count int32) []Object {
 		elems[i] = NullObj()
 	}
 	return elems
+}
+
+// opString allocates a string of the popped byte count, filled with zero
+// bytes. A negative count and a count past maxStringBytes are both rangecheck,
+// so the allocation is bounded before the runtime is asked for it.
+func opString(ctx context.Context, interp *Interp) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	count, err := interp.PopInt()
+	if err != nil {
+		return err
+	}
+	if count < 0 || int64(count) > maxStringBytes {
+		return errOf(errRangeCheck, "string")
+	}
+	return interp.Push(StringObj(make([]byte, count), false))
 }
 
 func opDict(ctx context.Context, interp *Interp) error {
@@ -123,6 +147,8 @@ func opStore(ctx context.Context, interp *Interp) error {
 	return interp.Store(name, val)
 }
 
+// opWhere searches the interpreter's own dictionary stack from the top down.
+// It reads the same stack begin and end maintain, so it cannot drift from it.
 func opWhere(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -131,8 +157,8 @@ func opWhere(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	for _, dict := range dictsTopDown(interp) {
-		if dict != nil && dict.has(name) {
+	for i := len(interp.dicts) - 1; i >= 0; i-- {
+		if dict := interp.dicts[i]; dict != nil && dict.has(name) {
 			return pushWhereHit(interp, dict)
 		}
 	}
@@ -175,30 +201,14 @@ func opBegin(ctx context.Context, interp *Interp) error {
 	if obj.Kind != KindDict || obj.Dict == nil {
 		return errOf(errTypeCheck, "begin")
 	}
-	frame := ensureSeeded(interp)
-	if err := interp.Begin(obj.Dict); err != nil {
-		return err
-	}
-	dictMu.Lock()
-	frame.dicts = append(frame.dicts, obj.Dict)
-	dictMu.Unlock()
-	return nil
+	return interp.Begin(obj.Dict)
 }
 
 func opEnd(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	frame := ensureSeeded(interp)
-	if err := interp.End(); err != nil {
-		return err
-	}
-	dictMu.Lock()
-	if len(frame.dicts) > 0 {
-		frame.dicts = frame.dicts[:len(frame.dicts)-1]
-	}
-	dictMu.Unlock()
-	return nil
+	return interp.End()
 }
 
 func opEndArray(ctx context.Context, interp *Interp) error {
@@ -287,58 +297,4 @@ func dictFromPairs(items []Object) (Object, error) {
 		dict.putNew(key.Name, items[i+1])
 	}
 	return DictObj(dict), nil
-}
-
-func ensureSeeded(interp *Interp) *dictFrame {
-	dictMu.Lock()
-	frame := dictFrames[interp]
-	if frame == nil {
-		frame = &dictFrame{dicts: nil, seeded: false}
-		dictFrames[interp] = frame
-	}
-	if frame.seeded {
-		dictMu.Unlock()
-		return frame
-	}
-	dictMu.Unlock()
-
-	sys, cur := lookupStartupDicts(interp)
-	dictMu.Lock()
-	defer dictMu.Unlock()
-	if frame.seeded {
-		return frame
-	}
-	frame.dicts = startupDicts(sys, cur)
-	frame.seeded = true
-	return frame
-}
-
-func lookupStartupDicts(interp *Interp) (*Dict, *Dict) {
-	var sys *Dict
-	if obj, ok := interp.Lookup("systemdict"); ok && obj.Kind == KindDict {
-		sys = obj.Dict
-	}
-	return sys, interp.CurrentDict()
-}
-
-func startupDicts(sys, cur *Dict) []*Dict {
-	var dicts []*Dict
-	if sys != nil {
-		dicts = append(dicts, sys)
-	}
-	if cur != nil && (len(dicts) == 0 || dicts[len(dicts)-1] != cur) {
-		dicts = append(dicts, cur)
-	}
-	return dicts
-}
-
-func dictsTopDown(interp *Interp) []*Dict {
-	frame := ensureSeeded(interp)
-	dictMu.Lock()
-	defer dictMu.Unlock()
-	out := make([]*Dict, 0, len(frame.dicts))
-	for i := len(frame.dicts) - 1; i >= 0; i-- {
-		out = append(out, frame.dicts[i])
-	}
-	return out
 }

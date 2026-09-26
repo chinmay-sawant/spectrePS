@@ -10,6 +10,9 @@
 | `make test` | `go test -p $(nproc) ./...` |
 | `make lint` | `gofmt -l` must be empty, then `golangci-lint run ./...`, then `make size-check` |
 | `make size-check` | `bash scripts/check-file-size.sh` |
+| `make bench` | `go test -p 1 -run '^$' -bench . -benchmem -count=3` over the six benchmark packages, writing `profiles/bench.txt` |
+| `make bench-profile` | the same packages with `-cpuprofile` and `-memprofile`, writing one CPU and one heap profile per package under `profiles/` |
+| `make bench-check` | a `-count=5` rerun compared against `profiles/bench.txt` with benchstat, writing `profiles/compare.txt` |
 | `make fmt` | `gofmt -w .` |
 | `make tidy` | `go mod tidy` |
 | `make clean` | remove `bin/` |
@@ -20,9 +23,11 @@
 
 `make size-check` enforces the 2,000-line Go file limit from `AGENTS.md`. Overflow is recorded in `scripts/file-size-allowlist.txt`. `make lint` runs the check, so a stale record fails lint.
 
+`make bench`, `make bench-profile`, and `make bench-check` are manual targets. Neither `make test` nor `make lint` calls them, because `go test ./...` runs benchmarks only when `-bench` is passed. Benchmark output lands in `profiles/`, which is gitignored; the recorded tables live in `documentation/performance.md`. `bash scripts/bench-cli.sh` measures the built binary and writes `profiles/cli.txt`.
+
 ## Checklist
 
-`plans/v0.0.1/00-program.md`, `plans/v0.0.2/00-program.md`, and `plans/v0.0.3/00-program.md` are the maps. Each other file in those directories is the ledger for one phase. Check a row only after the proof in the row has been run on the current tree. `[~]` means deferred, and the deferred lists are `plans/v0.0.1/10-deferred.md` with `plans/v0.0.3/10-pdfua2.md` for the tag-level rows.
+`plans/v0.0.1/00-program.md`, `plans/v0.0.2/00-program.md`, `plans/v0.0.3/00-program.md`, and `plans/v0.0.4/00-program.md` are the maps. Each other file in those directories is the ledger for one phase. Check a row only after the proof in the row has been run on the current tree. `[~]` means deferred, and the deferred lists are `plans/v0.0.1/10-deferred.md` with `plans/v0.0.3/10-pdfua2.md` for the tag-level rows.
 
 When a tag ships, append the `make lint` and `make test` transcript to `plans/v0.0.1/09-release-records.md`. Dev-loop runs and the tag run are both recorded there if they differ. A green dev loop is not a substitute for the tag line.
 

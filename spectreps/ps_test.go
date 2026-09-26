@@ -40,8 +40,10 @@ func checkWritePostScriptStable(t *testing.T, in *spectreps.Instance, doc *spect
 	if !bytes.HasPrefix(first, []byte("%!PS-Adobe-3.0")) {
 		t.Fatalf("program prefix = %q, want %%!PS-Adobe-3.0", first)
 	}
-	if !bytes.Contains(first, []byte("%%BoundingBox: 0 0 612 792")) {
-		t.Fatalf("program has no 612 by 792 box: %q", first)
+	// The box is the document's own /MediaBox, not a fixed letter box. The
+	// fixture is 20 by 20 points.
+	if !bytes.Contains(first, []byte("%%BoundingBox: 0 0 20 20")) {
+		t.Fatalf("program has no 20 by 20 box: %q", first)
 	}
 	if bytes.Contains(first, []byte("CreationDate")) || bytes.Contains(first, []byte("ModDate")) {
 		t.Fatal("program contains a date")

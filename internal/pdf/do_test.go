@@ -104,16 +104,8 @@ func TestPaintDoMissing(t *testing.T) {
 	}
 }
 
-// TestPaintDoRejectedSMask rejects an image that carries an /SMask, because
-// the alpha mask is not in this subset.
-func TestPaintDoRejectedSMask(t *testing.T) {
-	file := doPage(t, "2 0 0 2 0 0 cm /Im0 Do",
-		"<< /XObject << /Im0 5 0 R >> >>",
-		maskedImageBody(t),
-		imageStream(t, 2, 2, "/DeviceGray", "/FlateDecode", flateRaw(t, grayPixels())))
-	checkDoRejected(t, file)
-}
-
+// checkDoRejected proves a refused image painted no pixels. The /SMask
+// rejection row was retired in v0.0.4; TestPaintSMask is its positive canary.
 func checkDoRejected(t *testing.T, file *File) {
 	t.Helper()
 	pixmap := graphics.NewPixmap(2, 2)
@@ -151,7 +143,7 @@ func inheritedDoPage(t *testing.T, content, resources string, bodies ...string) 
 	doc := newDoc()
 	doc.object("<< /Type /Catalog /Pages 2 0 R >>")
 	doc.object("<< /Type /Pages /Kids [3 0 R] /Count 1 /Resources " + resources + " >>")
-	doc.object("<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>")
+	doc.object(pageBody)
 	doc.object(streamBody("", []byte(content)))
 	for _, body := range bodies {
 		doc.object(body)

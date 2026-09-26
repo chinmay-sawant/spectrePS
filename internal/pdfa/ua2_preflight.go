@@ -21,6 +21,7 @@ const (
 	ruleUA2Title           = "ua2-title"
 	ruleUA2RoleMap         = "ua2-rolemap"
 	ruleUA2MCID            = "ua2-mcid"
+	ruleUA2Content         = "ua2-content"
 
 	opRoleMapUA2    = "RoleMap"
 	opParentTreeUA2 = "ParentTree"
@@ -38,6 +39,8 @@ const (
 //   - ua2-title: the XMP carries a dc:title.
 //   - ua2-rolemap: every role resolves through /RoleMap or /RoleMapNS.
 //   - ua2-mcid: every MCID claim has an agreeing parent tree entry.
+//   - ua2-content: every marked-content item pairs and every MCID agrees
+//     with the parent tree on both sides.
 //
 // The PDF/A preflight is a separate request and never runs these checks, and
 // this preflight ignores PDF/A-only problems. The result is preflight only,
@@ -67,6 +70,9 @@ func ua2Checks(file *pdf.File, info UA2Info) error {
 		return pdf.NewError(opPDFUA, ruleUA2Marked)
 	}
 	if err := ua2DocumentRule(file); err != nil {
+		return err
+	}
+	if err := ua2ContentRule(file); err != nil {
 		return err
 	}
 	return ua2MetadataRules(info)

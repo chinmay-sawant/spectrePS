@@ -48,7 +48,7 @@ func (file *File) RawObject(num int) ([]byte, bool) {
 	if !ok || !entry.InUse || entry.Compressed {
 		return nil, false
 	}
-	got, gen, _, next, err := ParseIndirect(file.src, entry.Offset)
+	got, gen, _, next, err := parseIndirect(file.src, entry.Offset, file)
 	if err != nil || got != num || gen != entry.Gen {
 		return nil, false
 	}

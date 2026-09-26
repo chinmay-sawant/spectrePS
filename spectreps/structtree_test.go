@@ -7,6 +7,9 @@ import (
 	"github.com/chinmay-sawant/spectrePS/spectreps"
 )
 
+// taggedMsg is the JobError message for a tagged document at level 0.
+const taggedMsg = "tagged"
+
 // TestRewriteRefusesTagged proves level 0 refuses a tagged document instead of
 // stripping the tree, and that levels 1 through 5 keep it.
 func TestRewriteRefusesTagged(t *testing.T) {
@@ -20,7 +23,7 @@ func TestRewriteRefusesTagged(t *testing.T) {
 	}
 	out, err := in.RewritePDF(t.Context(), doc, spectreps.DefaultRewriteOptions())
 	var job spectreps.JobError
-	if !errors.As(err, &job) || job.Msg != "tagged" || job.Op != "RewritePDF" {
+	if !errors.As(err, &job) || job.Msg != taggedMsg || job.Op != "RewritePDF" {
 		t.Fatalf("RewritePDF() error = %v, want tagged in RewritePDF", err)
 	}
 	if out != nil {

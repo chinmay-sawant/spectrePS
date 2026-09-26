@@ -15,7 +15,27 @@ const (
 	maxProcNest   = 128
 	maxGSave      = 32
 	maxPathPoints = 100000
+	// maxArrayElems and maxStringBytes bound one allocation. Without them a
+	// program asks for 2147483647 elements and the runtime runs out of memory
+	// instead of reporting limitcheck. An Object is about 80 bytes, so the
+	// array budget is the larger of the two.
+	maxArrayElems  = 1 << 20
+	maxStringBytes = 1 << 25
+	// maxRetainedPageBytes bounds the pages one run keeps. Every showpage
+	// copies the whole page buffer, so an unbounded page count is an unbounded
+	// allocation. The budget is in bytes, not pages, because the page count
+	// that fills it depends on the caller's page geometry.
+	maxRetainedPageBytes = 1 << 30
+	// maxSteps bounds the objects one run executes, so a loop with no exit
+	// stops with limitcheck instead of running until the machine gives up.
+	// The interpreter retires about 22 million steps a second, so this is
+	// roughly three seconds of runaway execution. The heaviest file in the
+	// validation corpus uses 53,000 steps, so the headroom is over a thousand.
+	maxSteps = 1 << 26
 )
+
+// bytesPerPixel is the RGB8 pixmap stride factor the page budget multiplies.
+const bytesPerPixel = 3
 
 // execFrame is one called procedure on the execution stack.
 type execFrame struct {
@@ -25,11 +45,18 @@ type execFrame struct {
 // Interp executes PostScript.
 // system is systemdict. dicts starts as systemdict under userdict.
 // frames is the execution stack. The operand stack is stack, bottom to top.
+// gfx is the graphics state, loopDepth counts the loops the program is inside,
+// and steps counts the objects the run has executed. All of them live on the
+// interpreter, so two interpreters share nothing and nothing outlives the
+// interpreter that owns it.
 type Interp struct {
-	stack  []Object
-	dicts  []*Dict
-	system *Dict
-	frames []execFrame
+	stack     []Object
+	dicts     []*Dict
+	system    *Dict
+	frames    []execFrame
+	gfx       *gstate
+	loopDepth int
+	steps     int
 }
 
 // NewInterp returns an interpreter with systemdict under userdict.
@@ -39,16 +66,41 @@ func NewInterp() *Interp {
 	system := newDict(true)
 	user := newDict(false)
 	interp := &Interp{
-		stack:  nil,
-		dicts:  []*Dict{system, user},
-		system: system,
-		frames: nil,
+		stack:     nil,
+		dicts:     []*Dict{system, user},
+		system:    system,
+		frames:    nil,
+		gfx:       newGState(),
+		loopDepth: 0,
+		steps:     0,
 	}
 	registerValueOps(interp)
 	registerFlowOps(interp)
 	system.putNew("systemdict", DictObj(system))
 	system.putNew("userdict", DictObj(user))
 	return interp
+}
+
+// gs returns the graphics state. It is created on first use so a hand-built
+// Interp with the zero graphics field still paints.
+func (ip *Interp) gs() *gstate {
+	if ip.gfx == nil {
+		ip.gfx = newGState()
+	}
+	return ip.gfx
+}
+
+// step counts one executed object or one procedure entry. Crossing maxSteps is
+// limitcheck, so a loop with no exit stops on its own.
+// ExecStream counts every object and callProc counts every procedure entry,
+// because an empty procedure body has no object to count. A body of `{ }`
+// would otherwise loop forever without the counter moving.
+func (ip *Interp) step() error {
+	ip.steps++
+	if ip.steps > maxSteps {
+		return errOf(errLimitCheck, "exec")
+	}
+	return nil
 }
 
 // Run scans src and executes the top-level objects. The operand stack is kept.
@@ -73,15 +125,23 @@ func (ip *Interp) Run(ctx context.Context, src []byte) error {
 // UsePixmap paints stroke, fill, and showpage into pm.
 // scale converts CTM points into device pixels. 72 dpi uses 1.
 func (ip *Interp) UsePixmap(pm *graphics.Pixmap, scale float64) {
-	state := gsFor(ip)
+	state := ip.gs()
 	state.pix = pm
 	state.scale = scale
+	if pm != nil {
+		width, height := pm.PageSize()
+		state.pageW = float64(width)
+		state.pageH = float64(height)
+	}
 }
 
 func (ip *Interp) finishPage() error {
-	state := gsFor(ip)
+	state := ip.gs()
 	if state.pix == nil || state.pages > 0 {
 		return nil
+	}
+	if err := state.roomForPage(); err != nil {
+		return err
 	}
 	state.pix.ShowPage()
 	state.pages++
@@ -258,6 +318,9 @@ func (ip *Interp) ExecStream(ctx context.Context, elems []Object) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		if err := ip.step(); err != nil {
+			return err
+		}
 		if err := ip.execOne(ctx, elems[i]); err != nil {
 			return err
 		}
@@ -309,7 +372,10 @@ func tagOp(err error, opName string) error {
 
 func (ip *Interp) callProc(ctx context.Context, proc *Arr) error {
 	if len(ip.frames) >= maxExec {
-		return errOf("limitcheck", "exec")
+		return errOf(errLimitCheck, "exec")
+	}
+	if err := ip.step(); err != nil {
+		return err
 	}
 	ip.frames = append(ip.frames, execFrame{proc: proc})
 	defer ip.popFrame()
@@ -422,6 +488,10 @@ func assertCaps() {
 		maxProcNest,
 		maxGSave,
 		maxPathPoints,
+		maxArrayElems,
+		maxStringBytes,
+		maxRetainedPageBytes,
+		maxSteps,
 	}
 	for _, lim := range caps {
 		if lim <= 0 {

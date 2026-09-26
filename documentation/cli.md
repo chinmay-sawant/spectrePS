@@ -17,7 +17,8 @@ spectreps ink_cov [options] file.ps|file.pdf
 spectreps rewrite [options] file.pdf
 spectreps ps -o path file.pdf
 spectreps text [-pages range] file.pdf
-spectreps validate [options] file.ps|file.pdf
+spectreps info file.pdf
+spectreps validate file.ps|file.pdf
 spectreps compare bytes fileA fileB
 spectreps compare raster [options] fileA fileB
 spectreps gs [switches] file.ps|file.pdf
@@ -25,7 +26,7 @@ spectreps gs [switches] file.ps|file.pdf
 
 `gs` is the bounded compatibility mode. It accepts only the switches in `documentation/gs-argv-grammar.md` and routes the job to the commands above. Any other switch exits 2 with a message that names it.
 
-`version` prints `0.0.3`. Exit 0.
+`version` prints `0.0.4`. Exit 0.
 
 Shared options for `run`, `raster`, `pdfimage`, `bbox`, `inkcov`, `ink_cov`, and `compare raster`:
 
@@ -69,8 +70,25 @@ Any other `-colorspace` value exits 2. `rgb` keeps the 24-bit RGB bytes from ear
 | `-compress` | Flate content streams at level 0 | true |
 | `-level` | Compression level, 0 through 5 | 0 |
 | `-pdfa` | PDF/A-4 claim: `4` or `4f` | omitted |
+| `-subset-fonts` | Subset embedded TrueType fonts at levels 1 through 5 | false |
+| `-tags` | Generate a PDF/UA-2 structure tree | false |
+| `-claim` | Write the `pdfuaid` claim after the tagged write passes preflight | false |
+| `-tag-title` | `dc:title` of the tagged write | source XMP title |
+| `-tag-lang` | Catalog `/Lang` of the tagged write | source catalog `/Lang` |
 
 `-level 0` re-emits the path subset and keeps `-compress` as the Flate switch. `-level 1` through `-level 5` use the pass-through writer, so text, fonts, and content Spectre cannot interpret are copied. A level above 0 Flates content streams and ignores `-compress`. The image policy per level is in `documentation/devices.md`. Any other value exits 2. A tagged PDF at `-level 0` exits 1 with `Error: /tagged in RewritePDF`; levels 1 through 5 keep the tags and the source header version.
+
+`-subset-fonts` replaces an embedded `/FontFile2` TrueType program with a stable-glyph-index subset and adds a synthesized `/ToUnicode` at levels 1 through 5. It is off by default, so bytes do not change unless the caller opts in. Level 0 ignores it and still refuses text. A `/FontFile3` OpenType program and a Type 1 `/FontFile` program are copied whole, and a font with no program is copied unchanged, so the PDF/A `font-not-embedded` refusal is unaffected. `documentation/fonts.md` has the scope.
+
+`-tags` generates a PDF/UA-2 structure tree from the content the text machine reads, and `-claim` writes `pdfuaid:part 2` and `pdfuaid:rev 2024` only when the built bytes pass `pdfa.PreflightUA2`. `-tag-title` and `-tag-lang` fill `dc:title` and the catalog `/Lang`; a claim with neither a caller title nor a source title fails `ua2-title`, and that refusal still writes the tree with no claim. The reading-order thresholds are in `documentation/devices.md`, and the result is generate and preflight, never certification. The refusals are:
+
+| Request | Result |
+| --- | --- |
+| `-tags` on a tagged input | Exit 1, `Error: /tagged in RewritePDF`. |
+| `-tags` with `-pdfa` | Exit 1, `Error: /unsupported in RewritePDF`. |
+| An image with no `/Alt` source | Exit 1, `Error: /alt in Tag`. |
+| `-claim` with no title | Exit 1, `Error: /ua2-title in PDFUA`, and the tree is written with no claim. |
+| `-claim`, `-tag-title`, or `-tag-lang` without `-tags` | Exit 2. |
 
 `-pdfa 4` claims PDF/A-4 base and `-pdfa 4f` claims PDF/A-4f. A claim uses the pass-through writer at the selected level, appends the XMP metadata and the sRGB output intent, and changes the header to `%PDF-2.0` with a binary marker. The command runs the profile preflight first. A known violation exits 1 with one stderr line in the form `Error: /rule in PDFA`, and writes no output file. The rules are the table in `documentation/devices.md`. The claim is a profile preflight, not a certificate.
 
@@ -80,11 +98,26 @@ Any other `-colorspace` value exits 2. `rgb` keeps the 24-bit RGB bytes from ear
 | --- | --- | --- |
 | `-o` | Output PostScript path | required |
 
-`ps` opens a PDF and re-emits each page's path subset as one date-free PostScript program. The header is `%!PS-Adobe-3.0` with a fixed 612 by 792 box. Marks are `setrgbcolor` or `setgray`, `setlinewidth`, `m`/`l`, and `S`/`f`/`f*` in 72 dpi points, and a prolog defines the short names. Text and images are not emitted: a page with `Tj` exits 1 with `Error: /undefined in Tj`. The file is written at mode `0o600`, and bytes are stable across two runs. `documentation/devices.md` has the shape.
+`ps` opens a PDF and re-emits each page's path subset as one date-free PostScript program. The header is `%!PS-Adobe-3.0` and the `%%BoundingBox` is the first page's real `/MediaBox` in points, so an A4 document gets an A4 box. Marks are `setrgbcolor` or `setgray`, `setlinewidth`, `m`/`l`, and `S`/`f`/`f*` in 72 dpi points, and a prolog defines the short names. Text and images are not emitted: a page with `Tj` exits 1 with `Error: /undefined in Tj`. The file is written at mode `0o600`, and bytes are stable across two runs. `documentation/devices.md` has the shape.
 
 `text` opens a PDF and prints the extracted text of the selected pages to stdout. Lines run top to bottom and left to right, each line ends with CRLF, and a font with neither `/ToUnicode` nor a named encoding falls back to the code point. The command accepts `-pages` and no other option. Extraction is compared as text and geometry, not as raster bytes: text pixels never byte-match Ghostscript, because hinting and antialiasing differ. `documentation/devices.md` has the layout.
 
-`validate` takes one input and writes errors to stderr. It has no output file. `validate` does not run the PDF/UA-2 preflight yet. That preflight is `internal/pdfa.PreflightUA2`, it runs only for a UA-2 request, and its rules are in `documentation/devices.md`. The scope is preserve and preflight, and the claim is preflight only.
+`info` opens a PDF and prints a read-only summary to stdout. It writes no file and takes no option. The lines are:
+
+```
+PDF version: 1.4
+Pages: 2
+Page 1: 612 x 792
+Page 2: 100 x 50
+Tagged: false
+Fonts:
+  Helvetica embedded=false
+Images: 1
+```
+
+`PDF version` is the header version. `Pages` is the page tree leaf count, and each `Page` line is the resolved `/MediaBox` width and height in points, inherited from the nearest `/Pages` ancestor and defaulting to 612 by 792 when the tree has none. `Tagged` is the reader tagged flag. The `Fonts:` block lists every in-use `/Type /Font` dictionary except CIDFont descendants, sorted by name, and `embedded=true` means a `/FontFile`, `/FontFile2`, or `/FontFile3` program is in the file. A file with no fonts prints `Fonts: none`. `Images` counts the in-use image XObjects. An encrypted trailer exits 1 with `Error: /invalidaccess in Encrypt`, because the reader refuses it. A missing input or a bad flag exits 2, an unreadable path exits 3, and a malformed document exits 1.
+
+`validate` takes one input and writes errors to stderr. It has no option and no output file, so any flag on it exits 2. For a tagged input, one whose catalog carries `/StructTreeRoot` or a true `/MarkInfo /Marked`, `validate` also runs the PDF/UA-2 machine checks after the pages paint, open decision 11. A tree the rules refuse exits 1 with `Error: /ua2-<rule> in PDFUA`; an untagged PDF is not a UA-2 request. The rules are in `documentation/devices.md`, and the check is preflight only, never certification.
 
 `compare bytes` takes two paths and no device flags. `compare raster` rasterizes the selected pages of both inputs with the same options and calls `CompareRaster` on each page pair. A `.pdf` input opens with `OpenPDF` and paints each selected page with `RasterizePage`; any other input uses `RunPostScript`. Different selected page counts print `mismatch length` and exit 1. It does not hash the encoded files.
 
@@ -136,7 +169,7 @@ The formula and both worked examples are in `documentation/devices.md`. The chan
 | Code | When |
 | --- | --- |
 | 0 | Success. `compare` exits 0 when `Equal` is true. |
-| 1 | `JobError`, `ErrNotImplemented`, or a compare mismatch. |
+| 1 | `JobError` or a compare mismatch. |
 | 2 | Usage. Missing file, unknown flag, unknown command, missing `-o`. |
 | 3 | A read or write failed before the interpreter ran. |
 
@@ -154,14 +187,4 @@ or
 mismatch pixel 120
 ```
 
-or
-
-```
-mismatch width
-```
-
-stderr stays empty on a clean mismatch so scripts can diff stdout. Interpreter errors go to stderr and exit 1.
-
-## Phase 02 behavior
-
-`version`, usage errors, and `compare bytes` work. `run`, `raster`, `rewrite`, `validate`, and `compare raster` exit 1 with `spectreps: not implemented` on stderr until their phases land. They still parse flags, so a missing `-o` on `raster` is exit 2 even in phase 02.
+`compare bytes` prints `mismatch byte N`, or `mismatch length N` when one file is a prefix of the other. `compare raster` prints `mismatch pixel N`, or `mismatch length` when the selected page counts differ. Both inputs get the same `RunOptions` value and the same `-pages` selection, so their page sizes always agree and a width or height mismatch cannot reach the CLI. `CompareRaster` can still report `width` or `height` to a library caller. stderr stays empty on a clean mismatch so scripts can diff stdout. Interpreter errors go to stderr and exit 1.

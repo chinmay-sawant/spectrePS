@@ -1,0 +1,254 @@
+# sampledata/validation/traceability.tsv - validation traceability index.
+# Columns: section, case, test, status. Tabs separate the fields.
+# status live: the test column names a go test function on this tree.
+# status pending:<scope>: another agent is writing that test; reported, not failed.
+# status proof: the proof is a command outside go test (make target, script, generator, grep).
+# status unowned: no test and no pending owner; the integrator routes the row.
+# Sections plan-N carry the rows of plans/v0.0.4/5-validation.md phase N.
+# Sections test.md-<heading> carry the cases of documentation/test.md.
+section	case	test	status
+plan-1-corpus	1.1 folder layout, README, and manifest rows	TestValidationManifest	live
+plan-1-corpus	1.2 deterministic fetcher and no-write mismatch	go run internal/validation/gen.go	proof
+plan-1-corpus	1.3 manifest verifier	TestValidationManifest	live
+plan-1-corpus	1.3 manifest parser	TestValidationManifestParse	live
+plan-1-corpus	1.3 manifest rejects unlisted file	TestValidationManifestRejectsUnlisted	live
+plan-1-corpus	1.4 license gate	TestValidationLicenses	live
+plan-1-corpus	1.5 folder structure, tiers, and gitignore	grep sampledata/validation	proof
+plan-1-corpus	1.6 closure	make lint && make test	proof
+plan-2-library-cli	2.1 two instances	TestValidationMultiInstance	live
+plan-2-library-cli	2.2 canceled jobs	TestValidationCanceledJobs	live
+plan-2-library-cli	2.2 nil context jobs	TestValidationNilContextJobs	live
+plan-2-library-cli	2.3 nil document surface	TestValidationNilDocument	live
+plan-2-library-cli	2.4 exit codes 2 and 3	TestValidationExitCodes	live
+plan-2-library-cli	2.5 flag surface	TestValidationFlagSurface	live
+plan-2-library-cli	2.6 no process and import boundary	TestValidationNoProcess	live
+plan-2-library-cli	2.7 ErrNotImplemented reconciliation	grep ErrNotImplemented	proof
+plan-2-library-cli	2.8 closure	make lint && make test	proof
+plan-3-postscript-raster	3.1 postscript corpus rows and CUPS notice	TestValidationManifest	live
+plan-3-postscript-raster	3.2 stack operators	TestValidationStackExtra	live
+plan-3-postscript-raster	3.2 math operators	TestValidationMathOps	live
+plan-3-postscript-raster	3.2 compare and logic operators	TestValidationCompareLogic	live
+plan-3-postscript-raster	3.3 type operators	TestValidationTypeOps	live
+plan-3-postscript-raster	3.4 control flow	TestValidationControlFlow	live
+plan-3-postscript-raster	3.5 PostScript graphics	TestValidationPSSGraphics	live
+plan-3-postscript-raster	3.5 pixmap stroke and fill	TestValidationPixmapStrokeFill	live
+plan-3-postscript-raster	3.5 draw image edges	TestValidationDrawImageEdges	live
+plan-3-postscript-raster	3.6 raster geometry	TestValidationRasterGeometry	live
+plan-3-postscript-raster	3.7 pixel cap boundary	TestValidationPixelCap	live
+plan-3-postscript-raster	3.8 corpus PostScript run	TestValidationCorpusPostScript	live
+plan-3-postscript-raster	3.9 closure	make lint && make test	proof
+plan-4-pdf-read	4.1 corpus expect classes	TestValidationManifest	live
+plan-4-pdf-read	4.2 open xref and object streams	TestValidationOpenStructs	live
+plan-4-pdf-read	4.3 page tree errors	TestValidationPageTree	live
+plan-4-pdf-read	4.4 unsupported operator refusals	TestValidationUnsupportedOps	live
+plan-4-pdf-read	4.5 Do mask and decode policy	TestValidationDoPolicy	live
+plan-4-pdf-read	4.6 corpus PDF run	TestValidationCorpusPDF	live
+plan-4-pdf-read	4.7 closure	make lint && make test	proof
+plan-5-decoders	5.1 image expect classes	TestValidationManifest	live
+plan-5-decoders	5.2 image error shapes	TestValidationImageErrorShapes	live
+plan-5-decoders	5.3 filter chain	TestValidationFilterChain	live
+plan-5-decoders	5.4 CCITT parameter errors	TestValidationCCITTParams	live
+plan-5-decoders	5.5 corpus image run	TestValidationCorpusImages	live
+plan-5-decoders	5.6 closure	make lint && make test	proof
+plan-6-text-fonts	6.1 corpus rows and embedded font review	TestValidationLicenses	live
+plan-6-text-fonts	6.2 extraction cases	TestValidationExtractCases	live
+plan-6-text-fonts	6.3 FontFile3 OpenType mapping	TestValidationFontFile3	live
+plan-6-text-fonts	6.3 no-outline policy	TestValidationNoOutlinePolicy	live
+plan-6-text-fonts	6.4 text operator errors	TestValidationTextOpErrors	live
+plan-6-text-fonts	6.5 corpus text run	TestValidationCorpusText	live
+plan-6-text-fonts	6.6 closure	make lint && make test	proof
+plan-7-measure-compare	7.1 measure edges	TestValidationMeasureEdges	live
+plan-7-measure-compare	7.2 compare edges	TestValidationCompareEdges	live
+plan-7-measure-compare	7.2 compare CLI text	TestValidationCompareCLIText	live
+plan-7-measure-compare	7.3 corpus measure	TestValidationCorpusMeasure	live
+plan-7-measure-compare	7.4 closure	make lint && make test	proof
+plan-8-writers	8.1 corpus rewrite classes	TestValidationManifest	live
+plan-8-writers	8.2 rewrite tags	TestValidationRewriteTags	live
+plan-8-writers	8.2 rewrite containers	TestValidationRewriteContainers	live
+plan-8-writers	8.3 rewrite PDF/A levels	TestValidationRewritePDFA	live
+plan-8-writers	8.4 level override errors	TestValidationLevelOverridesErrors	live
+plan-8-writers	8.5 PSOut image refusal	TestValidationPSOutImage	live
+plan-8-writers	8.5 WritePostScript multi-page	TestValidationWritePostScript	live
+plan-8-writers	8.6 image PDF contract	TestValidationImagePDFContract	live
+plan-8-writers	8.7 corpus rewrite run	TestValidationCorpusRewrite	live
+plan-8-writers	8.8 closure	make lint && make test	proof
+plan-9-pdfa-ua2	9.1 corpus rows and CC BY attribution	TestValidationLicenses	live
+plan-9-pdfa-ua2	9.2 PDF/A rules through the API	TestValidationPDFARules	live
+plan-9-pdfa-ua2	9.3 PDF/A CLI levels	TestValidationPDFACLI	live
+plan-9-pdfa-ua2	9.4 UA-2 edges	TestValidationUA2Edges	live
+plan-9-pdfa-ua2	9.4 UA-2 preserve	TestValidationUA2Preserve	live
+plan-9-pdfa-ua2	9.5 validate runs the UA-2 checks (decision taken)	TestValidateUA2	live
+plan-9-pdfa-ua2	9.6 corpus PDF/A and tagged run	TestValidationCorpusPDFA	live
+plan-9-pdfa-ua2	9.7 closure	make lint && make test	proof
+plan-10-gs-argv	10.1 corpus device rows	TestValidationManifest	live
+plan-10-gs-argv	10.2 gs edges	TestValidationGSEdges	live
+plan-10-gs-argv	10.3 gs output rules	TestValidationGSOutputRules	live
+plan-10-gs-argv	10.4 gs parameter corners	TestValidationGSParamCorners	live
+plan-10-gs-argv	10.5 gs rejected devices	TestValidationGSRejectedDevices	live
+plan-10-gs-argv	10.6 corpus gs run	TestValidationCorpusGS	live
+plan-10-gs-argv	10.7 closure	make lint && make test	proof
+plan-11-reference-proofs	11.1 reference proofs doc	test -f documentation/reference-proofs.md	proof
+plan-11-reference-proofs	11.2 refs corpus rows	TestValidationManifest	live
+plan-11-reference-proofs	11.3 gs reference check	make refs-gs-check	proof
+plan-11-reference-proofs	11.4 rewrite cross-check	make refs-gs-check	proof
+plan-11-reference-proofs	11.5 pdfa-check and pdfua2-check	make pdfa-check && make pdfua2-check	proof
+plan-11-reference-proofs	11.6 closure, no gs pixels in the corpus	find sampledata/validation -name '*.ppm'	proof
+plan-12-closure	12.1 findings destinations	grep plans/v0.0.4/5-validation.md	proof
+plan-12-closure	12.2 traceability script	scripts/check-traceability.sh	proof
+plan-12-closure	12.3 test.md and features.md updates	grep TestValidation documentation/test.md	proof
+plan-12-closure	12.4 closure	make lint && make test	proof
+test.md-library-cli	new-close lifecycle	TestNewClose	live
+test.md-library-cli	two instances	TestValidationMultiInstance	live
+test.md-library-cli	version output	TestVersion	live
+test.md-library-cli	import boundary	TestValidationNoProcess	live
+test.md-library-cli	usage errors exit 2	TestUsage	live
+test.md-library-cli	unreadable path exits 3	TestPDFInfoCLI	live
+test.md-library-cli	raster without -o exits 2	TestRaster	live
+test.md-library-cli	rewrite without -o exits 2	TestRewrite	live
+test.md-library-cli	canceled context jobs	TestValidationCanceledJobs	live
+test.md-library-cli	nil context panic	TestValidationNilContextJobs	live
+test.md-postscript	scanner token forms	TestScan	live
+test.md-postscript	brace nesting	TestProcedure	live
+test.md-postscript	procedure execution	TestExecRule	live
+test.md-postscript	late lookup	TestLateLookup	live
+test.md-postscript	div, overflow, and copy	TestMath	live
+test.md-postscript	eq on int and real	TestValidationCompareLogic	live
+test.md-postscript	dict forall order	TestDict	live
+test.md-postscript	def systemdict and dict errors	TestDict	live
+test.md-postscript	exit outside a loop	TestControl	live
+test.md-postscript	save is undefined	TestBanned	live
+test.md-postscript	stack and nesting caps	TestLimits	live
+test.md-postscript	array and string size caps	TestAllocationCaps	live
+test.md-postscript	runaway loop stops on the step cap	TestRunawayLoopStops	live
+test.md-postscript	showpage retained byte budget	TestShowPageBudgetStops	live
+test.md-postscript	two interpreters share no state	TestInterpretersAreIndependent	live
+test.md-postscript	where reads the dict stack	TestWhereReadsTheDictStack	live
+test.md-postscript	exit is not a reportable error	TestExitIsNotAPostScriptError	live
+test.md-postscript	for zero increment	TestControl	live
+test.md-raster	default geometry	TestRunPostScript	live
+test.md-raster	bottom row and y flip	TestPaint	live
+test.md-raster	stroke, fill, and eofill	TestValidationPSSGraphics	live
+test.md-raster	showpage appends	TestPaint	live
+test.md-raster	blank page without showpage	TestPaint	live
+test.md-raster	matrices and gsave	TestCTM	live
+test.md-raster	pixel cap boundary	TestValidationPixelCap	live
+test.md-raster	ppm header and body	TestRaster	live
+test.md-raster	png decodes	TestRasterFiles	live
+test.md-raster	jpeg soi and decode	TestRasterJPEG	live
+test.md-raster	jpegq clamp	TestRasterJPEG	live
+test.md-raster	pdf every page and percent d	TestRasterPDFPages	live
+test.md-raster	pages grammar	TestPageSelection	live
+test.md-raster	pages filters after RunPostScript	TestPageSelection	live
+test.md-raster	tiff decodes	TestRasterTIFF	live
+test.md-raster	tiffcompress none and deflate	TestRasterTIFF	live
+test.md-raster	two pages without percent d exit 2	TestRasterPDFPages	live
+test.md-alpha-blend	alpha marker seam	TestPixmapAlphaBlend	live
+test.md-alpha-blend	twelve blend modes	TestPixmapBlendMode	live
+test.md-alpha-blend	blend mode names	TestPaintBlendModeNames	live
+test.md-alpha-blend	gs alpha, blend, and smask	TestPaintExtGStateAlpha	live
+test.md-alpha-blend	smask alpha and luminosity form	TestPaintSoftMask	live
+test.md-alpha-blend	transparency group	TestPaintGroupTransparency	live
+test.md-alpha-blend	recorder refuses transparency	TestEmitGSUnchanged	live
+test.md-box-ink	measure box union	TestMeasureBox	live
+test.md-box-ink	measure box blank	TestMeasureBox	live
+test.md-box-ink	measure ink fractions	TestMeasureInk	live
+test.md-box-ink	bbox output	TestBBox	live
+test.md-box-ink	inkcov output	TestInkcov	live
+test.md-box-ink	bbox and inkcov all pages and missing input	TestBBox	live
+test.md-box-ink	pages before printing	TestPageSelection	live
+test.md-pixel-compare	compare raster equal	TestCompareRaster	live
+test.md-pixel-compare	compare raster width and height	TestValidationCompareEdges	live
+test.md-pixel-compare	compare raster pixel offset	TestCompareRaster	live
+test.md-pixel-compare	compare raster CLI	TestCompareRasterCLI	live
+test.md-pixel-compare	compare does not start gs	TestValidationNoProcess	live
+test.md-pdf-open	classic xref opens	TestClassicXref	live
+test.md-pdf-open	xref stream and object stream	TestXRefStream	live
+test.md-pdf-open	content operators paint	TestPDFPathMatchesPS	live
+test.md-pdf-open	do image resolve	TestPaintDoImageRGB	live
+test.md-pdf-open	smask and mask decode	TestPaintSMask	live
+test.md-pdf-open	form xobject	TestPaintFormXObject	live
+test.md-pdf-open	w and w-star clip	TestPaintClip	live
+test.md-pdf-open	b and b-star fill stroke	TestPaintFillStroke	live
+test.md-pdf-open	gs extgstate	TestPaintExtGStateResource	live
+test.md-pdf-open	cmyk and color ops	TestCMYKPaint	live
+test.md-pdf-open	separation and devicen raster	TestSeparationRaster	live
+test.md-pdf-open	line params noop	TestPaintLineParams	live
+test.md-pdf-open	bx and ex	TestPaintCompatSection	live
+test.md-pdf-open	marked content parse	TestMarkedContentRead	live
+test.md-pdf-open	marked content events	TestMarkedContentEvents	live
+test.md-pdf-open	ocg default configuration	TestOCGVisibility	live
+test.md-pdf-open	image colorspace resolve	TestColorSpaceImageCMYK	live
+test.md-pdf-open	tint transform	TestTintTransformCalculator	live
+test.md-pdf-open	dct source sample count	TestColorSpaceImageCMYKDCTPreview	live
+test.md-pdf-open	unsupported colorspace op	TestColorSpaceImageOpName	live
+test.md-pdf-open	encrypted, unknown filter, truncated	TestPDFReject	live
+test.md-pdf-open	lzwdecode	TestLZWDecode	live
+test.md-pdf-open	ascii85decode	TestASCII85Decode	live
+test.md-pdf-open	asciihexdecode	TestASCIIHexDecode	live
+test.md-pdf-open	runlengthdecode	TestRunLengthDecode	live
+test.md-pdf-open	predictors	TestFlatePredictor	live
+test.md-pdf-open	filter chain	TestFilterChain	live
+test.md-pdf-open	level 2 lzw re-encode	TestLevelLZWImage	live
+test.md-pdf-open	rasterize page rangecheck	TestRasterizePage	live
+test.md-pdf-open	raster pdf ppm	TestRasterPDF	live
+test.md-pdf-info	info output	TestPDFInfoCLI	live
+test.md-pdf-info	info font block	TestPageFontDict	live
+test.md-pdf-info	info encrypt and mediabox errors	TestPDFInfo	live
+test.md-pdf-info	info exit codes	TestPDFInfoCLI	live
+test.md-text-extraction	text state ops	TestTextState	live
+test.md-text-extraction	simple font metrics	TestSimpleFont	live
+test.md-text-extraction	fontfile2, fontfile3, and type0	TestTrueTypeGlyph	live
+test.md-text-extraction	tj, tj, quote, show, and sink	TestTextSink	live
+test.md-text-extraction	standard 14 paint invalidfont	TestStandard14Paint	live
+test.md-text-extraction	extracttext lines and crlf	TestExtractTextGolden	live
+test.md-text-extraction	text command	TestTextCommand	live
+test.md-text-extraction	ps show standard 14	TestShowPS	live
+test.md-pdf-rewrite	rewrite roundtrip pixels	TestRewritePixels	live
+test.md-pdf-rewrite	default rewrite options	TestDefaultRewriteOptions	live
+test.md-pdf-rewrite	level 0 and levels 1 to 5	TestRewriteLevels	live
+test.md-pdf-rewrite	containers and PackObjects	TestWritePackedObjects	live
+test.md-pdf-rewrite	level image rules	TestLevelImagePolicy	live
+test.md-pdf-rewrite	ccitt levels	TestLevelCCITTImage	live
+test.md-pdf-rewrite	two calls equal	TestRewriteStable	live
+test.md-pdf-rewrite	bytes not compared to gs	make test	proof
+test.md-pdf-rewrite	rewrite CLI flags	TestRewriteCLI	live
+test.md-pdf-rewrite	compress samples	TestRewriteSamples	live
+test.md-pdfa-preflight	pdfa header	TestPDFA4Header	live
+test.md-pdfa-preflight	copyoptions append and catalog	TestCopyAppend	live
+test.md-pdfa-preflight	xmp packet	TestXMPPacket	live
+test.md-pdfa-preflight	icc profile tags	TestICCProfile	live
+test.md-pdfa-preflight	output intent	TestOutputIntent	live
+test.md-pdfa-preflight	nine refusals through the API	TestValidationPDFARules	live
+test.md-pdfa-preflight	separation and devicen refusals	TestPreflightSeparation	live
+test.md-pdfa-preflight	embedded files and 4f	TestPreflightEmbeddedFiles	live
+test.md-pdfa-preflight	rewrite pdfa roundtrip	TestRewritePDFA4Stable	live
+test.md-pdfa-preflight	rewrite pdfa cli	TestRewritePDFA4CLI	live
+test.md-pdfa-preflight	pdfa-check target	make pdfa-check	proof
+test.md-pdfa-preflight	pdfua2-check target	make pdfua2-check	proof
+test.md-bitmap-pdf	imagepdf xobject fields	TestImagePDF	live
+test.md-bitmap-pdf	imagepdfcolor colorspaces	TestImageColorSpaces	live
+test.md-bitmap-pdf	gray luma	TestImageColorSpaces	live
+test.md-bitmap-pdf	cmyk conversion	TestImageColorSpaces	live
+test.md-bitmap-pdf	pdfimage colorspace flag	TestPDFImageColor	live
+test.md-bitmap-pdf	mediabox and dpi	TestImagePDF	live
+test.md-bitmap-pdf	content stream and roundtrip	TestRasterizeOwnImagePDF	live
+test.md-bitmap-pdf	imagepdf stable	TestImagePDFStable	live
+test.md-bitmap-pdf	pdfimage cli input and output	TestPDFImage	live
+test.md-bitmap-pdf	pdfimage is not pdfwrite	TestPDFImage	live
+test.md-postscript-output	bounding box is the media box	TestWritePostScript	live
+test.md-postscript-output	psout write option boxes	TestWriteOptionsBox	live
+test.md-postscript-output	postscript round trip	TestPostScriptRoundTrip	live
+test.md-postscript-output	write post script corpus	TestValidationWritePostScript	live
+test.md-validate	validate ps ok	TestValidatePS	live
+test.md-validate	validate stackunderflow	TestValidatePS	live
+test.md-validate	validate pdf refusals	TestValidatePDF	live
+test.md-validate	validate writes nothing	TestValidate	live
+test.md-file-access-ban	banned operators	TestBanned	live
+test.md-file-access-ban	validate deletefile	TestValidateBanned	live
+test.md-file-access-ban	percent pipe never runs	TestValidateBanned	live
+test.md-file-access-ban	no network connection	TestValidationNoProcess	live
+test.md-file-byte-compare	compare files equal	TestCompareFiles	live
+test.md-file-byte-compare	compare files first byte	TestCompareFiles	live
+test.md-file-byte-compare	compare files length	TestCompareFiles	live
+test.md-file-byte-compare	compare bytes CLI	TestCompareBytes	live
+test.md-benchmarks	benchmarks do not gate make test	make test	proof

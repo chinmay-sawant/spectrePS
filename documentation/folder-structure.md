@@ -22,19 +22,27 @@ internal/pdfa/
 internal/pdfout/
 internal/ps/
 internal/psout/
+internal/tag/
+internal/truetypesynth/
+internal/type1synth/
+internal/validation/
 spectreps/
 sampledata/
 documentation/
 plans/v0.0.1/
 plans/v0.0.2/
 plans/v0.0.3/
+plans/v0.0.4/
+plans/PR/
 skills/phase-wise-checklist/SKILLS.md
 skills/unslop/SKILL.md
 skills/PR/
 scripts/
 ```
 
-`documentation/` is the prose folder for this repository. `plans/v0.0.1/`, `plans/v0.0.2/`, and `plans/v0.0.3/` are the execution ledgers. `sampledata/` holds the PDFs the compression plan measures. `skills/` holds agent instructions that already live in this repo.
+`verapdf/` and `bin/` also appear on a working machine. Both are gitignored: `bin/` is the built command from `make build`, and `verapdf/` is a local veraPDF install that only `make pdfa-check` and `make pdfua2-check` use.
+
+`documentation/` is the prose folder for this repository. `plans/v0.0.1/` through `plans/v0.0.4/` are the execution ledgers, one folder per phase, and `plans/PR/` holds the pull request text. `plans/v0.0.1/10-deferred.md` is the one list of work that still waits. `sampledata/` holds the fixtures, the scenario PDFs, and the validation corpus. `skills/` holds agent instructions that already live in this repo.
 
 ## Public library
 
@@ -47,19 +55,19 @@ spectreps/instance.go
 spectreps/options.go
 spectreps/postscript.go
 spectreps/pdf.go
+spectreps/pdfa.go
 spectreps/raster.go
 spectreps/image.go
 spectreps/measure.go
 spectreps/compare.go
-spectreps/api_test.go
-spectreps/compare_test.go
-spectreps/image_test.go
-spectreps/measure_test.go
-spectreps/pdf_test.go
-spectreps/raster_test.go
+spectreps/extract.go
+spectreps/info.go
+spectreps/subset.go
+spectreps/tag.go
+spectreps/validate.go
 ```
 
-The test files use `package spectreps_test`. Another module imports `github.com/chinmay-sawant/spectrePS/spectreps` and nothing under `internal/`.
+Those are the 16 implementation files. The 22 `*_test.go` files beside them all use `package spectreps_test`. Another module imports `github.com/chinmay-sawant/spectrePS/spectreps` and nothing under `internal/`.
 
 ## Command
 
@@ -67,11 +75,13 @@ The test files use `package spectreps_test`. Another module imports `github.com/
 
 ## Private code
 
-`internal/engine` holds the session and file byte compare. `internal/ps` is the PostScript interpreter, `internal/graphics` the device, matrix, and pixmap layer, `internal/pdf` the PDF reader, `internal/pdfout` the PDF writers, `internal/pdfa` the PDF/A and PDF/UA-2 metadata and preflight, `internal/font` the font metrics, encodings, and glyph-name tables, `internal/psout` the PDF-to-PostScript writer, and `internal/cli` the command layer. Add a directory when its first `.go` file or fixture is real. Do not add `pkg/`, `api/`, `util/`, or empty placeholder packages.
+`internal/engine` holds the session and file byte compare. `internal/ps` is the PostScript interpreter, `internal/graphics` the device, matrix, and pixmap layer, `internal/pdf` the PDF reader, `internal/pdfout` the PDF writers, `internal/pdfa` the PDF/A and PDF/UA-2 metadata and preflight, `internal/tag` the structure tree recorder and tagged write, `internal/font` the font metrics, encodings, glyph-name tables, the Type 1 program decoder, and TrueType subsetting, `internal/type1synth` and `internal/truetypesynth` the synthetic font programs the tests embed, `internal/psout` the PDF-to-PostScript writer, `internal/validation` the validation corpus manifest reader and checker, and `internal/cli` the command layer. Add a directory when its first `.go` file or fixture is real. Do not add `pkg/`, `api/`, `util/`, or empty placeholder packages.
 
 `sampledata/` holds the fixtures and samples. Scenario folders (`compress/`, `pdfa/`, `pdfua2/`) hold the PDFs the plans measure. `sampledata/fixtures/` holds the unit-test inputs and expected PPM bytes. Golden files are written by the test that first locks a case, then checked in. They are not copied from Ghostscript output. Matching Ghostscript byte for byte is not a success criterion.
 
-Package `spectreps` calls `internal/engine`, `internal/ps`, `internal/graphics`, `internal/pdf`, and `internal/pdfout`. `internal/cli` stays on the public library, which is the same boundary an external program has.
+`sampledata/validation/` is the validation corpus. One subfolder per feature area holds real PDF and PostScript files, and every file has a row in `sampledata/validation/manifest.tsv` that records its pinned source, license, SHA-256, feature, and expected verdict. Files at or under 1 MiB are committed. Larger files and whole suites live under the gitignored `sampledata/validation/external/` and are fetched by `go run internal/validation/gen.go -fetch-external`. Every corpus test is named `TestValidation<Area>`, so `go test -count=1 ./... -run TestValidation` runs the group.
+
+Package `spectreps` calls `internal/engine`, `internal/ps`, `internal/graphics`, `internal/pdf`, `internal/pdfout`, `internal/psout`, `internal/pdfa`, and `internal/tag`. It does not call `internal/cli`, `internal/validation`, `internal/font`, `internal/type1synth`, or `internal/truetypesynth`. `internal/cli` stays on the public library, which is the same boundary an external program has.
 
 ## Ownership
 
@@ -79,7 +89,7 @@ Package `spectreps` calls `internal/engine`, `internal/ps`, `internal/graphics`,
 | --- | --- |
 | `cmd/spectreps` | `github.com/chinmay-sawant/spectrePS/internal/cli` |
 | `internal/cli` | `github.com/chinmay-sawant/spectrePS/spectreps` |
-| `package spectreps` | `internal/engine`, and later the interpreter packages under `internal/` |
+| `package spectreps` | `internal/engine`, `internal/ps`, `internal/graphics`, `internal/pdf`, `internal/pdfout`, `internal/psout`, `internal/pdfa`, `internal/tag` |
 | `package spectreps_test` | the public package only |
 | another module | the public package only |
 

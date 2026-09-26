@@ -66,6 +66,8 @@ func dispatch(args []string, stdout, stderr io.Writer) int {
 		return cmdValidate(args[1:], stderr)
 	case "text":
 		return cmdText(args[1:], stdout, stderr)
+	case "info":
+		return cmdInfo(args[1:], stdout, stderr)
 	case "compare":
 		return cmdCompare(args[1:], stdout, stderr)
 	case "gs":
@@ -84,10 +86,12 @@ spectreps pdfimage [-w points] [-h points] [-r dpi] [-colorspace rgb|gray|cmyk] 
 spectreps bbox [-w points] [-h points] [-r dpi] [-pages range] file
 spectreps inkcov [-w points] [-h points] [-r dpi] [-pages range] file
 spectreps ink_cov [-w points] [-h points] [-r dpi] [-pages range] file
-spectreps rewrite [-compress] [-level N] [-pdfa 4|4f] -o path file.pdf
+spectreps rewrite [-compress] [-level N] [-pdfa 4|4f] [-subset-fonts]
+                 [-tags [-claim] [-tag-title title] [-tag-lang lang]] -o path file.pdf
 spectreps ps -o path file.pdf
 spectreps validate file
 spectreps text [-pages range] file.pdf
+spectreps info file.pdf
 spectreps compare bytes fileA fileB
 spectreps compare raster [-w points] [-h points] [-r dpi] [-pages range] [-o path] fileA fileB
 spectreps gs [-sDEVICE=name] [-sOutputFile=path] [switches] file
@@ -319,9 +323,20 @@ func cmdRewrite(args []string, stderr io.Writer) int {
 	compress := set.Bool("compress", true, "flate content streams at level 0")
 	level := set.Int("level", 0, "compression level, 0 through 5")
 	pdfaFlag := set.String("pdfa", "", "PDF/A profile, 4 or 4f")
+	subset := set.Bool("subset-fonts", false, "subset embedded fonts on levels 1 through 5")
+	// Tag generation, v0.0.4 phase 4.2. The four flags below are the tag
+	// switch and the claim opt-in.
+	tags := set.Bool("tags", false, "generate a PDF/UA-2 structure tree")
+	claim := set.Bool("claim", false, "write the pdfuaid claim when the tagged write passes preflight")
+	tagTitle := set.String("tag-title", "", "dc:title for the tagged write")
+	tagLang := set.String("tag-lang", "", "catalog /Lang for the tagged write")
 	rest, code := parseSet(set, args)
 	if code != 0 {
 		return code
+	}
+	if !tagFlagsOK(*tags, *claim, *tagTitle, *tagLang) {
+		fmt.Fprintln(stderr, "spectreps: -claim, -tag-title, and -tag-lang need -tags")
+		return exitUsage
 	}
 	if *level < 0 || *level > maxRewriteLevel {
 		fmt.Fprintf(stderr, "spectreps: -level wants 0 through 5, got %d\n", *level)
@@ -336,7 +351,20 @@ func cmdRewrite(args []string, stderr io.Writer) int {
 		usage(stderr)
 		return exitUsage
 	}
-	return rewriteToFile(stderr, rest[0], *outPath, rewriteOptions(*level, *compress, mode))
+	opt := rewriteOptions(*level, *compress, mode, *subset)
+	opt.Tag = *tags
+	opt.Claim = *claim
+	opt.Title = *tagTitle
+	opt.Lang = *tagLang
+	return rewriteToFile(stderr, rest[0], *outPath, opt)
+}
+
+// tagFlagsOK reports whether the tag options came with -tags.
+func tagFlagsOK(tags, claim bool, title, lang string) bool {
+	if tags {
+		return true
+	}
+	return !claim && title == "" && lang == ""
 }
 
 // parsePDFAMode maps the -pdfa flag. An empty value leaves the claim off.
@@ -355,12 +383,24 @@ func parsePDFAMode(value string) (spectreps.PDFAMode, bool) {
 
 // rewriteOptions maps the flags. An explicit level above 0 wins. Level 0 keeps
 // the -compress switch as the Flate option, and a PDF/A mode switches the
-// writer.
-func rewriteOptions(level int, compress bool, mode spectreps.PDFAMode) spectreps.RewriteOptions {
+// writer. -subset-fonts passes through; level 0 ignores it and still refuses
+// text.
+func rewriteOptions(
+	level int,
+	compress bool,
+	mode spectreps.PDFAMode,
+	subset bool,
+) spectreps.RewriteOptions {
 	if level > 0 {
-		return spectreps.RewriteOptions{CompressStreams: true, Level: level, PDFA: mode}
+		return spectreps.RewriteOptions{
+			CompressStreams: true, Level: level, PDFA: mode, SubsetFonts: subset,
+			Tag: false, Claim: false, Title: "", Lang: "",
+		}
 	}
-	return spectreps.RewriteOptions{CompressStreams: compress, Level: 0, PDFA: mode}
+	return spectreps.RewriteOptions{
+		CompressStreams: compress, Level: 0, PDFA: mode, SubsetFonts: subset,
+		Tag: false, Claim: false, Title: "", Lang: "",
+	}
 }
 
 func rewriteToFile(stderr io.Writer, inPath, outPath string, opt spectreps.RewriteOptions) int {
@@ -478,6 +518,11 @@ func validatePDF(ctx context.Context, in *spectreps.Instance, src []byte) error 
 		if _, err = in.RasterizePage(ctx, doc, page, opt); err != nil {
 			return err
 		}
+	}
+	// A tagged input claims a structure tree, so validate checks it against
+	// the PDF/UA-2 machine rules too, open decision 11.
+	if doc.Tagged() {
+		return in.PreflightUA2(ctx, doc)
 	}
 	return nil
 }

@@ -1,13 +1,15 @@
 package spectreps
 
 import (
+	"errors"
 	"fmt"
-
-	"github.com/chinmay-sawant/spectrePS/internal/engine"
 )
 
-// ErrNotImplemented is returned by interpreter methods until their phase lands.
-var ErrNotImplemented = engine.ErrNotImplemented
+// ErrNotImplemented is the legacy job sentinel. No method returns it: every
+// job either runs or returns a JobError, and the CLI maps a JobError to exit
+// 1, never this value. It stays exported for callers that still compare
+// against it.
+var ErrNotImplemented = errors.New("spectreps: not implemented")
 
 // JobError is one interpreter error.
 // Op is the operator name without a slash. Msg is the error name without a slash.

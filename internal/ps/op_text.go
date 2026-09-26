@@ -10,10 +10,11 @@ const (
 	fontNameKey = "FontName"
 	fontSizeKey = "FontSize"
 
-	opFindFont  = "findfont"
-	opScaleFont = "scalefont"
-	opSetFont   = "setfont"
-	opShow      = "show"
+	opFindFont    = "findfont"
+	opScaleFont   = "scalefont"
+	opSetFont     = "setfont"
+	opShow        = "show"
+	opStringWidth = "stringwidth"
 
 	errInvalidFont = "invalidfont"
 	baseFontSize   = 1.0
@@ -28,6 +29,7 @@ func registerTextOps(interp *Interp) {
 	interp.Install(opScaleFont, opScaleFontRun)
 	interp.Install(opSetFont, opSetFontRun)
 	interp.Install(opShow, opShowRun)
+	interp.Install(opStringWidth, opStringWidthRun)
 }
 
 // opFindFontRun looks up one of the standard 14 names. Any other name is
@@ -84,7 +86,7 @@ func opSetFontRun(ctx context.Context, interp *Interp) error {
 			size = val
 		}
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	state.fontName = fontNameOf(dict)
 	state.fontSize = size
 	return nil
@@ -104,7 +106,7 @@ func opShowRun(ctx context.Context, interp *Interp) error {
 	if obj.Kind != KindString || obj.Str == nil {
 		return errOf(errTypeCheck, opShow)
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	metrics, ok := font.Standard14(state.fontName)
 	if !ok {
 		return errOf(errInvalidFont, opShow)
@@ -130,6 +132,36 @@ func glyphWidth(metrics *font.Metrics, code byte) font.Width {
 	}
 	width, _ := metrics.WidthByName(name)
 	return width
+}
+
+// opStringWidthRun pushes the user-space width and the vertical displacement
+// of one string in the current font and size. The standard 14 are horizontal,
+// so the second value is 0. stringwidth does not move the current point and
+// does not need one.
+func opStringWidthRun(ctx context.Context, interp *Interp) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	obj, err := interp.Pop()
+	if err != nil {
+		return err
+	}
+	if obj.Kind != KindString || obj.Str == nil {
+		return errOf(errTypeCheck, opStringWidth)
+	}
+	state := interp.gs()
+	metrics, ok := font.Standard14(state.fontName)
+	if !ok {
+		return errOf(errInvalidFont, opStringWidth)
+	}
+	width := 0.0
+	for _, code := range obj.Str.Bytes {
+		width += float64(glyphWidth(metrics, code)) / emScale * state.fontSize
+	}
+	if err := interp.Push(RealObj(width)); err != nil {
+		return err
+	}
+	return interp.Push(RealObj(0))
 }
 
 // popFontDict pops one font dictionary. Anything else is invalidfont.

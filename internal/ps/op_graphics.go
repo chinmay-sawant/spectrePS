@@ -3,28 +3,24 @@ package ps
 import (
 	"context"
 	"math"
-	"sync"
 
 	"github.com/chinmay-sawant/spectrePS/internal/graphics"
 )
 
 const (
 	defaultLineWidth = 1
-	maxGSaveDepth    = 32
+	showpageName     = "showpage"
 	halfTurnDegrees  = 180
+	fullTurnDegrees  = 360
+	maxLineCap       = 2
 	opSetRGB         = "setrgbcolor"
+	opSetLineCap     = "setlinecap"
+	opRectFill       = "rectfill"
+	opRectStroke     = "rectstroke"
+	opDTransform     = "dtransform"
 	paintStroke      = "stroke"
 	paintFill        = "fill"
 	paintEOFill      = "eofill"
-)
-
-// gsByInterp stores graphics state for each interpreter.
-// Phase 04 replaces this recorder with the pixmap device and must keep user-space currentpoint.
-//
-//nolint:gochecknoglobals // Interp has no graphics field until phase 04
-var (
-	gsMu       sync.Mutex
-	gsByInterp = map[*Interp]*gstate{}
 )
 
 // matrix is the CTM, user space to device space.
@@ -63,12 +59,14 @@ type gstateSnap struct {
 	subY     float64
 	subOpen  bool
 	width    float64
+	lineCap  int
 	gray     float64
 	red      float64
 	green    float64
 	blue     float64
 	fontName string
 	fontSize float64
+	clips    []clipPath
 }
 
 // gstate is the phase 03 path recorder.
@@ -83,16 +81,20 @@ type gstate struct {
 	subY        float64
 	subOpen     bool
 	width       float64
+	lineCap     int
 	gray        float64
 	red         float64
 	green       float64
 	blue        float64
 	fontName    string
 	fontSize    float64
+	clips       []clipPath
 	saves       []*gstateSnap
 	pages       int
 	pix         *graphics.Pixmap
 	scale       float64
+	pageW       float64
+	pageH       float64
 	strokeCount int
 	fillCount   int
 	eoFillCount int
@@ -113,8 +115,12 @@ func registerGraphicsOps(interp *Interp) {
 	interp.Install("fill", opFill)
 	interp.Install("eofill", opEOFill)
 	interp.Install("setlinewidth", opSetLineWidth)
+	interp.Install(opSetLineCap, opSetLineCapRun)
 	interp.Install("setrgbcolor", opSetRGBColor)
 	interp.Install("setgray", opSetGray)
+	interp.Install(opRectFill, opRectFillRun)
+	interp.Install(opRectStroke, opRectStrokeRun)
+	interp.Install(opDTransform, opDTransformRun)
 	interp.Install("gsave", opGSave)
 	interp.Install("grestore", opGRestore)
 	interp.Install("showpage", opShowPage)
@@ -124,6 +130,9 @@ func registerGraphicsOps(interp *Interp) {
 	interp.Install("concat", opConcat)
 	interp.Install("setmatrix", opSetMatrix)
 	interp.Install("currentmatrix", opCurrentMatrix)
+	registerArcOps(interp)
+	registerClipOps(interp)
+	registerInfoOps(interp)
 	registerTextOps(interp)
 }
 
@@ -135,7 +144,7 @@ func opMoveto(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	devX, devY := state.ctm.apply(userX, userY)
 	return state.moveTo(devX, devY)
 }
@@ -148,7 +157,7 @@ func opRmoveto(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	userX, userY, err := state.userPoint("rmoveto")
 	if err != nil {
 		return err
@@ -165,7 +174,7 @@ func opLineto(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	if err := state.requirePoint("lineto"); err != nil {
 		return err
 	}
@@ -181,7 +190,7 @@ func opRlineto(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	userX, userY, err := state.userPoint("rlineto")
 	if err != nil {
 		return err
@@ -198,7 +207,7 @@ func opCurveto(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	if err := state.requirePoint("curveto"); err != nil {
 		return err
 	}
@@ -213,7 +222,7 @@ func opRcurveto(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	userX, userY, err := state.userPoint("rcurveto")
 	if err != nil {
 		return err
@@ -225,7 +234,7 @@ func opClosepath(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	if err := state.requirePoint("closepath"); err != nil {
 		return err
 	}
@@ -239,7 +248,7 @@ func opNewpath(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	gsFor(interp).clearPath()
+	interp.gs().clearPath()
 	return nil
 }
 
@@ -247,7 +256,7 @@ func opCurrentPoint(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	userX, userY, err := state.userPoint("currentpoint")
 	if err != nil {
 		return err
@@ -278,8 +287,91 @@ func opSetLineWidth(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	gsFor(interp).width = width
+	interp.gs().width = width
 	return nil
+}
+
+// opSetLineCapRun stores the line cap. The stroke device draws a capsule,
+// which is the round cap, so caps 0 and 2 keep the recorded deviation from
+// documentation/devices.md.
+func opSetLineCapRun(ctx context.Context, interp *Interp) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	value, err := interp.PopInt()
+	if err != nil {
+		return err
+	}
+	if value < 0 || value > maxLineCap {
+		return errOf(errRangecheck, opSetLineCap)
+	}
+	interp.gs().lineCap = int(value)
+	return nil
+}
+
+// opRectStrokeRun strokes the rectangle x y width height and leaves the
+// current path in place, per the Level 2 contract. A negative width or height
+// extends the rectangle in the negative direction.
+func opRectStrokeRun(ctx context.Context, interp *Interp) error {
+	return rectPaint(ctx, interp, opRectStroke, paintStroke)
+}
+
+// opRectFillRun fills the rectangle x y width height and leaves the current
+// path in place.
+func opRectFillRun(ctx context.Context, interp *Interp) error {
+	return rectPaint(ctx, interp, opRectFill, paintFill)
+}
+
+func rectPaint(ctx context.Context, interp *Interp, opName, kind string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	height, err := popFloat(interp, opName)
+	if err != nil {
+		return err
+	}
+	width, err := popFloat(interp, opName)
+	if err != nil {
+		return err
+	}
+	userY, err := popFloat(interp, opName)
+	if err != nil {
+		return err
+	}
+	userX, err := popFloat(interp, opName)
+	if err != nil {
+		return err
+	}
+	state := interp.gs()
+	saved := state.takePath()
+	if err := state.addRect(userX, userY, width, height); err != nil {
+		return err
+	}
+	state.notePaint(paintMark{kind: kind, evenOdd: false})
+	state.putPath(saved)
+	return nil
+}
+
+// opDTransformRun transforms a distance vector dx dy by the CTM into dx' dy'.
+func opDTransformRun(ctx context.Context, interp *Interp) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	deltaY, err := popFloat(interp, opDTransform)
+	if err != nil {
+		return err
+	}
+	deltaX, err := popFloat(interp, opDTransform)
+	if err != nil {
+		return err
+	}
+	mat := interp.gs().ctm
+	devX := mat.a*deltaX + mat.c*deltaY
+	devY := mat.b*deltaX + mat.d*deltaY
+	if err := interp.Push(RealObj(devX)); err != nil {
+		return err
+	}
+	return interp.Push(RealObj(devY))
 }
 
 func opSetGray(ctx context.Context, interp *Interp) error {
@@ -290,7 +382,7 @@ func opSetGray(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	state.gray = gray
 	state.red = gray
 	state.green = gray
@@ -314,7 +406,7 @@ func opSetRGBColor(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	state.red = red
 	state.green = green
 	state.blue = blue
@@ -325,8 +417,8 @@ func opGSave(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	state := gsFor(interp)
-	if len(state.saves) >= maxGSaveDepth {
+	state := interp.gs()
+	if len(state.saves) >= maxGSave {
 		return errOf(errLimitCheck, "gsave")
 	}
 	state.saves = append(state.saves, state.snapshot())
@@ -337,7 +429,7 @@ func opGRestore(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	if len(state.saves) == 0 {
 		return errOf(errLimitCheck, "grestore")
 	}
@@ -352,7 +444,10 @@ func opShowPage(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
+	if err := state.roomForPage(); err != nil {
+		return err
+	}
 	if state.pix != nil {
 		state.pix.ShowPage()
 	}
@@ -369,7 +464,7 @@ func opTranslate(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	state.ctm = concatMatrix(translation(tx, ty), state.ctm)
 	return nil
 }
@@ -382,7 +477,7 @@ func opScale(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	state.ctm = concatMatrix(scaling(sx, sy), state.ctm)
 	return nil
 }
@@ -395,7 +490,7 @@ func opRotate(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	state.ctm = concatMatrix(rotation(degrees), state.ctm)
 	return nil
 }
@@ -408,7 +503,7 @@ func opConcat(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	state.ctm = concatMatrix(mat, state.ctm)
 	return nil
 }
@@ -421,7 +516,7 @@ func opSetMatrix(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	gsFor(interp).ctm = mat
+	interp.gs().ctm = mat
 	return nil
 }
 
@@ -429,7 +524,7 @@ func opCurrentMatrix(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	mat := gsFor(interp).ctm
+	mat := interp.gs().ctm
 	values := []float64{mat.a, mat.b, mat.c, mat.d, mat.e, mat.f}
 	for _, val := range values {
 		if err := interp.Push(RealObj(val)); err != nil {
@@ -443,19 +538,21 @@ func paintOp(ctx context.Context, interp *Interp, kind string, evenOdd bool) err
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	gsFor(interp).notePaint(paintMark{kind: kind, evenOdd: evenOdd})
+	interp.gs().notePaint(paintMark{kind: kind, evenOdd: evenOdd})
 	return nil
 }
 
-func gsFor(interp *Interp) *gstate {
-	gsMu.Lock()
-	defer gsMu.Unlock()
-	state := gsByInterp[interp]
-	if state == nil {
-		state = newGState()
-		gsByInterp[interp] = state
+// roomForPage reports limitcheck when keeping another page would cross
+// maxRetainedPageBytes. The budget is computed from the device geometry, so a
+// small page allows more pages than a large one and the retained bytes stay
+// bounded either way.
+func (state *gstate) roomForPage() error {
+	page := int64(state.pageW) * int64(state.pageH) * bytesPerPixel
+	kept := int64(state.pages) * page
+	if kept+page > maxRetainedPageBytes {
+		return errOf(errLimitCheck, showpageName)
 	}
-	return state
+	return nil
 }
 
 func newGState() *gstate {
@@ -469,12 +566,14 @@ func newGState() *gstate {
 		subY:        0,
 		subOpen:     false,
 		width:       defaultLineWidth,
+		lineCap:     0,
 		gray:        0,
 		red:         0,
 		green:       0,
 		blue:        0,
 		fontName:    "",
 		fontSize:    baseFontSize,
+		clips:       nil,
 		saves:       nil,
 		pages:       0,
 		strokeCount: 0,
@@ -482,7 +581,9 @@ func newGState() *gstate {
 		eoFillCount: 0,
 		marks:       nil,
 		pix:         nil,
-		scale:       0,
+		scale:       1,
+		pageW:       defaultPageWidth,
+		pageH:       defaultPageHeight,
 	}
 }
 
@@ -522,6 +623,64 @@ func (state *gstate) addPoints(pts []devPt) error {
 	state.devX = last.x
 	state.devY = last.y
 	state.hasPt = true
+	return nil
+}
+
+// pathSnap is the current path and current point, saved around a rectangle
+// paint so rectfill and rectstroke leave the path untouched.
+type pathSnap struct {
+	path    []devPt
+	hasPt   bool
+	devX    float64
+	devY    float64
+	subX    float64
+	subY    float64
+	subOpen bool
+}
+
+func (state *gstate) takePath() pathSnap {
+	return pathSnap{
+		path:    append([]devPt(nil), state.path...),
+		hasPt:   state.hasPt,
+		devX:    state.devX,
+		devY:    state.devY,
+		subX:    state.subX,
+		subY:    state.subY,
+		subOpen: state.subOpen,
+	}
+}
+
+func (state *gstate) putPath(snap pathSnap) {
+	state.path = snap.path
+	state.hasPt = snap.hasPt
+	state.devX = snap.devX
+	state.devY = snap.devY
+	state.subX = snap.subX
+	state.subY = snap.subY
+	state.subOpen = snap.subOpen
+}
+
+// addRect appends a closed rectangle subpath in user space. A negative width
+// or height extends the rectangle in the negative direction.
+func (state *gstate) addRect(userX, userY, width, height float64) error {
+	corners := [...][2]float64{
+		{userX, userY},
+		{userX + width, userY},
+		{userX + width, userY + height},
+		{userX, userY + height},
+		{userX, userY},
+	}
+	pts := make([]devPt, len(corners))
+	for i, corner := range corners {
+		pts[i].x, pts[i].y = state.ctm.apply(corner[0], corner[1])
+	}
+	pts[0].move = true
+	if err := state.addPoints(pts); err != nil {
+		return err
+	}
+	state.subX = pts[0].x
+	state.subY = pts[0].y
+	state.subOpen = true
 	return nil
 }
 
@@ -577,11 +736,20 @@ func (state *gstate) emit(mark paintMark) {
 		pts[i] = graphics.Point{X: pt.x * state.scale, Y: pt.y * state.scale, Move: pt.move}
 	}
 	width := state.width * state.scale * math.Hypot(state.ctm.a, state.ctm.b)
+	clips := state.deviceClips()
 	if mark.kind == paintStroke {
-		state.pix.Stroke(pts, width, state.red, state.green, state.blue)
+		if len(clips) == 0 {
+			state.pix.Stroke(pts, width, state.red, state.green, state.blue)
+			return
+		}
+		state.pix.StrokeClipped(clips, pts, width, state.red, state.green, state.blue)
 		return
 	}
-	state.pix.Fill(pts, state.red, state.green, state.blue, mark.evenOdd)
+	if len(clips) == 0 {
+		state.pix.Fill(pts, state.red, state.green, state.blue, mark.evenOdd)
+		return
+	}
+	state.pix.FillClipped(clips, pts, state.red, state.green, state.blue, mark.evenOdd)
 }
 
 func (state *gstate) snapshot() *gstateSnap {
@@ -595,12 +763,14 @@ func (state *gstate) snapshot() *gstateSnap {
 		subY:     state.subY,
 		subOpen:  state.subOpen,
 		width:    state.width,
+		lineCap:  state.lineCap,
 		gray:     state.gray,
 		red:      state.red,
 		green:    state.green,
 		blue:     state.blue,
 		fontName: state.fontName,
 		fontSize: state.fontSize,
+		clips:    cloneClips(state.clips),
 	}
 }
 
@@ -614,12 +784,14 @@ func (state *gstate) restore(snap *gstateSnap) {
 	state.subY = snap.subY
 	state.subOpen = snap.subOpen
 	state.width = snap.width
+	state.lineCap = snap.lineCap
 	state.gray = snap.gray
 	state.red = snap.red
 	state.green = snap.green
 	state.blue = snap.blue
 	state.fontName = snap.fontName
 	state.fontSize = snap.fontSize
+	state.clips = cloneClips(snap.clips)
 }
 
 func (mat matrix) apply(userX, userY float64) (float64, float64) {

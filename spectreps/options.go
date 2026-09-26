@@ -39,15 +39,31 @@ const (
 // the XMP metadata and the sRGB output intent, and runs the profile preflight
 // first. Level 0 then copies streams unchanged, and levels 1 through 5 still
 // use their compression and image policy.
+// Tag selects the tagged write: one recorder per page, the derived reading
+// order and roles, and a PDF/UA-2 structure tree. A tagged input and a
+// combination of Tag with PDFA are refused. Title and Lang fill the dc:title
+// and the catalog /Lang, and Claim writes the pdfuaid claim when the built
+// bytes pass the UA-2 preflight.
 type RewriteOptions struct {
 	CompressStreams bool
 	Level           int
 	PDFA            PDFAMode
+	// SubsetFonts embeds subsetted font programs on a rewrite. It is off by
+	// default. Levels 1 through 5 apply it; level 0 ignores it and still
+	// refuses text, because the path writer cannot emit a font.
+	SubsetFonts bool `exhaustruct:"optional"`
+	Tag         bool
+	Claim       bool
+	Title       string
+	Lang        string
 }
 
 // DefaultRewriteOptions turns stream compression on at level 0.
 func DefaultRewriteOptions() RewriteOptions {
-	return RewriteOptions{CompressStreams: true, Level: 0, PDFA: PDFANone}
+	return RewriteOptions{
+		CompressStreams: true, Level: 0, PDFA: PDFANone, SubsetFonts: false,
+		Tag: false, Claim: false, Title: "", Lang: "",
+	}
 }
 
 // PostScriptOptions controls a later PostScript write.
