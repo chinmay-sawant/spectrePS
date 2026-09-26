@@ -1,7 +1,7 @@
 # v0.0.4 - Type 1 fonts
 
 > **Parent:** `plans/v0.0.4/00-program.md` - program ledger
-> **Status:** implemented (phases 1 to 6). Phase 7 is deferred to `plans/v0.0.1/10-deferred.md` 10.5.
+> **Status:** implemented (phases 1 to 6). Phase 7 is deferred to `plans/v0.0.1/10-deferred.md` 10.1.
 > **Estimated effort:** about two weeks for phases 1 to 6. Phase 7 is a stretch gated on the tag budget.
 
 ---
@@ -104,15 +104,15 @@ Start only after phases 1 to 6 land. If the tag budget runs out, the integrator 
 
 ### 7.1 CFF container
 
-- [~] The reader parses CFF version 1: header, INDEXes, DICTs, charset, and encoding. CFF2 and FDSelect are refused, which keeps `/CIDFontType0C` out. Proof: `go test -count=1 ./internal/font -run TestCFFGlyph`. Returned to `plans/v0.0.1/10-deferred.md` 10.5.
+- [~] The reader parses CFF version 1: header, INDEXes, DICTs, charset, and encoding. CFF2 and FDSelect are refused, which keeps `/CIDFontType0C` out. Proof: `go test -count=1 ./internal/font -run TestCFFGlyph`. Returned to `plans/v0.0.1/10-deferred.md` 10.1.
 
 ### 7.2 Type 2 charstrings
 
-- [~] The interpreter covers the Type 2 operator set, `hintmask` and `cntrmask`, `callsubr` and `callgsubr` with the 107, 1131, and 32768 bias, the flex operators, and `endchar` seac; width comes from `nominalWidthX`, `defaultWidthX`, and the leading operand. Proof: `go test -count=1 ./internal/font -run TestCFFGlyph`. Returned to `plans/v0.0.1/10-deferred.md` 10.5 as its own item.
+- [~] The interpreter covers the Type 2 operator set, `hintmask` and `cntrmask`, `callsubr` and `callgsubr` with the 107, 1131, and 32768 bias, the flex operators, and `endchar` seac; width comes from `nominalWidthX`, `defaultWidthX`, and the leading operand. Proof: `go test -count=1 ./internal/font -run TestCFFGlyph`. Returned to `plans/v0.0.1/10-deferred.md` 10.1 as its own item.
 
 ### 7.3 Simple Type1C paints
 
-- [~] `/FontFile3 /Subtype /Type1C` loads in a simple font and paints; `/CIDFontType0C` and `/CIDFontType0` stay `invalidfont`. Returned to `plans/v0.0.1/10-deferred.md` 10.5 as its own item. Returned to `plans/v0.0.1/10-deferred.md` 10.5 as its own item; the tag budget ran out.
+- [~] `/FontFile3 /Subtype /Type1C` loads in a simple font and paints; `/CIDFontType0C` and `/CIDFontType0` stay `invalidfont`. Returned to `plans/v0.0.1/10-deferred.md` 10.1 as its own item; the tag budget ran out.
 
 ## Fixtures and licensing
 

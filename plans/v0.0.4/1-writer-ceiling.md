@@ -1,7 +1,7 @@
 # v0.0.4 - Writer size ceiling
 
 > **Parent:** `plans/v0.0.4/00-program.md` - program ledger
-> **Status:** not started.
+> **Status:** implemented. Rows 1.1 to 1.3 landed, the v0.0.3 row 1.2 is accepted, and `make lint` and `make test` pass.
 > **Estimated effort:** half a day
 
 ---

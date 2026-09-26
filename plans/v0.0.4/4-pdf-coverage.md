@@ -1,7 +1,7 @@
 # v0.0.4 - PDF coverage
 
 > **Parent:** `plans/v0.0.4/00-program.md` - program ledger
-> **Status:** implemented. `tiffsep` is deferred to `plans/v0.0.1/10-deferred.md` 10.5.
+> **Status:** implemented. `tiffsep` is deferred to `plans/v0.0.1/10-deferred.md` 10.2.
 > **Estimated effort:** about eight weeks across six phases. Phase 6 is the cut line.
 
 ---
@@ -53,7 +53,7 @@ The painter refuses `/SMask`, ignores `/Mask` and `/Decode`, and refuses `/Image
 - [x] `/Separation` and `/DeviceN` load with their alternate space and tint transform; an unsupported space returns `undefined` with the image or paint operator name. Proof: `go test -count=1 ./internal/pdf -run TestSeparationColor` and `go test -count=1 ./internal/pdf -run TestDeviceNColor`.
 - [x] `K`/`k`, `CS`/`cs`, and `SC`/`sc`/`SCN`/`scn` run, the current space and components survive `q`/`Q`, and a mark reaches the RGB pixmap through the preview conversion. Proof: `go test -count=1 ./internal/pdf -run TestCMYKPaint` and `go test -count=1 ./internal/pdf -run TestGenericColorOps`.
 - [x] A separation page rasterizes to the RGB preview. Proof: `go test -count=1 ./internal/pdf -run TestSeparationRaster`.
-- [~] A separation accumulator behind a new optional device seam records process C, M, Y, K and each named spot ink as its own plane. `tiffsep` is in scope: `spectreps tiffsep -o out.tif in.pdf` writes one grayscale TIFF per ink plus a composite, with deterministic names (`out.Cyan.tif`, `out.Black.tif`, `out.<SpotName>.tif`), reusing `golang.org/x/image/tiff` and the existing page selection. This is the largest row in the phase and the first to cut to v0.0.5 if phase 3 slips. Proof: `go test -count=1 ./internal/pdf -run TestSeparationPlates` and `go test -count=1 ./internal/cli -run TestTiffSep`, `TestTiffSepStable`, and `TestTiffSepCLI`. Cut to `plans/v0.0.1/10-deferred.md` 10.5 as the plan's declared first cut; the reader still resolves Separation and DeviceN to the RGB preview.
+- [~] A separation accumulator behind a new optional device seam records process C, M, Y, K and each named spot ink as its own plane. `tiffsep` is in scope: `spectreps tiffsep -o out.tif in.pdf` writes one grayscale TIFF per ink plus a composite, with deterministic names (`out.Cyan.tif`, `out.Black.tif`, `out.<SpotName>.tif`), reusing `golang.org/x/image/tiff` and the existing page selection. This is the largest row in the phase and the first to cut to v0.0.5 if phase 3 slips. Proof: `go test -count=1 ./internal/pdf -run TestSeparationPlates` and `go test -count=1 ./internal/cli -run TestTiffSep`, `TestTiffSepStable`, and `TestTiffSepCLI`. Cut to `plans/v0.0.1/10-deferred.md` 10.2 as the plan's declared first cut; the reader still resolves Separation and DeviceN to the RGB preview.
 - [x] The PDF/A preflight applies `cmyk-without-profile` to a `/Separation` or `/DeviceN` value nested inside a page `/ColorSpace` resource, through a name, array, or reference. Direct dictionaries already refuse. Proof: `go test -count=1 ./internal/pdfa -run TestPreflightSeparation`.
 - [x] Closure: freeze the CMYK to RGB rule next to the existing RGB to CMYK rule in `documentation/devices.md`; `features.md`, `covered-and-not-covered.md`, `cli.md`, and `test.md` state the new behavior; `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
