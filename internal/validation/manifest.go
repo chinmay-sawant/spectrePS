@@ -44,6 +44,12 @@ const (
 	ManifestName     = "manifest.tsv"
 	TraceabilityName = "traceability.tsv"
 	ReadmeName       = "README.md"
+	// ExpectedTextDir is the golden-text folder, relative to the corpus
+	// root. The text corpus test writes one expected extraction per text row
+	// there with UPDATE_FIXTURES=1, and the files are checked in. They carry
+	// no manifest row because they are test output, not corpus inputs, so
+	// checkUnlisted skips the folder.
+	ExpectedTextDir = "text/expected"
 )
 
 // ExternalPrefix marks a row in the fetched, non-committed tier.
@@ -392,7 +398,7 @@ func checkUnlisted(rows []Row, dir string) error {
 		}
 		rel = filepath.ToSlash(rel)
 		if entry.IsDir() {
-			if rel == strings.TrimSuffix(ExternalPrefix, "/") {
+			if rel == strings.TrimSuffix(ExternalPrefix, "/") || rel == ExpectedTextDir {
 				return filepath.SkipDir
 			}
 			return nil
