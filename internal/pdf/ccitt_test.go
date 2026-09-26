@@ -127,16 +127,16 @@ func TestImageXObjectCCITTRejects(t *testing.T) {
 		errName string
 	}{
 		{
-			name:    "K above zero",
+			name:    "K above zero with group 4 bytes",
 			dict:    base + " /DecodeParms << /K 1 >>",
 			raw:     raw,
-			errName: errUndefined,
+			errName: errSyntax,
 		},
 		{
-			name:    "missing end of line",
+			name:    "no end of line with group 4 bytes",
 			dict:    base + " /DecodeParms << /K 0 >>",
 			raw:     raw,
-			errName: errUndefined,
+			errName: errSyntax,
 		},
 		{
 			name: "bit depth",
@@ -156,7 +156,7 @@ func TestImageXObjectCCITTRejects(t *testing.T) {
 			name:    "missing decode parms",
 			dict:    base,
 			raw:     raw,
-			errName: errUndefined,
+			errName: errSyntax,
 		},
 		{
 			name:    "truncated",
