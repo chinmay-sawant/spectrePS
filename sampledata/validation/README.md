@@ -278,3 +278,39 @@ The external tier (`external/`) holds fetched, non-committed files and is
 skipped cleanly when absent. The `Text` goldens under `text/expected/` are
 written by `UPDATE_FIXTURES=1 go test ./internal/cli -run
 TestValidationCorpusText` and checked in.
+
+## The external tier, measured
+
+Both external rows were fetched on 2026-09-26 with
+`go run internal/validation/gen.go -fetch-external`, and both digests matched.
+They are external for two different reasons:
+
+- `external/fax-decode-parms.pdf` is 1,565,966 bytes, 1.49 MiB, over the 1 MiB
+  committed-tier limit. Its license, Apache-2.0, is admitted to the committed
+  tier; only its size keeps it out.
+- `external/pdf20examples/simple-pdf-2.0.pdf` is 5,211 bytes, well under the
+  limit. Its license, CC-BY-SA-4.0, is the reason: `AdmittedLicense` admits a
+  CC BY-SA row in the external tier only.
+
+Fetching them changed a recorded verdict. `external/fax-decode-parms.pdf` was
+recorded as `paint`, and that value had never been measured, because the row
+only runs when the tier is present. Measured, it refuses:
+
+```
+Error: /invalidfont in Tj
+```
+
+The file is a 10-page scan with an OCR text layer over three non-embedded
+standard 14 fonts, `Helvetica-Bold`, `Times-Italic`, and `Times-Roman`, and
+`spectreps info` reports `embedded=false` for all three. The refusal is the
+no-outline policy in `documentation/fonts.md`, the same one already recorded as
+`refuse:invalidfont` on `postscript/cups-testfile.ps`, and not a CCITT defect.
+The error itself proves the CCITT path is sound: the refusal names `Tj`, a text
+operator, so the page got past all 8 images before the text layer failed. The
+`expect` column is now `refuse:invalidfont in Tj`, and the committed row
+`images/ccitt_EndOfBlock_false.pdf` still carries the painting CCITT claim.
+
+With the tier present the corpus is 66 pass, 0 fail, 0 skipped. With it absent,
+64 pass, 0 fail, 2 skipped, and `make test` stays green either way. No test
+opens a network connection, so CI runs without this tier and treats those two
+rows as skipped rather than passed.
