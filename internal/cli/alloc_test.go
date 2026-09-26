@@ -40,6 +40,60 @@ func TestPerformanceAllocs(t *testing.T) {
 	}
 }
 
+// The allocation ceiling per encoder, from the v0.0.5 coverage extension. The
+// values are the median of a -count=3 make bench run, and AllocsPerRun agrees
+// with -benchmem here because neither encoder pools a writer.
+const (
+	allocCLIPNG   = 34
+	allocCLITIFF  = 27
+	allocCLIEncNs = 50
+)
+
+// TestEncoderAllocs locks the allocation counts of the raster output encoders.
+// The PNG, JPEG, and TIFF paths had no benchmark before the v0.0.5 extension,
+// so no ceiling covered them.
+func TestEncoderAllocs(t *testing.T) {
+	img := allocCLIPage(t)
+	cases := []struct {
+		name  string
+		limit float64
+		call  func()
+	}{
+		{name: "PNG encode", limit: allocCLIPNG, call: func() {
+			_, _ = encodePNG(img)
+		}},
+		{name: "TIFF encode uncompressed", limit: allocCLITIFF, call: func() {
+			_, _ = encodeTIFF(img, tiffNone)
+		}},
+	}
+	for _, tc := range cases {
+		got := testing.AllocsPerRun(allocCLIEncNs, tc.call)
+		if got != tc.limit {
+			t.Errorf("%s allocs = %v, want %v", tc.name, got, tc.limit)
+		}
+	}
+}
+
+// allocCLIPage paints one 200 by 200 page with the same program the raster
+// benchmark uses, so the encoders are measured over real pixels.
+func allocCLIPage(t *testing.T) spectreps.PageImage {
+	t.Helper()
+	in, err := spectreps.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = in.Close() })
+	pages, err := in.RunPostScript(
+		t.Context(),
+		[]byte(benchCLIStrokeProgram),
+		spectreps.RunOptions{PageWidthPt: 200, PageHeightPt: 200, ResolutionDPI: 72},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pages[0]
+}
+
 // allocCLIFixture writes a small one-page image PDF and returns its path and
 // an output path.
 func allocCLIFixture(t *testing.T) (string, string) {

@@ -33,6 +33,7 @@ plans/v0.0.1/
 plans/v0.0.2/
 plans/v0.0.3/
 plans/v0.0.4/
+plans/v0.0.5/
 plans/PR/
 skills/phase-wise-checklist/SKILLS.md
 skills/unslop/SKILL.md
@@ -42,7 +43,7 @@ scripts/
 
 `verapdf/` and `bin/` also appear on a working machine. Both are gitignored: `bin/` is the built command from `make build`, and `verapdf/` is a local veraPDF install that only `make pdfa-check` and `make pdfua2-check` use.
 
-`documentation/` is the prose folder for this repository. `plans/v0.0.1/` through `plans/v0.0.4/` are the execution ledgers, one folder per phase, and `plans/PR/` holds the pull request text. `plans/v0.0.1/10-deferred.md` is the one list of work that still waits. `sampledata/` holds the fixtures, the scenario PDFs, and the validation corpus. `skills/` holds agent instructions that already live in this repo.
+`documentation/` is the prose folder for this repository. `plans/v0.0.1/` through `plans/v0.0.5/` are the execution ledgers, one folder per phase, and `plans/PR/` holds the pull request text. `plans/v0.0.1/10-deferred.md` is the one list of work that still waits. `sampledata/` holds the fixtures, the scenario PDFs, and the validation corpus. `skills/` holds agent instructions that already live in this repo.
 
 ## Public library
 

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/chinmay-sawant/spectrePS/internal/graphics"
 	"github.com/chinmay-sawant/spectrePS/internal/pdf"
 )
 
@@ -122,6 +123,64 @@ func BenchmarkEncodeDCT(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		if _, err := EncodeDCT(pic, 40); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// benchGraphicsImage paints one page through the device and returns the shown
+// image, which is the shape the image writers take. The packer benchmarks need
+// a real graphics.Image and the page costs nothing once it is painted.
+func benchGraphicsImage(b *testing.B, side int) graphics.Image {
+	b.Helper()
+	pixmap := graphics.NewPixmap(side, side)
+	for i := range side {
+		pixmap.Stroke([]graphics.Point{
+			{X: 0, Y: float64(i), Move: true},
+			{X: float64(side), Y: float64(i)},
+		}, 1, 0, 0, 0)
+	}
+	pixmap.ShowPage()
+	return pixmap.Pages()[0]
+}
+
+// BenchmarkWriteImagesColor packs one page through each branch of packSamples.
+// The image PDF benchmark in spectreps covers ImageColorRGB only, so the gray
+// and CMYK per pixel float loops have never been timed.
+func BenchmarkWriteImagesColor(b *testing.B) {
+	pages := []graphics.Image{benchGraphicsImage(b, 200)}
+	for _, testCase := range []struct {
+		name  string
+		space ImageColorSpace
+	}{
+		{name: "rgb", space: ImageRGB},
+		{name: "gray", space: ImageGray},
+		{name: "cmyk", space: ImageCMYK},
+	} {
+		b.Run(testCase.name, func(b *testing.B) {
+			b.SetBytes(int64(200 * 200 * 3))
+			b.ReportAllocs()
+			b.ResetTimer()
+			for range b.N {
+				if _, err := WriteImagesColor(b.Context(), pages, 72, testCase.space); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+// BenchmarkEncodeFlateRGB encodes an 842 by 632 image as a Flate stream, the
+// same geometry BenchmarkEncodeDCT uses so the two encoders compare. The
+// encoder reads through the image.Image interface per pixel and writes one
+// zlib row per scanline.
+func BenchmarkEncodeFlateRGB(b *testing.B) {
+	pic := benchImage(842, 632)
+	b.SetBytes(int64(842 * 632 * 3))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		if _, err := EncodeFlateRGB(pic); err != nil {
 			b.Fatal(err)
 		}
 	}
