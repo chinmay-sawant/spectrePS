@@ -18,6 +18,8 @@ TIFF is a fourth encoding of the same pixels, selected by an output path that en
 
 Anti-aliasing is off in this ledger. There is no `TextAlphaBits` equivalent yet. Turning it on would change pixels and invalidate fixtures, so it stays deferred.
 
+The PostScript interpreter paints through the same pixmap. `setlinecap` stores its code, and the stroke device draws a capsule, which is the round cap, so codes 0 and 2 carry the deviation recorded under `J` and `j` below. PostScript `clip`, `initclip`, `clippath`, and `pathbbox` use the same list of device-space clip paths the PDF `W` and `W*` operators use, through `graphics.Clip`.
+
 ## Compare
 
 `CompareFiles` is a byte compare of two slices, including the first mismatch offset. It is the 0.0.1 behavior behind `spectreps compare bytes`.

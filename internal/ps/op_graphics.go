@@ -12,7 +12,13 @@ const (
 	defaultLineWidth = 1
 	maxGSaveDepth    = 32
 	halfTurnDegrees  = 180
+	fullTurnDegrees  = 360
+	maxLineCap       = 2
 	opSetRGB         = "setrgbcolor"
+	opSetLineCap     = "setlinecap"
+	opRectFill       = "rectfill"
+	opRectStroke     = "rectstroke"
+	opDTransform     = "dtransform"
 	paintStroke      = "stroke"
 	paintFill        = "fill"
 	paintEOFill      = "eofill"
@@ -63,12 +69,14 @@ type gstateSnap struct {
 	subY     float64
 	subOpen  bool
 	width    float64
+	lineCap  int
 	gray     float64
 	red      float64
 	green    float64
 	blue     float64
 	fontName string
 	fontSize float64
+	clips    []clipPath
 }
 
 // gstate is the phase 03 path recorder.
@@ -83,16 +91,20 @@ type gstate struct {
 	subY        float64
 	subOpen     bool
 	width       float64
+	lineCap     int
 	gray        float64
 	red         float64
 	green       float64
 	blue        float64
 	fontName    string
 	fontSize    float64
+	clips       []clipPath
 	saves       []*gstateSnap
 	pages       int
 	pix         *graphics.Pixmap
 	scale       float64
+	pageW       float64
+	pageH       float64
 	strokeCount int
 	fillCount   int
 	eoFillCount int
@@ -113,8 +125,12 @@ func registerGraphicsOps(interp *Interp) {
 	interp.Install("fill", opFill)
 	interp.Install("eofill", opEOFill)
 	interp.Install("setlinewidth", opSetLineWidth)
+	interp.Install(opSetLineCap, opSetLineCapRun)
 	interp.Install("setrgbcolor", opSetRGBColor)
 	interp.Install("setgray", opSetGray)
+	interp.Install(opRectFill, opRectFillRun)
+	interp.Install(opRectStroke, opRectStrokeRun)
+	interp.Install(opDTransform, opDTransformRun)
 	interp.Install("gsave", opGSave)
 	interp.Install("grestore", opGRestore)
 	interp.Install("showpage", opShowPage)
@@ -124,6 +140,9 @@ func registerGraphicsOps(interp *Interp) {
 	interp.Install("concat", opConcat)
 	interp.Install("setmatrix", opSetMatrix)
 	interp.Install("currentmatrix", opCurrentMatrix)
+	registerArcOps(interp)
+	registerClipOps(interp)
+	registerInfoOps(interp)
 	registerTextOps(interp)
 }
 
@@ -280,6 +299,90 @@ func opSetLineWidth(ctx context.Context, interp *Interp) error {
 	}
 	gsFor(interp).width = width
 	return nil
+}
+
+// opSetLineCapRun stores the line cap. The stroke device draws a capsule,
+// which is the round cap, so caps 0 and 2 keep the recorded deviation from
+// documentation/devices.md.
+func opSetLineCapRun(ctx context.Context, interp *Interp) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	value, err := interp.PopInt()
+	if err != nil {
+		return err
+	}
+	if value < 0 || value > maxLineCap {
+		return errOf(errRangecheck, opSetLineCap)
+	}
+	gsFor(interp).lineCap = int(value)
+	return nil
+}
+
+// opRectStrokeRun strokes the rectangle x y width height and leaves the
+// current path in place, per the Level 2 contract. A negative width or height
+// extends the rectangle in the negative direction.
+func opRectStrokeRun(ctx context.Context, interp *Interp) error {
+	return rectPaint(ctx, interp, opRectStroke, paintStroke)
+}
+
+// opRectFillRun fills the rectangle x y width height and leaves the current
+// path in place.
+func opRectFillRun(ctx context.Context, interp *Interp) error {
+	return rectPaint(ctx, interp, opRectFill, paintFill)
+}
+
+func rectPaint(ctx context.Context, interp *Interp, opName, kind string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	height, err := popFloat(interp, opName)
+	if err != nil {
+		return err
+	}
+	width, err := popFloat(interp, opName)
+	if err != nil {
+		return err
+	}
+	userY, err := popFloat(interp, opName)
+	if err != nil {
+		return err
+	}
+	userX, err := popFloat(interp, opName)
+	if err != nil {
+		return err
+	}
+	state := gsFor(interp)
+	saved := state.takePath()
+	if err := state.addRect(userX, userY, width, height); err != nil {
+		return err
+	}
+	state.notePaint(paintMark{kind: kind})
+	state.putPath(saved)
+	return nil
+}
+
+// opDTransformRun transforms a distance vector by the CTM.
+// dx dy dtransform dx' dy'
+func opDTransformRun(ctx context.Context, interp *Interp) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	deltaY, err := popFloat(interp, opDTransform)
+	if err != nil {
+		return err
+	}
+	deltaX, err := popFloat(interp, opDTransform)
+	if err != nil {
+		return err
+	}
+	mat := gsFor(interp).ctm
+	devX := mat.a*deltaX + mat.c*deltaY
+	devY := mat.b*deltaX + mat.d*deltaY
+	if err := interp.Push(RealObj(devX)); err != nil {
+		return err
+	}
+	return interp.Push(RealObj(devY))
 }
 
 func opSetGray(ctx context.Context, interp *Interp) error {
@@ -469,12 +572,14 @@ func newGState() *gstate {
 		subY:        0,
 		subOpen:     false,
 		width:       defaultLineWidth,
+		lineCap:     0,
 		gray:        0,
 		red:         0,
 		green:       0,
 		blue:        0,
 		fontName:    "",
 		fontSize:    baseFontSize,
+		clips:       nil,
 		saves:       nil,
 		pages:       0,
 		strokeCount: 0,
@@ -482,7 +587,9 @@ func newGState() *gstate {
 		eoFillCount: 0,
 		marks:       nil,
 		pix:         nil,
-		scale:       0,
+		scale:       1,
+		pageW:       defaultPageWidth,
+		pageH:       defaultPageHeight,
 	}
 }
 
@@ -522,6 +629,64 @@ func (state *gstate) addPoints(pts []devPt) error {
 	state.devX = last.x
 	state.devY = last.y
 	state.hasPt = true
+	return nil
+}
+
+// pathSnap is the current path and current point, saved around a rectangle
+// paint so rectfill and rectstroke leave the path untouched.
+type pathSnap struct {
+	path    []devPt
+	hasPt   bool
+	devX    float64
+	devY    float64
+	subX    float64
+	subY    float64
+	subOpen bool
+}
+
+func (state *gstate) takePath() pathSnap {
+	return pathSnap{
+		path:    append([]devPt(nil), state.path...),
+		hasPt:   state.hasPt,
+		devX:    state.devX,
+		devY:    state.devY,
+		subX:    state.subX,
+		subY:    state.subY,
+		subOpen: state.subOpen,
+	}
+}
+
+func (state *gstate) putPath(snap pathSnap) {
+	state.path = snap.path
+	state.hasPt = snap.hasPt
+	state.devX = snap.devX
+	state.devY = snap.devY
+	state.subX = snap.subX
+	state.subY = snap.subY
+	state.subOpen = snap.subOpen
+}
+
+// addRect appends a closed rectangle subpath in user space. A negative width
+// or height extends the rectangle in the negative direction.
+func (state *gstate) addRect(userX, userY, width, height float64) error {
+	corners := [...][2]float64{
+		{userX, userY},
+		{userX + width, userY},
+		{userX + width, userY + height},
+		{userX, userY + height},
+		{userX, userY},
+	}
+	pts := make([]devPt, len(corners))
+	for i, corner := range corners {
+		pts[i].x, pts[i].y = state.ctm.apply(corner[0], corner[1])
+	}
+	pts[0].move = true
+	if err := state.addPoints(pts); err != nil {
+		return err
+	}
+	state.subX = pts[0].x
+	state.subY = pts[0].y
+	state.subOpen = true
 	return nil
 }
 
@@ -577,11 +742,20 @@ func (state *gstate) emit(mark paintMark) {
 		pts[i] = graphics.Point{X: pt.x * state.scale, Y: pt.y * state.scale, Move: pt.move}
 	}
 	width := state.width * state.scale * math.Hypot(state.ctm.a, state.ctm.b)
+	clips := state.deviceClips()
 	if mark.kind == paintStroke {
-		state.pix.Stroke(pts, width, state.red, state.green, state.blue)
+		if len(clips) == 0 {
+			state.pix.Stroke(pts, width, state.red, state.green, state.blue)
+			return
+		}
+		state.pix.StrokeClipped(clips, pts, width, state.red, state.green, state.blue)
 		return
 	}
-	state.pix.Fill(pts, state.red, state.green, state.blue, mark.evenOdd)
+	if len(clips) == 0 {
+		state.pix.Fill(pts, state.red, state.green, state.blue, mark.evenOdd)
+		return
+	}
+	state.pix.FillClipped(clips, pts, state.red, state.green, state.blue, mark.evenOdd)
 }
 
 func (state *gstate) snapshot() *gstateSnap {
@@ -595,12 +769,14 @@ func (state *gstate) snapshot() *gstateSnap {
 		subY:     state.subY,
 		subOpen:  state.subOpen,
 		width:    state.width,
+		lineCap:  state.lineCap,
 		gray:     state.gray,
 		red:      state.red,
 		green:    state.green,
 		blue:     state.blue,
 		fontName: state.fontName,
 		fontSize: state.fontSize,
+		clips:    cloneClips(state.clips),
 	}
 }
 
@@ -614,12 +790,14 @@ func (state *gstate) restore(snap *gstateSnap) {
 	state.subY = snap.subY
 	state.subOpen = snap.subOpen
 	state.width = snap.width
+	state.lineCap = snap.lineCap
 	state.gray = snap.gray
 	state.red = snap.red
 	state.green = snap.green
 	state.blue = snap.blue
 	state.fontName = snap.fontName
 	state.fontSize = snap.fontSize
+	state.clips = cloneClips(snap.clips)
 }
 
 func (mat matrix) apply(userX, userY float64) (float64, float64) {
