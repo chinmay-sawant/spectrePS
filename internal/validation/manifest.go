@@ -37,12 +37,13 @@ import (
 	"strings"
 )
 
-// ManifestName and ReadmeName are the two file names under
+// ManifestName, TraceabilityName, and ReadmeName are the file names under
 // sampledata/validation that are not corpus rows. README.md may sit in any
 // folder and carries provenance prose.
 const (
-	ManifestName = "manifest.tsv"
-	ReadmeName   = "README.md"
+	ManifestName     = "manifest.tsv"
+	TraceabilityName = "traceability.tsv"
+	ReadmeName       = "README.md"
 )
 
 // ExternalPrefix marks a row in the fetched, non-committed tier.
@@ -396,7 +397,7 @@ func checkUnlisted(rows []Row, dir string) error {
 			}
 			return nil
 		}
-		if rel == ManifestName || filepath.Base(rel) == ReadmeName {
+		if rel == ManifestName || rel == TraceabilityName || filepath.Base(rel) == ReadmeName {
 			return nil
 		}
 		if !listed[rel] {
