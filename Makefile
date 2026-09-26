@@ -6,7 +6,7 @@ NPROC := $(shell nproc 2>/dev/null || echo 1)
 # BENCH_PKGS is the packages with Benchmark functions. make test never runs them.
 BENCH_PKGS := ./spectreps ./internal/cli ./internal/pdf ./internal/pdfout ./internal/graphics ./internal/ps
 
-.PHONY: help build test lint fmt tidy clean size-check pdfa-check pdfua2-check refs-gs-check bench bench-profile bench-check
+.PHONY: help build test lint fmt tidy clean size-check pdfa-check pdfua2-check refs-gs-check validation-run bench bench-profile bench-check
 
 help:
 	@printf '%s\n' \
@@ -17,6 +17,7 @@ help:
 		'pdfa-check  run veraPDF over sampledata/pdfa when installed' \
 		'pdfua2-check run veraPDF over sampledata/pdfua2 when installed' \
 		'refs-gs-check run the Ghostscript reference proofs when gs is installed' \
+		'validation-run run the acceptance harness over sampledata/validation' \
 		'bench       run the benchmarks with -count=3 into profiles/bench.txt' \
 		'bench-profile write CPU and memory profiles per package under profiles/' \
 		'bench-check run the benchmarks with -count=5 and compare with benchstat' \
@@ -87,6 +88,11 @@ pdfua2-check:
 # inside make test or make lint.
 refs-gs-check:
 	bash scripts/ref-gs-check.sh
+
+# validation-run runs the acceptance harness over the validation corpus. It
+# never runs under make test or make lint.
+validation-run:
+	bash scripts/validation-run.sh
 
 # bench runs every benchmark three times and records the output. Benchmark
 # timing is machine-specific and never gates make test.
