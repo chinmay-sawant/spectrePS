@@ -51,7 +51,9 @@ func checkEmitLine(t *testing.T) {
 
 func checkEmitUndefined(t *testing.T) {
 	t.Helper()
-	_, err := Emit(t.Context(), []byte("1 Tr"))
+	// sh is outside the interpreter subset, so the recorder refuses it. Tr and
+	// d are accepted no-ops since v0.0.4 and no longer fit this fixture.
+	_, err := Emit(t.Context(), []byte("sh"))
 	var job *pdf.Error
 	if !errors.As(err, &job) || job.Error() != errUndefined {
 		t.Fatalf("error = %v, want undefined", err)
