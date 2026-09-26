@@ -60,6 +60,12 @@ The released tag is v0.0.3. v0.0.2 added the page summaries, JPEG and TIFF raste
 - `spectreps validate` runs the interpreter in stop-on-first-error mode. A bad xref, a bad stream, an encrypted file, or an unsupported operator fails the command with that error. It does not claim PDF/A conformance. A tagged input also runs the PDF/UA-2 machine checks, open decision 11: a tree the machine rules refuse fails the command with `Error: /ua2-<rule> in PDFUA`, and an untagged PDF is not a UA-2 request. The rules are in `documentation/devices.md`.
 - `PreflightUA2` checks `/MarkInfo /Marked true`, `/StructTreeRoot`, one `Document` in the PDF 2.0 namespace, `/Lang` syntax, `/ViewerPreferences /DisplayDocTitle`, the `pdfuaid` values, `dc:title`, role-map resolution, and MCID coverage. A refusal is `Error: /ua2-<rule> in PDFUA`. The result is preflight only, never certification. The rule list is in `documentation/devices.md`.
 
+## Validation corpus
+
+- `sampledata/validation/` is the validation corpus. One folder per feature area holds real PDF and PostScript files: `postscript/`, `paths/`, `structural/`, `images/`, `text/`, `tagged/`, `pdfa/`, `rewrite/`, `gs-argv/`, and `refs/`. Every file has a row in `sampledata/validation/manifest.tsv` with its source, pinned commit, license, SHA-256, byte count, feature, and expected verdict.
+- The corpus has two tiers. The committed tier is checked in and holds files at or under 1 MiB. The external tier lives under the gitignored `sampledata/validation/external/`, holds larger files and whole suites, and `go run internal/validation/gen.go -fetch-external` fetches it after checking every SHA-256. Tests skip the external tier when it is absent, and no test opens a network connection.
+- Every corpus test is named `TestValidation<Area>`, so `go test -count=1 ./... -run TestValidation` runs the group under `make test`. `sampledata/validation/traceability.tsv` maps every case in `documentation/test.md` to the test that proves it.
+
 ## Library and CLI
 
 - Package `spectreps` exposes `New`, `Close`, `RunPostScript`, `OpenPDF`, `PageCount`, `RasterizePage`, `ExtractText`, `RewritePDF`, `PreflightUA2`, `ImagePDF`, `MeasureBox`, `MeasureInk`, `MeasureInkAmount`, `CompareFiles`, `CompareRaster`, and `Version`. The full contract is `documentation/public-api.md`.
