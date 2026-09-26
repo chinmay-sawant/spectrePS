@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/chinmay-sawant/spectrePS/spectreps"
 )
 
 // benchCLIStrokeProgram is the synthetic PostScript input the raster and
@@ -127,5 +129,93 @@ func BenchmarkCLIGS(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		benchCLIRun(b, args...)
+	}
+}
+
+// benchFormatPage paints one 200 by 200 page with the same stroke program the
+// raster benchmark uses. Every encoder benchmark shares it, so the difference
+// between the four lines is the encoder and not the raster. The CLI raster
+// benchmark writes PPM, so without these the PNG, JPEG, and TIFF paths have
+// never been timed.
+func benchFormatPage(b *testing.B) spectreps.PageImage {
+	b.Helper()
+	in, err := spectreps.New()
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(func() { _ = in.Close() })
+	pages, err := in.RunPostScript(
+		b.Context(),
+		[]byte(benchCLIStrokeProgram),
+		spectreps.RunOptions{PageWidthPt: 200, PageHeightPt: 200, ResolutionDPI: 72},
+	)
+	if err != nil {
+		b.Fatal(err)
+	}
+	return pages[0]
+}
+
+// BenchmarkEncodePPM measures the PPM writer. It allocates the body and then a
+// second full copy when it prepends the header, so its B/op is at least twice
+// the page size.
+func BenchmarkEncodePPM(b *testing.B) {
+	img := benchFormatPage(b)
+	b.SetBytes(int64(img.Width * img.Height * 3))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		_ = encodePPM(img)
+	}
+}
+
+// BenchmarkEncodePNG and BenchmarkEncodeJPEG measure the two compressed raster
+// formats. Each pays the W*H*4 RGBA conversion in rgbaFromPage first.
+func BenchmarkEncodePNG(b *testing.B) {
+	img := benchFormatPage(b)
+	b.SetBytes(int64(img.Width * img.Height * 3))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		if _, err := encodePNG(img); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkEncodeJPEG measures the JPEG writer at the default quality the
+// raster command uses.
+func BenchmarkEncodeJPEG(b *testing.B) {
+	img := benchFormatPage(b)
+	b.SetBytes(int64(img.Width * img.Height * 3))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		if _, err := encodeJPEG(img, 85); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkEncodeTIFF measures the TIFF writer with and without Deflate, so
+// the compression cost is separated from the container cost.
+func BenchmarkEncodeTIFF(b *testing.B) {
+	img := benchFormatPage(b)
+	for _, testCase := range []struct {
+		name     string
+		encoding tiffEncoding
+	}{
+		{name: "deflate", encoding: tiffDeflate},
+		{name: "none", encoding: tiffNone},
+	} {
+		b.Run(testCase.name, func(b *testing.B) {
+			b.SetBytes(int64(img.Width * img.Height * 3))
+			b.ReportAllocs()
+			b.ResetTimer()
+			for range b.N {
+				if _, err := encodeTIFF(img, testCase.encoding); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }

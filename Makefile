@@ -4,7 +4,7 @@ PKG := ./cmd/spectreps
 # nproc is the machine's CPU count. Fall back to 1 if the command is missing.
 NPROC := $(shell nproc 2>/dev/null || echo 1)
 # BENCH_PKGS is the packages with Benchmark functions. make test never runs them.
-BENCH_PKGS := ./spectreps ./internal/cli ./internal/pdf ./internal/pdfout ./internal/graphics ./internal/ps
+BENCH_PKGS := ./spectreps ./internal/cli ./internal/engine ./internal/font ./internal/pdf ./internal/pdfa ./internal/pdfout ./internal/graphics ./internal/ps ./internal/psout ./internal/tag
 
 .PHONY: help build test lint fmt tidy clean size-check pdfa-check pdfua2-check refs-gs-check validation-run bench bench-profile bench-check
 

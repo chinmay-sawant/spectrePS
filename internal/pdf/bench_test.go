@@ -124,3 +124,34 @@ func BenchmarkPaintPage(b *testing.B) {
 		}
 	}
 }
+
+// benchInflateSource builds a 1 MiB buffer of compressible bytes and returns
+// it with its zlib stream. The pattern repeats so the decode is a real inflate
+// and not a stored block.
+func benchInflateSource() ([]byte, []byte) {
+	plain := make([]byte, 1<<20)
+	for i := range plain {
+		plain[i] = byte('a' + i%26)
+	}
+	return plain, benchFlate(plain)
+}
+
+// BenchmarkDecodeFlate inflates one 1 MiB buffer through Decode. The only
+// other measurements of the Flate path are indirect, inside Open, so
+// readLimited growing its output through 4096 byte appends has never been
+// measured on its own.
+func BenchmarkDecodeFlate(b *testing.B) {
+	plain, packed := benchInflateSource()
+	b.SetBytes(int64(len(plain)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		out, err := Decode(opFlate, Value{}, packed)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(out) != len(plain) {
+			b.Fatalf("decoded %d bytes, want %d", len(out), len(plain))
+		}
+	}
+}

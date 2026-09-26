@@ -6,6 +6,13 @@ the `internal/cli` command layer, and the hot internal packages (`pdf`,
 Output lands in `profiles/`, which is gitignored. The accepted baseline, the
 allocation budget, and the findings live here.
 
+The v0.0.4 suite covered six packages and 35 benchmark functions. The v0.0.5
+coverage extension adds five packages and 32 more functions, so the tree now has
+67 functions producing 86 result rows, because sub-benchmarks expand. The v0.0.4
+tables below are the accepted comparison and this file does not re-record them.
+The extension is in `Coverage extension`, and every row is in
+`documentation/benchmark.md`.
+
 ## Machine
 
 | Item | Value |
@@ -25,13 +32,13 @@ counts and do not depend on the clock.
 
 | Command | Writes | What it runs |
 | --- | --- | --- |
-| `make bench` | `profiles/bench.txt` | `go test -p 1 -run '^$' -bench . -benchmem -count=3` over the six benchmark packages |
+| `make bench` | `profiles/bench.txt` | `go test -p 1 -run '^$' -bench . -benchmem -count=3` over the eleven benchmark packages |
 | `make bench-profile` | `profiles/<pkg>.cpu`, `profiles/<pkg>.mem` | one CPU and one heap profile per package |
 | `make bench-check` | `profiles/compare.txt` | a `-count=5` rerun compared against `profiles/bench.txt` with benchstat |
 | `bash scripts/bench-cli.sh` | `profiles/cli.txt` | the built binary, one command per row, min and median of 10 runs |
 | `go test -run '^$' -bench . -benchmem ./spectreps` | stdout | one package at a time |
 
-`-p 1` serializes the six packages so their benchmarks do not share cores.
+`-p 1` serializes the eleven packages so their benchmarks do not share cores.
 
 ## Inputs
 
@@ -134,6 +141,277 @@ geometry the script uses later.
 | Benchmark | ns/op | B/op | allocs/op |
 | --- | --- | --- | --- |
 | BenchmarkStrokeProgram | 2562173 | 701129 | 8067 |
+
+## Coverage extension
+
+Recorded on 2026-09-26 on the machine above, go1.26.4, from one `make bench`
+run over the eleven packages. The plan is `plans/v0.0.5/`. The `ns/op` column
+is the median of the three counts and `B/op` and `allocs/op` matched across all
+three in every cell. The v0.0.4 tables above are not re-recorded here, and these
+numbers are not a comparison against them, because the two sets do not measure
+the same work.
+
+**The `ns/op` values below are a first reading, not a baseline.** The `bench-check`
+section shows that `make bench-check` compares `-count=3` against `-count=5`,
+which is below the six samples benchstat needs before it will compute a
+confidence interval, and that the resulting verdict flagged 107 of 323 rows on a
+tree where no production file had changed. Treat every timing number in this
+section as indicative of magnitude only. The `B/op` and `allocs/op` columns are
+exact and are the part to rely on. Deferred row 4.3 of
+`plans/v0.0.5/5-baseline-and-budget.md` is the gate for re-capturing at
+`-count=10`, and until that row closes no timing number here is a baseline.
+
+### Fill at path complexity
+
+`Pixmap.Fill` (`internal/graphics/pixmap.go:137`) walks every pixel of the page
+and calls `inside` (`internal/graphics/pixmap.go:385`) for each one, and
+`inside` walks every subpath segment. The cost is `W*H*N`. The v0.0.4 suite
+measured it at N of 4 only, on a 612 by 792 page.
+
+| Benchmark | Points | ns/op | B/op | allocs/op |
+| --- | --- | --- | --- | --- |
+| BenchmarkFillComplexity/4 | 4 | 968770 | 192 | 2 |
+| BenchmarkFillComplexity/32 | 32 | 7689271 | 1664 | 2 |
+| BenchmarkFillComplexity/128 | 128 | 26492447 | 6272 | 2 |
+| BenchmarkFillSubpaths | 128 in 32 subpaths | 21577169 | 11480 | 95 |
+
+The page is 200 by 200, so the 128 point row is 5.1 million inside tests. Going
+from 4 to 32 points cost 7.9 times and from 32 to 128 cost 3.4 times, so the cost
+is close to linear in N on this page and the constant is the page area. The
+allocation count does not move with N, because the only allocation is the
+subpath slice. `FillSubpaths` splits the same 128 segments across 32 subpaths
+and costs 21.6 ms against 26.5 ms for one subpath, because `cross` rejects a
+segment early when the pixel is outside its scanline.
+
+### Clip, glyph, and page
+
+The clip paths had no benchmark. Each clipped mark allocates a `rectSnapshot`
+of two fresh byte slices at `internal/graphics/clip.go:152` and walks the same
+rectangle again in `restoreOutside` at `internal/graphics/clip.go:171`.
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | --- | --- | --- |
+| BenchmarkStrokeClipped | 10995205 | 1900792 | 6 |
+| BenchmarkFillClipped | 10318785 | 164255 | 8 |
+| BenchmarkCompositeGroupClipped/group-only | 37632 | 0 | 0 |
+| BenchmarkCompositeGroupClipped/clipped | 890755 | 164064 | 6 |
+| BenchmarkDrawGlyph/full | 29528 | 0 | 0 |
+| BenchmarkDrawGlyph/half | 29117 | 0 | 0 |
+| BenchmarkDrawGlyph/zero | 9706 | 0 | 0 |
+| BenchmarkShowPage | 774935 | 1458197 | 1 |
+
+`CompositeGroupClipped` costs 23.7 times the same composite with no clip, and
+the 164 KB is the whole 200 by 200 page, because the snapshot at
+`internal/graphics/clip.go:78` covers the page rather than the group bounds.
+`DrawGlyph/zero` is a third of the full case, which is the walk with nothing to
+write, so the early return at `internal/graphics/pixmap.go:259` is not a
+shortcut. `ShowPage` copies 1.46 MB, which is the pixel plane at letter size.
+
+### Output encoders
+
+The v0.0.4 CLI raster benchmark wrote PPM, so no benchmark in the tree had
+encoded a PNG, a JPEG, or a TIFF. All four share one painted 200 by 200 page.
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | --- | --- | --- |
+| BenchmarkEncodePPM | 54055 | 246052 | 4 |
+| BenchmarkEncodeJPEG | 504297 | 169776 | 11 |
+| BenchmarkEncodePNG | 709869 | 1016390 | 34 |
+| BenchmarkEncodeTIFF/none | 164556 | 330558 | 27 |
+| BenchmarkEncodeTIFF/deflate | 540593 | 981423 | 49 |
+
+`BenchmarkEncodePPM` allocates 246 KB for a 120 KB page, because
+`internal/cli/run.go:684` copies the body again to prepend the header. PNG is
+the most expensive of the four and allocates 1.0 MB, of which 160 KB is the
+`W*H*4` RGBA conversion in `rgbaFromPage`. The TIFF deflate case costs 3.3 times
+the uncompressed case for a file 3.0 times larger.
+
+### Image packers
+
+`BenchmarkImagePDF` in `spectreps` covered `ImageColorRGB` only, so the gray and
+CMYK branches of `packSamples` (`internal/pdfout/image.go:124`) had never been
+timed.
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | --- | --- | --- |
+| BenchmarkWriteImagesColor/rgb | 221533 | 4635 | 43 |
+| BenchmarkWriteImagesColor/gray | 202610 | 65268 | 43 |
+| BenchmarkWriteImagesColor/cmyk | 640379 | 256786 | 47 |
+| BenchmarkEncodeFlateRGB | 14909755 | 3193154 | 532160 |
+
+CMYK costs 2.9 times RGB, which is the per pixel `rgbToCMYK` at
+`internal/pdfout/image.go:171`. Gray is 0.9 times RGB because the page is black
+on white and the luma of a white pixel is one byte against three.
+
+`EncodeFlateRGB` allocates 532,160 objects for a 842 by 632 image, which is
+532,144 pixels, so it is one allocation per pixel. The encoder reads through the
+`image.Image` interface at `internal/pdfout/scale.go:47`, and the returned
+`color.Color` escapes to the heap on every call. It also writes one zlib row per
+scanline at `internal/pdfout/scale.go:53`, so 632 calls reach the writer where
+one would do. This is the largest allocation count in the tree by two orders of
+magnitude and it was invisible before this extension.
+
+### Flate decode
+
+| Benchmark | ns/op | MB/s | B/op | allocs/op |
+| --- | --- | --- | --- | --- |
+| BenchmarkDecodeFlate | 1728564 | 606.62 | 5253305 | 27 |
+
+One 1 MiB buffer through `Decode` (`internal/pdf/filter.go:93`) allocates 5.25
+MB, which is 5.25 times the output. `readLimited`
+(`internal/pdf/filter.go:649`) starts from a 4096 byte buffer and grows by
+append, so the output is copied through about 9 reallocations. The 606 MB/s is
+the throughput, and it is acceptable. The allocation factor is not, and it is
+the same shape as the accepted Flate decode row in `Findings`.
+
+### Font, metadata, and the byte compare
+
+Three packages had no benchmark. `internal/font` is 6,820 implementation lines
+and `internal/pdfa` is 2,070, and both sit on a text or a rewrite path.
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | --- | --- | --- |
+| BenchmarkStandard14Lookup | 379.6 | 0 | 0 |
+| BenchmarkAGLUnicode | 49.76 | 0 | 0 |
+| BenchmarkEncodingLookup | 52444 | 0 | 0 |
+| BenchmarkLoadType1/parse | 20970 | 32000 | 163 |
+| BenchmarkLoadType1/glyph | 497.0 | 648 | 15 |
+| BenchmarkSubset/subset | 2354 | 3032 | 27 |
+| BenchmarkSubset/tag | 284.5 | 8 | 1 |
+| BenchmarkPreflight | 1653991 | 4938 | 12 |
+| BenchmarkPreflightUA2 | 371776 | 168936 | 4512 |
+| BenchmarkXMPPacket/pdfa4 | 0.1534 | 0 | 0 |
+| BenchmarkXMPPacket/ua2 | 2596 | 9142 | 13 |
+| BenchmarkCompareBytes/equal | 236164 | 0 | 0 |
+| BenchmarkCompareBytes/last-byte | 241644 | 0 | 0 |
+
+Every font lookup is allocation-free, so the standard 14 tables and the AGL map
+are not a memory cost. `EncodingLookup` walks 768 code and name pairs in 52
+microseconds, which is 68 ns per pair, and the text job pays it per shown code.
+`LoadType1/parse` is 42 times the glyph interpret, so a document that shows
+every glyph once pays the parse once and the interpret many times.
+
+`BenchmarkPreflight` is 1.65 ms, the most expensive single call in the tree
+outside a rewrite, and it is the only PDF/A benchmark that was missing. It walks
+every object in `sampledata/pdfa/compliant-a4.pdf`. `PreflightUA2` allocates
+4,512 objects for a second content scan at `internal/pdfa/ua2_content.go:27`.
+The PDF/A XMP packet is a constant string, which is why it costs 0.15 ns and 0
+allocations; the UA-2 packet is built per call and costs 2.6 microseconds.
+
+### Reading order and the tagged write
+
+`DerivePlan` is the only superlinear loop on a public job. `orderFlow` at
+`internal/tag/reading.go:897` is `O(n^2)` with a slice shift per removal.
+
+| Benchmark | Runs | ns/op | B/op | allocs/op |
+| --- | --- | --- | --- | --- |
+| BenchmarkDerivePlan/50 | 50 | 74667 | 82876 | 706 |
+| BenchmarkDerivePlan/200 | 200 | 379228 | 328702 | 2662 |
+| BenchmarkDerivePlan/800 | 800 | 2448927 | 1310273 | 10468 |
+| BenchmarkTaggedBuild | 20 | 116797 | 95515 | 1350 |
+| BenchmarkEmit | 2000 segments | 2323015 | 760994 | 25979 |
+
+Four times the runs cost 5.1 times the time from 50 to 200 and 6.5 times from
+200 to 800, so the curve steepens exactly where `orderFlow` starts to dominate.
+800 runs is 2.4 ms on one page, which is the worst case for a text-dense page
+and the best case for a document that is mostly paths.
+
+`BenchmarkEmit` allocates 25,979 objects for 2,000 path segments, which is 13
+per segment, against 5,628 for the whole of `WritePostScript`.
+
+### Library jobs with no benchmark
+
+| Benchmark | ns/op | B/op | allocs/op |
+| --- | --- | --- | --- |
+| BenchmarkDocumentInfo | 1359 | 184 | 7 |
+| BenchmarkPreflightUA2, library | 371776 | 168936 | 4512 |
+| BenchmarkWritePostScript | 495039 | 208707 | 5628 |
+| BenchmarkRewritePDFTagged | 1505441 | 1440061 | 12094 |
+| BenchmarkRewritePDFA | 81110 | 89604 | 147 |
+
+`DocumentInfo` is cheap, so the page tree walk and the font sort are not a cost
+worth a fix. `RewritePDFTagged` is 18.6 times `RewritePDFA` on the same input,
+and it is the most expensive writer in `RewritePDF`. The difference is the
+recorder, `DerivePlan`, the structure build, and the `PreflightUA2` call the
+builder makes on its own output, against an XMP packet, an ICC profile, and an
+output intent.
+
+### Profiles for the new packages
+
+`make bench-profile` writes one CPU and one heap profile per package, so all
+eleven are available. Three carry most of the new cost.
+
+`internal/pdfout` CPU, 15260 ms of samples over 13.14 s:
+
+| Function | Flat | Cumulative |
+| --- | --- | --- |
+| compress/flate.(*compressor).deflate | 9.04 percent | 16.64 percent |
+| x/image/draw.(*kernelScaler).scaleX_RGBA | 7.40 percent | 7.40 percent |
+| runtime.memmove | 5.77 percent | 5.77 percent |
+| crypto/internal/fips140/sha256.blockSHANI | 5.44 percent | 5.44 percent |
+
+`internal/pdfa` CPU, 5420 ms of samples over 3.96 s:
+
+| Function | Flat | Cumulative |
+| --- | --- | --- |
+| internal/runtime/maps.(*Iter).Next | 10.15 percent | 13.28 percent |
+| pdf.(*File).ObjectCount | 7.38 percent | 22.14 percent |
+| strings.(*Replacer).build | 4.06 percent | 11.99 percent |
+
+`ObjectCount` at 22.14 percent cumulative is the whole of the 1.65 ms
+`BenchmarkPreflight` figure, and `maps.(*Iter).Next` beside it says why: the
+preflight walks the xref map to learn the object count, and that walk is the
+cost. `strings.(*Replacer).build` is the UA-2 XMP builder recompiling its
+replacer on every call, which is the 2.6 microsecond `BenchmarkXMPPacket/ua2`
+row and a fix in one line if anyone wants it.
+
+`internal/tag` CPU, 7360 ms of samples over 5.84 s:
+
+| Function | Flat | Cumulative |
+| --- | --- | --- |
+| math.archMax | 9.51 percent | 9.51 percent |
+| tag.runText | 5.71 percent | 15.22 percent |
+| tag.actualTextOf | 3.40 percent | 8.97 percent |
+
+`math.archMax` at 9.51 percent is the geometry work in the reader, and
+`runText` plus `actualTextOf` at 24 percent cumulative is where
+`BenchmarkDerivePlan` spends its time. The `orderFlow` quadratic is real but it
+is not the largest term at 800 runs.
+
+The `internal/pdfout` heap profile is the one that changed a conclusion.
+Ranked by allocated objects rather than bytes:
+
+| Function | Share of all objects |
+| --- | --- |
+| image.(*RGBA).At | 48.52 percent |
+| image.(*YCbCr).At | 21.72 percent |
+| pdf.(*lexer).parseDict | 6.72 percent |
+| pdf.(*lexer).scanName | 3.71 percent |
+| pdf.(*lexer).scanWord | 3.57 percent |
+
+`image.(*RGBA).At` and `image.(*YCbCr).At` together are 70.24 percent of every
+object the writer package allocates. Both return a `color.Color` interface
+value, and the concrete colour struct escapes to the heap on each call, so
+every pixel read through the `image.Image` interface costs one allocation. The
+`BenchmarkEncodeFlateRGB` row measured the same thing from the other end at
+532,160 objects for 532,144 pixels, and the profile says the pattern is not
+local to that one function: `ScaleImage` and the level 5 re-encode path read the
+same way.
+
+Ranked by bytes the shape is different, and it is the accepted cost rather than
+a new one:
+
+| Function | Share of all bytes |
+| --- | --- |
+| bytes.growSlice | 42.46 percent |
+| bytes.Clone | 31.28 percent |
+| x/image/draw.(*kernelScaler).makeTmpBuf | 9.41 percent |
+| pdfout.packedCMYK | 3.22 percent |
+| pdfout.packedGray | 2.60 percent |
+
+Buffer growth and cloning are 73.74 percent of allocated bytes, which is the
+writer assembling whole output files in `bytes.Buffer`, and that is the accepted
+cost named in the v0.0.4 findings.
 
 ## Application timing
 
@@ -431,6 +709,21 @@ One row per hot area. Each row names a phase 5 change or an accepted reason.
 | Raster compare | spectreps.CompareRaster, spectreps/compare.go:15 | 100 percent of its own benchmark | pixels | 5.5 landed the tight-stride `bytes.Equal` fast path |
 | 300 to 600 dpi | pixmap fill, ShowPage copy, PPM encode | 3.9 times the min time for 4 times the pixels | pixels | Attributed above, and 5.1 removed the allocation part. No new fix row |
 
+The v0.0.5 extension added these rows. Each is measured and none has a landed
+fix, because `plans/v0.0.5/` changes no production code.
+
+| Hot area | Top function, file:line | Measured | Linear in | Disposition |
+| --- | --- | --- | --- | --- |
+| Fill at path complexity | graphics.inside, internal/graphics/pixmap.go:385, called from Fill :137 | 26.5 ms for 128 points on a 200 by 200 page | page area and path points | Open. The cost is `O(W*H*N)` with no scanline bucketing and no bounds rejection. A fix is a later plan row |
+| Clip snapshot | graphics.(*Pixmap).snapshotRect, internal/graphics/clip.go:152, and restoreOutside :171 | 164 KB and 6 allocs per clipped mark, and 23.7 times the cost of the same composite unclipped | snapshot rectangle area | Open. `CompositeGroupClipped` snapshots the whole page where the group bounds would do |
+| Flate RGB encode | pdfout.EncodeFlateRGB, internal/pdfout/scale.go:41 | 532,160 allocs/op for 532,144 pixels, 14.9 ms | pixels | Open. One heap allocation per pixel from the `image.Image` interface at :47, and one zlib write per scanline at :53 |
+| Flate decode growth | pdf.readLimited, internal/pdf/filter.go:649 | 5.25 MB allocated for a 1 MiB output at 606 MB/s | output bytes | Open. The buffer starts at 4096 bytes and grows by append, so the output is copied about 9 times |
+| CMYK packing | pdfout.packedCMYK, internal/pdfout/image.go:157 | 640 us against 222 us for RGB on the same page | pixels | Open. Per pixel float conversion with no packed fast path |
+| PPM double copy | cli.encodePPM, internal/cli/run.go:684 | 246 KB for a 120 KB page | page bytes | Open. The body is copied again to prepend the header |
+| Reading order | tag.orderFlow, internal/tag/reading.go:897 | 2.4 ms for 800 runs on one page | run count, superlinear | Open. `O(n^2)` with a slice shift per removal |
+| PDF/A preflight | pdfa.Preflight, internal/pdfa/preflight.go:73 | 1.65 ms on a compliant A-4 file | object count | Open. The loop visits every object, and it runs inside every PDF/A rewrite |
+| UA-2 content scan | pdfa.ua2ContentRule, internal/pdfa/ua2_content.go:27 | 4,512 allocs/op for a second scan of the page bytes | content bytes | Open. A second scanner over bytes the content interpreter already read |
+
 ## Budget
 
 The accepted baseline is the `make bench` table above, taken on 2026-09-26.
@@ -444,7 +737,35 @@ The allocation ceilings are in `spectreps/alloc_test.go` and
 | MeasureInkAmount | 0 allocs | exact |
 | CompareRaster | 0 allocs | exact |
 | CompareFiles | 0 allocs | exact |
-| level 2 rewrite, internal/cli | 701 allocs | exact, collector paused in the test |
+| level 2 rewrite, internal/cli | 715 allocs | exact, collector paused in the test |
+| DocumentInfo | 7 allocs | exact |
+| PreflightUA2 | 4512 allocs | exact |
+| WritePostScript | 5628 allocs | exact |
+| RewritePDF tagged | 12090 allocs | exact |
+| RewritePDF PDF/A-4 | 147 allocs | exact |
+| PNG encode, internal/cli | 34 allocs | exact |
+| TIFF encode uncompressed, internal/cli | 27 allocs | exact |
+
+The level 2 rewrite ceiling is 715 in `internal/cli/alloc_test.go` and was 701
+in the v0.0.4 record. The merged tree added five allocations to that path, the
+code comment at `internal/cli/alloc_test.go:18` names them, and this table now
+carries the number the test actually asserts.
+
+The five `spectreps` ceilings and the two `internal/cli` ceilings are the v0.0.5
+extension. `PreflightUA2`, `WritePostScript`, and `RewritePDF PDF/A-4` match
+their `-benchmem` counts. `RewritePDF tagged` does not: the benchmark reads
+12,095 and `AllocsPerRun` reads 12,090, because `AllocsPerRun` warms the zlib
+writer pool before it measures and a benchmark does not. The ceiling is the
+`AllocsPerRun` value, which is the one that gates `make test`.
+
+The guard proof: with the `internal/cli` ceiling lowered by one, to 714,
+`go test -count=1 ./internal/cli -run TestPerformanceAllocs` fails with
+`level 2 rewrite allocs = 715, want 714`, and the restored ceiling passes. The
+same proof ran on the v0.0.5 ceilings. Lowering `allocRewriteTagged` to 12089
+made `go test -count=1 ./spectreps -run TestJobAllocs` fail with
+`RewritePDF tagged allocs = 12090, want 12089`, and lowering `allocCLIPNG` to 33
+made `go test -count=1 ./internal/cli -run TestEncoderAllocs` fail with
+`PNG encode allocs = 34, want 33`. Both restored values pass.
 
 The guard proof: with the `internal/cli` ceiling lowered by one, to 700,
 `go test -count=1 ./internal/cli -run TestPerformanceAllocs` fails with
@@ -528,22 +849,78 @@ delta is the emitted content of one page, about 19.6 KiB.
 | `/usr/bin/time` | yes | seconds and peak RSS per command | `scripts/bench-cli.sh` stops with a message |
 | hyperfine | no | wall-clock distribution per command | the script falls back to GNU time |
 | `go tool pprof` | yes | CPU and allocation profiles | profiles cannot be read |
-| benchstat | no | A/B comparison of two benchmark runs | `make bench-check` prints a skip |
+| benchstat | yes | A/B comparison of two benchmark runs | `make bench-check` prints a skip |
 | perf | no | not used | nothing |
+
+benchstat is installed at `~/go/bin/benchstat` by
+`go install golang.org/x/perf/cmd/benchstat@latest`. `~/go/bin` is on `PATH`
+from `~/.zshrc:52`, so `make bench-check` produces a real ratio verdict. The
+install is a tool, not a module requirement: `go install` with a version runs
+outside the module, and `go.mod` and `go.sum` are byte-identical before and
+after. The repository has no CI, so nothing runs this suite automatically and
+every number here is reproducible only on this machine.
 
 ## bench-check
 
 `make bench-check` runs the suite with `-count=5` and compares
-`profiles/bench.txt` with the fresh run through benchstat when it is on PATH.
-benchstat is not installed on this machine, so the verdict is:
+`profiles/bench.txt` with the fresh run through benchstat, writing the verdict
+to `profiles/compare.txt`. benchstat is installed, so the comparison runs. This
+is the first run on this tree that produced a ratio verdict at all, because
+every `make bench-check` before the v0.0.5 extension wrote a skip line.
 
-```
-benchstat is not on PATH, skipping the comparison
-```
+It also produced a verdict that is not usable, and the reason is the Makefile
+rather than the tool. The base capture is `-count=3` and the fresh capture is
+`-count=5`, so benchstat gets 3 samples on one side and 5 on the other. Its own
+footnote says it needs 6 samples for a confidence interval, and 44 rows came
+back as `± ∞` with that footnote. The test it runs is a Mann-Whitney U, and at
+n of 3 against 5 the smallest reachable p-value is 0.036, so the p-value
+distribution has no room below it.
 
-The fresh `-count=5` run passed and its raw rows are in
-`profiles/bench-check.txt`. Without benchstat there is no automatic ratio
-verdict, so a reader compares the two tables by hand. The allocation columns
-track the baseline within a few bytes and, in the Flate and CLI raster cells,
-within one allocation per op where a buffer or a pool decision differs.
+The measured result on 2026-09-26, on a tree where no non-test Go file had
+changed:
+
+| Reading | Value |
+| --- | --- |
+| Rows compared | 323 |
+| Rows benchstat called significant | 107 |
+| Of those, rows sitting at exactly p=0.036 | 107 |
+| Rows marked `~`, no significant change | 216 |
+| Rows reading `all samples are equal` | 22 |
+| Per-package `allocs/op` geomean | +0.00 percent in every package |
+
+All 107 significant rows carry the identical floor p-value, so benchstat is not
+ranking them, it is reporting that the three base samples and the five new
+samples do not overlap on a noisy box. The per-package `sec/op` geomeans ranged
+from -2.22 percent to +46.67 percent in a single run with a load average of 1.04
+and no competing process, and the sign of the move tracked the size of the
+benchmark rather than anything in the code. `Subset/tag` moved +34.21 percent
+and `OpenClassicXRef` moved +38.30 percent in the same file, in opposite
+directions from their neighbours.
+
+The 22 rows reading `all samples are equal` are the `allocs/op` columns, and
+those are the signal. `BenchmarkRewritePDFA` read 147 allocs on both sides
+across all eight samples. That is the whole argument for the budget: allocation
+counts are exact and reproducible, timing numbers on this box are not, at any
+sample count the current targets provide.
+
+Read a verdict in this order.
+
+1. The `allocs/op` and `B/op` columns. They are the only rows a change has to
+   move, and they are the only rows that reproduce.
+2. The `geomean` row. Near zero means the box was quiet. Several percent off in
+   one direction across every package means the run is not comparable to itself.
+3. The `sec/op` column last, and never on a single row.
+
+Three things follow, and none of them is a code change.
+
+- Raise the counts before trusting a verdict. `-count=10` on both sides puts
+  benchstat above its 6-sample floor and lets the p-value discriminate. That is
+  a Makefile row in `plans/v0.0.5/5-baseline-and-budget.md`, not a fix here.
+- Do not run lint or a build while a comparison is in flight. An early run on
+  this tree shared the box with `golangci-lint` and reported +15.19 percent on
+  `EncodePPM` and +14.19 percent on `OpenXRefStream`, which was load.
+- Keep timing out of `make test`. The numbers above are the argument, and they
+  are stronger than the policy statement was before this section existed.
+
+
 

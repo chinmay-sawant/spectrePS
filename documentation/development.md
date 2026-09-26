@@ -10,7 +10,7 @@
 | `make test` | `go test -p $(nproc) ./...` |
 | `make lint` | `gofmt -l` must be empty, then `golangci-lint run ./...`, then `make size-check` |
 | `make size-check` | `bash scripts/check-file-size.sh` |
-| `make bench` | `go test -p 1 -run '^$' -bench . -benchmem -count=3` over the six benchmark packages, writing `profiles/bench.txt` |
+| `make bench` | `go test -p 1 -run '^$' -bench . -benchmem -count=3` over the eleven benchmark packages, writing `profiles/bench.txt` |
 | `make bench-profile` | the same packages with `-cpuprofile` and `-memprofile`, writing one CPU and one heap profile per package under `profiles/` |
 | `make bench-check` | a `-count=5` rerun compared against `profiles/bench.txt` with benchstat, writing `profiles/compare.txt` |
 | `make fmt` | `gofmt -w .` |
@@ -23,7 +23,7 @@
 
 `make size-check` enforces the 2,000-line Go file limit from `AGENTS.md`. Overflow is recorded in `scripts/file-size-allowlist.txt`. `make lint` runs the check, so a stale record fails lint.
 
-`make bench`, `make bench-profile`, and `make bench-check` are manual targets. Neither `make test` nor `make lint` calls them, because `go test ./...` runs benchmarks only when `-bench` is passed. Benchmark output lands in `profiles/`, which is gitignored; the recorded tables live in `documentation/performance.md`. `bash scripts/bench-cli.sh` measures the built binary and writes `profiles/cli.txt`.
+`make bench`, `make bench-profile`, and `make bench-check` are manual targets. Neither `make test` nor `make lint` calls them, because `go test ./...` runs benchmarks only when `-bench` is passed. Benchmark output lands in `profiles/`, which is gitignored; the recorded tables live in `documentation/performance.md` and the full run output lives in `documentation/benchmark.md`. `bash scripts/bench-cli.sh` measures the built binary and writes `profiles/cli.txt`. `make bench-check` needs `benchstat` on `PATH`; install it with `go install golang.org/x/perf/cmd/benchstat@latest`, which leaves `go.mod` and `go.sum` untouched.
 
 ## Checklist
 

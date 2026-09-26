@@ -17,6 +17,7 @@ const (
 	benchPathPDF = "compress/path.pdf"
 	benchWhatPDF = "compress/whatisthis.pdf"
 	benchTextPDF = "fixtures/text.pdf"
+	benchUA2PDF  = "pdfua2/compliant-ua2.pdf"
 
 	benchPagePoints = 200
 )
@@ -330,4 +331,71 @@ func BenchmarkPerCallInstance(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+// BenchmarkDocumentInfo reads the page tree for sizes, sorts the font list,
+// and counts the images. The file is opened once, so the line is Info and not
+// OpenPDF.
+func BenchmarkDocumentInfo(b *testing.B) {
+	src := benchRead(b, benchPathPDF)
+	_, doc := benchOpen(b, src)
+	b.SetBytes(int64(len(src)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		if _, err := doc.Info(); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkPreflightUA2 runs the PDF/UA-2 preflight on its own, which is the
+// second content scanner over the page bytes. The tagged rewrite below pays
+// the same scan inside a whole write.
+func BenchmarkPreflightUA2(b *testing.B) {
+	src := benchRead(b, benchUA2PDF)
+	in, doc := benchOpen(b, src)
+	b.SetBytes(int64(len(src)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		if err := in.PreflightUA2(b.Context(), doc); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkWritePostScript converts every page to a PostScript program, which
+// covers psout.Emit and psout.Write end to end.
+func BenchmarkWritePostScript(b *testing.B) {
+	src := benchRead(b, benchPathPDF)
+	in, doc := benchOpen(b, src)
+	b.SetBytes(int64(len(src)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		if _, err := in.WritePostScript(
+			b.Context(), doc, spectreps.PostScriptOptions{},
+		); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkRewritePDFTagged and BenchmarkRewritePDFA cover the two RewritePDF
+// writers that had no benchmark. Each runs a preflight over the whole document
+// before it writes a byte, so the recorder, the plan derivation, the build, and
+// the preflight are all inside the timed loop.
+func BenchmarkRewritePDFTagged(b *testing.B) {
+	benchRewrite(b, benchPathPDF, spectreps.RewriteOptions{
+		Tag:   true,
+		Title: "Bench document",
+		Lang:  "en-US",
+	})
+}
+
+// BenchmarkRewritePDFA claims PDF/A-4, which appends the XMP packet, the ICC
+// profile, and the output intent.
+func BenchmarkRewritePDFA(b *testing.B) {
+	benchRewrite(b, benchPathPDF, spectreps.RewriteOptions{PDFA: spectreps.PDFA4})
 }
