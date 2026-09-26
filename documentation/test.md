@@ -6,6 +6,44 @@ Tests call package `spectreps` or the `spectreps` binary. They do not run `/usr/
 
 External tests use `package spectreps_test`, so they only see the exported API.
 
+## Validation corpus
+
+The v0.0.4 validation work adds a checked-in corpus at `sampledata/validation/` and a traceability table that maps every case in this file to the test that proves it.
+
+`sampledata/validation/` holds one folder per feature area. Every file has a row in `sampledata/validation/manifest.tsv` with its source, pinned commit, license, SHA-256, byte count, feature, and expected verdict. The folders and what each one proves:
+
+- `postscript/`: repo-authored interpreter programs and the Apache-2.0 CUPS pages, for the interpreter and raster cases.
+- `paths/`: PDF path and paint operator files, including an image XObject page.
+- `structural/`: classic xref tables, xref streams, object streams, a page with no `/Resources`, and files that must refuse with a named xref error.
+- `images/`: Flate, DCT, CCITT G3 and G4, and JPEG2000 samples, including a filter chain and a named refusal.
+- `text/`: font-bearing PDFs for metrics, encodings, and extraction, with the embedded font review in the corpus README.
+- `tagged/`: PDF/UA-2 structure samples with a `negative/` subfolder.
+- `pdfa/`: PDF/A-4 and PDF/A-4f samples with a `negative/` subfolder.
+- `rewrite/`: the writer levels 0 to 5 over paths, containers, images, and tags.
+- `gs-argv/`: the bounded `gs` device mode over a PDF, a PostScript program, and a corpus PDF.
+- `refs/`: the repo-authored programs the phase 11 Ghostscript reference checks rasterize.
+
+The corpus has two tiers:
+
+- The committed tier is checked in. Every file is at or under 1 MiB.
+- The external tier lives under the gitignored `sampledata/validation/external/`. It holds larger files and whole suites, and `go run internal/validation/gen.go -fetch-external` fetches it after checking every SHA-256. Tests skip the external tier when it is absent, and no test opens a network connection.
+
+`sampledata/validation/traceability.tsv` is the index. It carries one row per case below and one row per validation plan row, with the section, the case, the test function, and a status. A `live` row names a function that `go test -list` must report. `scripts/check-traceability.sh` checks the table against the live list and exits 1 on a `live` row whose function is missing. A row whose test has not landed yet is `pending:<scope>`, and the script reports it instead of failing.
+
+Every corpus test is named `TestValidation<Area>`, so `go test -count=1 ./... -run TestValidation` runs the validation group, and `make test` runs it with everything else. The group names every `TestValidation` function in the suite:
+
+- `internal/cli`: `TestValidationExitCodes`, `TestValidationFlagSurface`, `TestValidationNoProcess`, `TestValidationRasterGeometry`, `TestValidationCompareCLIText`, `TestValidationCorpusMeasure`, `TestValidationCorpusPostScript`, `TestValidationCorpusPDF`, `TestValidationCorpusImages`, `TestValidationCorpusText`, `TestValidationCorpusRewrite`, `TestValidationCorpusPDFA`, `TestValidationCorpusGS`, `TestValidationPDFACLI`, `TestValidationGSEdges`, `TestValidationGSOutputRules`, `TestValidationGSParamCorners`, `TestValidationGSRejectedDevices`.
+- `internal/graphics`: `TestValidationPixmapStrokeFill`, `TestValidationDrawImageEdges`.
+- `internal/pdf`: `TestValidationPageTree`, `TestValidationUnsupportedOps`, `TestValidationImageErrorShapes`, `TestValidationFilterChain`, `TestValidationCCITTParams`, `TestValidationFontFile3`, `TestValidationNoOutlinePolicy`, `TestValidationTextOpErrors`.
+- `internal/pdfa`: `TestValidationUA2Edges`.
+- `internal/pdfout`: `TestValidationLevelOverridesErrors`.
+- `internal/ps`: `TestValidationStackExtra`, `TestValidationMathOps`, `TestValidationCompareLogic`, `TestValidationTypeOps`, `TestValidationControlFlow`, `TestValidationPSSGraphics`.
+- `internal/psout`: `TestValidationPSOutImage`.
+- `internal/validation`: `TestValidationManifest`, `TestValidationManifestParse`, `TestValidationManifestRejectsUnlisted`, `TestValidationLicenses`.
+- `spectreps`: `TestValidationMultiInstance`, `TestValidationCanceledJobs`, `TestValidationNilContextJobs`, `TestValidationNilDocument`, `TestValidationPixelCap`, `TestValidationOpenStructs`, `TestValidationDoPolicy`, `TestValidationExtractCases`, `TestValidationMeasureEdges`, `TestValidationCompareEdges`, `TestValidationRewriteTags`, `TestValidationRewriteContainers`, `TestValidationRewritePDFA`, `TestValidationWritePostScript`, `TestValidationImagePDFContract`, `TestValidationPDFARules`, `TestValidationUA2Preserve`.
+
+The external reference proofs in phase 11 stay outside `make test`. Their verdicts belong to the proof tool versions recorded in `documentation/reference-proofs.md`.
+
 ## Library and CLI
 
 - `New` returns a non-nil instance. `Close` returns nil. A second `Close` on the same instance returns nil.
