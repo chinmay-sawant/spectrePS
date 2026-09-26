@@ -60,7 +60,7 @@ type RewriteOptions struct {
 
 func DefaultRewriteOptions() RewriteOptions // CompressStreams true at level 0
 
-type PostScriptOptions struct{} // fixed 612 by 792 box, no compression
+type PostScriptOptions struct{} // no options yet; the page box comes from the document
 
 type CompareResult struct {
     Equal  bool
@@ -204,4 +204,4 @@ A cancelled `ctx` returns `ctx.Err()` and no partial success. `nil` context is a
 
 `RewriteOptions.PDFA` appends a PDF/A-4 claim. `PDFA4` is the base claim and `PDFA4F` is the embedded-file claim. A claim uses the pass-through writer at the selected level, runs the profile preflight, and returns a `JobError` with `Op` `PDFA` and the failed rule in `Msg` when the input carries a known violation. The claim is a profile preflight, not a certificate. The rules and the writer changes are in `documentation/devices.md`.
 
-`WritePostScript` writes one date-free PostScript program from a path-only document. The marks match `RewritePDF` level 0: `setrgbcolor` or `setgray`, `setlinewidth`, `m` and `l`, and `S`, `f`, or `f*` in 72 dpi points. A prolog defines the short names in terms of the long operators, each page ends in `showpage`, and the header carries a fixed 612 by 792 box. Two calls return equal bytes. Text and images are not emitted, so a content operator Spectre cannot emit returns `undefined` with its operator name; a text page returns `undefined in Tj`. A nil document returns `rangecheck`. The zero `PostScriptOptions` is the only supported shape in this tag; media options wait.
+`WritePostScript` writes one date-free PostScript program from a path-only document. The marks match `RewritePDF` level 0: `setrgbcolor` or `setgray`, `setlinewidth`, `m` and `l`, and `S`, `f`, or `f*` in 72 dpi points. A prolog defines the short names in terms of the long operators, each page ends in `showpage`, and the header carries the first page's resolved `/MediaBox` as its `%%BoundingBox`, floored at the minimum and ceiled at the maximum because DSC wants integers. A page with no resolvable box falls back to the 612 by 792 reader default. Two calls return equal bytes. Text and images are not emitted, so a content operator Spectre cannot emit returns `undefined` with its operator name; a text page returns `undefined in Tj`. A nil document returns `rangecheck`. The zero `PostScriptOptions` is the only supported shape in this tag; media options wait.

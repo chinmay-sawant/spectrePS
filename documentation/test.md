@@ -66,6 +66,11 @@ The external reference proofs in phase 11 stay outside `make test`. Their verdic
 - Dictionary `forall` walks entries in insertion order.
 - `def` into `systemdict` is `invalidaccess`. `def` into `userdict` succeeds. `end` when only `systemdict` remains is `dictstackunderflow`. `]` with no mark is `unmatchedmark`. `exit` outside a loop is `invalidexit`. `save` is `undefined`.
 - Operand stack past 8192 is `stackoverflow`. Execution stack past 500, dictionary stack past 20, and procedure nesting past 128 are `limitcheck`.
+- `array` and `string` past their caps are `rangecheck`, one past and far past, and the value exactly at the cap still allocates. `2147483647 array` is `rangecheck` and must not reach the Go allocator.
+- A loop with no `exit` stops with `limitcheck`. The body may be empty: `{ } loop` is bounded, because the cap counts a procedure entry as well as an object.
+- A program that only calls `showpage` stops with `limitcheck` at the retained page byte budget, and `10 { showpage } repeat` still runs.
+- Two interpreters share nothing. After one runs a `translate` and a `repeat`, the other's transformation is still the identity and its `loopDepth` is back to zero. `where` finds `b` while a dictionary is on the stack and does not find it after `end`.
+- `exit` inside `loop` or `repeat` is not a reportable error, and `errors.As` for `*Error` does not match it.
 - `for` with a zero increment is `rangecheck`.
 
 ## Raster
@@ -82,7 +87,7 @@ The external reference proofs in phase 11 stay outside `make test`. Their verdic
 - `spectreps raster -o out.jpg in.ps` writes a JPEG that starts with the SOI bytes `FF D8` and decodes to the page geometry. `.jpeg` selects the same encoder; every other suffix falls back to PPM. The test decodes with `image/jpeg` and does not compare JPEG bytes.
 - `-jpegq` defaults to 75 and is clamped to 1 through 100. `-jpegq 0` and `-jpegq 500` still write a decodable JPEG. `run` and `compare raster` reject `-jpegq` with exit 2.
 - `spectreps raster` paints every page of a PDF input. A two-page fixture and an `-o` path with `%d` write two PPM files whose bodies match each page's marks.
-- `-pages` takes `N` or `A-B`, 1-based inclusive. `A-` runs to the last page and `-B` starts at page 1, and an omitted flag selects every page. `raster`, `pdfimage`, `bbox`, `inkcov`, and `compare raster` accept it, and `run` accepts and ignores it. A malformed value exits 2. A start below 1 or past the last page exits 1 with `Error: /rangecheck in pages`. An end past the last page clamps to the last page.
+- `-pages` takes `N` or `A-B`, 1-based inclusive. `A-` runs to the last page and `-B` starts at page 1, and an omitted flag selects every page. `raster`, `pdfimage`, `bbox`, `inkcov`, `ink_cov`, and `compare raster` accept it, and `run` accepts and ignores it. A malformed value exits 2. A start below 1 or past the last page exits 1 with `Error: /rangecheck in pages`. An end past the last page clamps to the last page.
 - For PostScript, `-pages` filters after `RunPostScript`, so a failing page outside the range still fails the command.
 - `spectreps raster -o out.tif in.ps` writes a TIFF that `tiff.Decode` reads back to the same pixels as the PPM from the same program. `.tiff` selects the same encoder, `.png`, `.jpg`, and `.jpeg` keep theirs, and every other suffix falls back to PPM. The test compares decoded pixels, not the TIFF bytes.
 - `-tiffcompress none` writes uncompressed TIFF and `-tiffcompress deflate` writes Deflate strips. The default is `deflate`, so two runs with the same input and the default return equal TIFF bytes. An unknown value exits 2 and writes no file. `run` and `compare raster` reject `-tiffcompress` with exit 2.
@@ -193,6 +198,14 @@ The external reference proofs in phase 11 stay outside `make test`. Their verdic
 - `spectreps rewrite -pdfa 4|4f` writes the file and exits 0, a refusal exits 1 with `Error: /rule in PDFA`, and any other `-pdfa` value exits 2. A refusal writes no output file.
 - `make pdfa-check` runs `verapdf --flavour 4` over the PDFs under `sampledata/pdfa/`, excludes a `negative/` subfolder, prefers a local copy at `./verapdf/verapdf`, falls back to `verapdf` on PATH, and prints a skip when neither exists. The local copy is gitignored. veraPDF is a proof tool, not a dependency, and it stays out of `make test`. On 2026-09-25, veraPDF 1.30.2 reported `compliant="2" nonCompliant="0"` for `path-a4.pdf` and `compliant-a4.pdf`. The verdict is veraPDF's; the claim wording stays "profile preflight".
 - `make pdfua2-check` runs `verapdf --flavour ua2 --format json` over the PDFs under `sampledata/pdfua2/`, uses the same local-copy preference and skip, and excludes `negative/`. On 2026-09-25, veraPDF 1.30.2 reported 1727 passed rules and 0 failed rules for `tagged-ua2.pdf` and `compliant-ua2.pdf`. The `negative/untagged.pdf` fixture fails `ua2-marked` by design.
+
+## PostScript output
+
+- `WritePostScript` on a path-only document returns a program whose header carries the document's own `%%BoundingBox`, not a fixed letter box. The 20 by 20 fixture gets `%%BoundingBox: 0 0 20 20`.
+- `psout.Write` boxes: the zero options fall back to `0 0 612 792`, an explicit size is used as given, a fractional size is floored at the minimum and ceiled at the maximum so 595.28 by 841.89 becomes `0 0 595 842`, and a non-positive width or height falls back to the default on that axis only.
+- A text page returns `undefined in Tj` and no bytes. A nil document is `rangecheck`, a cancelled context returns `context.Canceled`, and a nil context panics.
+- Two writes on the same document return bytes `CompareFiles` reports equal, and the program carries no `CreationDate` or `ModDate`.
+- A page with `re`/`f`, `m`/`l`/`S`, a curve, and `q`/`Q`/`cm` runs back through `RunPostScript` at 72 dpi and matches the original page under `CompareRaster`.
 
 ## Bitmap PDF
 

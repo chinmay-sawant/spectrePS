@@ -50,6 +50,85 @@ func TestLimits(t *testing.T) {
 	assertCanceled(t)
 }
 
+// TestAllocationCaps checks that a huge array or string is a PostScript error
+// and not an allocation failure from the Go runtime.
+func TestAllocationCaps(t *testing.T) {
+	assertErrName(t, "2147483647 array pop", "rangecheck")
+	assertErrName(t, "4294967296 string pop", "rangecheck")
+	// One past each cap.
+	assertErrName(t, "1048577 array pop", "rangecheck")
+	assertErrName(t, "33554433 string pop", "rangecheck")
+	// Exactly at each cap still works.
+	assertInts(t, "1048576 array length", 1048576)
+	mustRun(t, "33554432 string length")
+}
+
+// TestRunawayLoopStops checks that a loop with no exit stops on the step cap
+// instead of running until the machine gives up. The empty body has no object
+// to count, so the cap also has to fire on the procedure entry.
+func TestRunawayLoopStops(t *testing.T) {
+	assertErrName(t, "{ } loop", limitCheckName)
+	assertErrName(t, "{ } loop", limitCheckName)
+}
+
+// TestShowPageBudgetStops checks that showpage is bounded by the retained page
+// bytes, so a program that only shows pages cannot grow without limit.
+func TestShowPageBudgetStops(t *testing.T) {
+	assertErrName(t, "{ showpage } loop", limitCheckName)
+	// A normal multi-page program is unaffected.
+	mustRun(t, "10 { showpage } repeat")
+}
+
+// TestInterpretersAreIndependent checks that two interpreters share no state.
+// The graphics state, the loop depth, and the dictionary stack all live on the
+// interpreter, so one run cannot change what another run sees.
+func TestInterpretersAreIndependent(t *testing.T) {
+	first := mustRun(t, "/x 1 def 10 20 translate 2 { 1 1 } repeat")
+	second := mustRun(t, "/x 2 def")
+	firstX, firstOK := first.Lookup("x")
+	secondX, secondOK := second.Lookup("x")
+	if !firstOK || !secondOK || firstX.Int != 1 || secondX.Int != 2 {
+		t.Fatalf("x = %d and %d, want 1 and 2", firstX.Int, secondX.Int)
+	}
+	if first.loopDepth != 0 || second.loopDepth != 0 {
+		t.Fatalf("loop depth = %d and %d, want 0 and 0", first.loopDepth, second.loopDepth)
+	}
+	// The first interpreter translated 10 20. The second one did not, so its
+	// transformation is still the identity. Before the state moved onto the
+	// interpreter, both reads hit the same shared map.
+	if first.gs().ctm.e != 10 || first.gs().ctm.f != 20 {
+		t.Fatalf("first ctm e,f = %v,%v, want 10,20", first.gs().ctm.e, first.gs().ctm.f)
+	}
+	if second.gs().ctm != identityMatrix() {
+		t.Fatalf("second ctm = %+v, want the identity", second.gs().ctm)
+	}
+}
+
+// TestWhereReadsTheDictStack checks that where finds the same dictionaries
+// begin and end maintain, in the same top-down order.
+func TestWhereReadsTheDictStack(t *testing.T) {
+	// 42 is the hit for b while d is on the stack, 7 is the hit for a at the
+	// top. b is gone after end, so there is no 99.
+	assertInts(t,
+		"/a 1 def /d 2 dict def d begin /b 3 def /b where { pop 42 } if "+
+			"end /b where { pop 99 } if /a where { pop 7 } if",
+		42, 7)
+}
+
+// TestExitIsNotAPostScriptError checks that the exit stop condition never
+// reaches a caller as a reportable error, and that tagOp cannot rewrite it.
+// tagOp sets Op on every *Error it sees, so the signal is a different type.
+func TestExitIsNotAPostScriptError(t *testing.T) {
+	mustRun(t, "{ exit } loop")
+	mustRun(t, "3 { exit } repeat")
+	assertErrName(t, "exit", "invalidexit")
+	err := NewInterp().Run(t.Context(), []byte("{ exit } loop"))
+	var psErr *Error
+	if errors.As(err, &psErr) {
+		t.Fatalf("exit surfaced as *Error: %+v", psErr)
+	}
+}
+
 func TestGraphics(t *testing.T) {
 	assertFloats(t, "0 0 moveto currentpoint", 0, 0)
 	assertFloats(t, "10 0 translate 0 0 moveto currentpoint", 0, 0)

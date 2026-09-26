@@ -126,10 +126,22 @@ Pipe paths such as `%pipe%...` never run, because `file` returns `invalidaccess`
 | `gsave` depth | 32 |
 | Procedure nesting while scanning | 128 |
 | Path points | 100000 |
+| Array elements | 1048576 |
+| String bytes | 33554432 |
+| Executed objects and procedure entries | 67108864 |
+| Retained page bytes for one run | 1073741824 |
 | Pixels per page | 40000000 |
 | Side of a page, pixels | 20000 |
 
 A default letter page at 72 dpi is 612 by 792 pixels. A letter page at 300 dpi is under the pixel cap. A letter page at 600 dpi is 5100 by 6600, which is 33,660,000 pixels and still under the 40,000,000 cap. The area cap is crossed at 655 dpi, and a letter page there returns `limitcheck`.
+
+An `array` or a `string` past its cap returns `rangecheck`, not `limitcheck`, because the requested size is an operand rather than a resource the interpreter accumulated. Without the cap, a program asking for 2147483647 elements would ask the Go runtime for a very large allocation and crash instead of reporting a PostScript error.
+
+The executed-object cap is what stops a loop with no `exit`. It counts an object each time one runs and a procedure entry each time one is called, because a body of `{ }` has no object to count and would otherwise loop forever with the counter standing still. The interpreter retires about 22 million objects a second, so the cap is roughly three seconds of runaway execution. The heaviest file in the validation corpus uses 53,000 objects, so the headroom is over a thousand.
+
+The retained-page-byte cap is what stops a program that only calls `showpage`. Every `showpage` copies the whole page buffer, so an unbounded page count is an unbounded allocation. The budget is in bytes rather than pages because the page count that fills it depends on the caller's page geometry: a letter page at 72 dpi is 1,454,208 bytes a page, so the budget allows 738 pages, and a small page allows more.
+
+The interpreter polls the context on every object it runs, so a cancelled context stops the job promptly. The caps above are a floor on what a program can consume and are not a substitute for a caller deadline.
 
 ## Out of this tag
 

@@ -166,17 +166,17 @@ func validationStringWidth(t *testing.T) {
 func validationSetLineCap(t *testing.T) {
 	t.Helper()
 	interp, _ := psopsRun(t, "1 setlinecap", 10, 10)
-	if gsFor(interp).lineCap != 1 {
-		t.Fatalf("lineCap = %d, want 1", gsFor(interp).lineCap)
+	if interp.gs().lineCap != 1 {
+		t.Fatalf("lineCap = %d, want 1", interp.gs().lineCap)
 	}
 	interp, _ = psopsRun(t, "0 setlinecap 2 setlinecap", 10, 10)
-	if gsFor(interp).lineCap != 2 {
-		t.Fatalf("lineCap = %d, want 2", gsFor(interp).lineCap)
+	if interp.gs().lineCap != 2 {
+		t.Fatalf("lineCap = %d, want 2", interp.gs().lineCap)
 	}
 	// gsave and grestore save the line cap.
 	interp, _ = psopsRun(t, "1 setlinecap gsave 0 setlinecap grestore", 10, 10)
-	if gsFor(interp).lineCap != 1 {
-		t.Fatalf("lineCap after grestore = %d, want 1", gsFor(interp).lineCap)
+	if interp.gs().lineCap != 1 {
+		t.Fatalf("lineCap after grestore = %d, want 1", interp.gs().lineCap)
 	}
 
 	psopsWantError(t, "setlinecap", "stackunderflow")

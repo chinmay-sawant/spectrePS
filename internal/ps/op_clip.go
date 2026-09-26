@@ -40,7 +40,7 @@ func opClipRun(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	state.clips = append(state.clips, clipPath{
 		pts:     append([]devPt(nil), state.path...),
 		evenOdd: false,
@@ -53,7 +53,7 @@ func opInitClipRun(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	gsFor(interp).clips = nil
+	interp.gs().clips = nil
 	return nil
 }
 
@@ -65,7 +65,7 @@ func opClipPathRun(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	state.clearPath()
 	pts := state.clipBoundary()
 	if len(pts) == 0 {
@@ -86,7 +86,7 @@ func opPathBBoxRun(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	inv, ok := state.ctm.invert()
 	if len(state.path) == 0 || !ok {
 		return state.pushBBox(interp, 0, 0, 0, 0)

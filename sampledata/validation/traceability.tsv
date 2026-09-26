@@ -118,6 +118,12 @@ test.md-postscript	def systemdict and dict errors	TestDict	live
 test.md-postscript	exit outside a loop	TestControl	live
 test.md-postscript	save is undefined	TestBanned	live
 test.md-postscript	stack and nesting caps	TestLimits	live
+test.md-postscript	array and string size caps	TestAllocationCaps	live
+test.md-postscript	runaway loop stops on the step cap	TestRunawayLoopStops	live
+test.md-postscript	showpage retained byte budget	TestShowPageBudgetStops	live
+test.md-postscript	two interpreters share no state	TestInterpretersAreIndependent	live
+test.md-postscript	where reads the dict stack	TestWhereReadsTheDictStack	live
+test.md-postscript	exit is not a reportable error	TestExitIsNotAPostScriptError	live
 test.md-postscript	for zero increment	TestControl	live
 test.md-raster	default geometry	TestRunPostScript	live
 test.md-raster	bottom row and y flip	TestPaint	live
@@ -229,6 +235,10 @@ test.md-bitmap-pdf	content stream and roundtrip	TestRasterizeOwnImagePDF	live
 test.md-bitmap-pdf	imagepdf stable	TestImagePDFStable	live
 test.md-bitmap-pdf	pdfimage cli input and output	TestPDFImage	live
 test.md-bitmap-pdf	pdfimage is not pdfwrite	TestPDFImage	live
+test.md-postscript-output	bounding box is the media box	TestWritePostScript	live
+test.md-postscript-output	psout write option boxes	TestWriteOptionsBox	live
+test.md-postscript-output	postscript round trip	TestPostScriptRoundTrip	live
+test.md-postscript-output	write post script corpus	TestValidationWritePostScript	live
 test.md-validate	validate ps ok	TestValidatePS	live
 test.md-validate	validate stackunderflow	TestValidatePS	live
 test.md-validate	validate pdf refusals	TestValidatePDF	live

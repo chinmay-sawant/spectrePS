@@ -174,6 +174,7 @@ func (in *Instance) WritePostScript(
 func writePostScript(ctx context.Context, file *pdf.File) ([]byte, error) {
 	count := file.PageCount()
 	pages := make([]psout.Page, 0, count)
+	boxWidth, boxHeight := 0.0, 0.0
 	for i := range count {
 		content, err := file.Content(i)
 		if err != nil {
@@ -184,12 +185,27 @@ func writePostScript(ctx context.Context, file *pdf.File) ([]byte, error) {
 			return nil, asPDFJobError(err)
 		}
 		pages = append(pages, psout.Page{Content: emitted})
+		if i == 0 {
+			boxWidth, boxHeight = pageBox(file, i)
+		}
 	}
-	out, err := psout.Write(ctx, pages, psout.WriteOptions{})
+	out, err := psout.Write(ctx, pages, psout.WriteOptions{WidthPt: boxWidth, HeightPt: boxHeight})
 	if err != nil {
 		return nil, asPDFJobError(err)
 	}
 	return out, nil
+}
+
+// pageBox returns one page's real /MediaBox in points so the PostScript header
+// carries the document's own page instead of a fixed letter box. A page whose
+// box will not resolve falls back to zero, which psout.Write reads as the 612
+// by 792 reader default.
+func pageBox(file *pdf.File, index int) (float64, float64) {
+	size, err := file.PageSize(index)
+	if err != nil {
+		return 0, 0
+	}
+	return size.Width, size.Height
 }
 
 func asPDFJobError(err error) error {

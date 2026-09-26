@@ -46,7 +46,7 @@ Each row is a small slice, not Ghostscript parity.
 - Interpret PostScript. The slice is the operator set in `documentation/language.md`, not LanguageLevel 3.
 - Open a PDF and rasterize pages. The slice is path and text operators plus Flate streams, not PDF 1.7 or PDF 2.0.
 - Rasterize to an image. Spectre writes PPM, PNG, JPEG, and TIFF (none or Deflate). Ghostscript also writes BMP, PCX, fax, and PSD.
-- Select pages with `-pages`, in the style of `-dFirstPage` and `-dLastPage`. `raster`, `bbox`, `inkcov`, `pdfimage`, and `compare raster` take the flag, and a `%d` output path numbers the emitted pages from 1.
+- Select pages with `-pages`, in the style of `-dFirstPage` and `-dLastPage`. `raster`, `bbox`, `inkcov`, `ink_cov`, `pdfimage`, and `compare raster` take the flag, and a `%d` output path numbers the emitted pages from 1.
 - Rewrite a PDF as a new file and compress streams with Flate.
 - Paint and extract PDF text, in the style of `txtwrite` and `ps2ascii`. Spectre paints embedded TrueType, OpenType, and Type 1 outlines and the standard 14 advances, and extraction writes UTF-8 with CRLF lines.
 - Stop on the first broken-file error, the same idea as `-dPDFSTOPONERROR`.

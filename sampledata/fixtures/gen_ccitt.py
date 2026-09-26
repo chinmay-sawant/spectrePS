@@ -3,7 +3,7 @@
 
 Usage, from the repository root:
 
-    python3 internal/pdf/testdata/gen_ccitt.py internal/pdf/testdata
+    python3 sampledata/fixtures/gen_ccitt.py sampledata/fixtures
 
 Writes the raw TIFF strip bytes, which is what a PDF /CCITTFaxDecode stream
 carries. A TIFF strip holds the fax codes with the opposite bit polarity to a

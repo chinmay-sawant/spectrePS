@@ -82,7 +82,7 @@ func arcRun(ctx context.Context, interp *Interp, clockwise bool) error {
 	if args.radius < 0 {
 		return errOf(errRangecheck, opName)
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	pts := arcPoints(state, args, arcSweep(args.angle1, args.angle2, clockwise))
 	if err := state.addPoints(pts); err != nil {
 		return err

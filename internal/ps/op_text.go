@@ -86,7 +86,7 @@ func opSetFontRun(ctx context.Context, interp *Interp) error {
 			size = val
 		}
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	state.fontName = fontNameOf(dict)
 	state.fontSize = size
 	return nil
@@ -106,7 +106,7 @@ func opShowRun(ctx context.Context, interp *Interp) error {
 	if obj.Kind != KindString || obj.Str == nil {
 		return errOf(errTypeCheck, opShow)
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	metrics, ok := font.Standard14(state.fontName)
 	if !ok {
 		return errOf(errInvalidFont, opShow)
@@ -149,7 +149,7 @@ func opStringWidthRun(ctx context.Context, interp *Interp) error {
 	if obj.Kind != KindString || obj.Str == nil {
 		return errOf(errTypeCheck, opStringWidth)
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	metrics, ok := font.Standard14(state.fontName)
 	if !ok {
 		return errOf(errInvalidFont, opStringWidth)

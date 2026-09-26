@@ -31,12 +31,8 @@ makefile text eol=lf
 *.otf binary linguist-vendored
 *.wasm binary linguist-vendored
 
-# Exclude build/vendored/generated directories from language statistics
+# Exclude the build output directory from language statistics
 /bin/** linguist-vendored
-/dist/** linguist-vendored
-/vendor/** linguist-vendored
-/frontend/node_modules/** linguist-vendored
-/frontend/dist/** linguist-vendored
 
 # Ensure exported archives don't include local development files
 /.vscode/** export-ignore
@@ -76,21 +72,14 @@ makefile linguist-vendored
 # Module lockfile is generated
 go.sum linguist-generated
 
-/documents/** linguist-vendored
 /plans/** linguist-vendored
-/scripts/chunks/** linguist-vendored
-/scripts/findings/** linguist-vendored
+/documentation/** linguist-vendored
+/sampledata/** linguist-vendored
 
 # Docs stay in the repo for clones but are omitted from export archives and diff stats
 *.md export-ignore linguist-vendored
 *.markdown export-ignore linguist-vendored
 *.rst export-ignore linguist-vendored
-
-# Generated/sample output and fixtures should not count toward Go diff stats
-/testdata/** linguist-vendored
-/output/** linguist-vendored
-/docs/** linguist-vendored
-/frontend/** linguist-vendored
 
 # Fallback: any other non-Go files should not count toward diff stats
 * linguist-vendored

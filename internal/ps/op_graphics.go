@@ -3,14 +3,13 @@ package ps
 import (
 	"context"
 	"math"
-	"sync"
 
 	"github.com/chinmay-sawant/spectrePS/internal/graphics"
 )
 
 const (
 	defaultLineWidth = 1
-	maxGSaveDepth    = 32
+	showpageName     = "showpage"
 	halfTurnDegrees  = 180
 	fullTurnDegrees  = 360
 	maxLineCap       = 2
@@ -22,15 +21,6 @@ const (
 	paintStroke      = "stroke"
 	paintFill        = "fill"
 	paintEOFill      = "eofill"
-)
-
-// gsByInterp stores graphics state for each interpreter.
-// Phase 04 replaces this recorder with the pixmap device and must keep user-space currentpoint.
-//
-//nolint:gochecknoglobals // Interp has no graphics field until phase 04
-var (
-	gsMu       sync.Mutex
-	gsByInterp = map[*Interp]*gstate{}
 )
 
 // matrix is the CTM, user space to device space.
@@ -154,7 +144,7 @@ func opMoveto(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	devX, devY := state.ctm.apply(userX, userY)
 	return state.moveTo(devX, devY)
 }
@@ -167,7 +157,7 @@ func opRmoveto(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	userX, userY, err := state.userPoint("rmoveto")
 	if err != nil {
 		return err
@@ -184,7 +174,7 @@ func opLineto(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	if err := state.requirePoint("lineto"); err != nil {
 		return err
 	}
@@ -200,7 +190,7 @@ func opRlineto(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	userX, userY, err := state.userPoint("rlineto")
 	if err != nil {
 		return err
@@ -217,7 +207,7 @@ func opCurveto(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	if err := state.requirePoint("curveto"); err != nil {
 		return err
 	}
@@ -232,7 +222,7 @@ func opRcurveto(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	userX, userY, err := state.userPoint("rcurveto")
 	if err != nil {
 		return err
@@ -244,7 +234,7 @@ func opClosepath(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	if err := state.requirePoint("closepath"); err != nil {
 		return err
 	}
@@ -258,7 +248,7 @@ func opNewpath(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	gsFor(interp).clearPath()
+	interp.gs().clearPath()
 	return nil
 }
 
@@ -266,7 +256,7 @@ func opCurrentPoint(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	userX, userY, err := state.userPoint("currentpoint")
 	if err != nil {
 		return err
@@ -297,7 +287,7 @@ func opSetLineWidth(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	gsFor(interp).width = width
+	interp.gs().width = width
 	return nil
 }
 
@@ -315,7 +305,7 @@ func opSetLineCapRun(ctx context.Context, interp *Interp) error {
 	if value < 0 || value > maxLineCap {
 		return errOf(errRangecheck, opSetLineCap)
 	}
-	gsFor(interp).lineCap = int(value)
+	interp.gs().lineCap = int(value)
 	return nil
 }
 
@@ -352,7 +342,7 @@ func rectPaint(ctx context.Context, interp *Interp, opName, kind string) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	saved := state.takePath()
 	if err := state.addRect(userX, userY, width, height); err != nil {
 		return err
@@ -375,7 +365,7 @@ func opDTransformRun(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	mat := gsFor(interp).ctm
+	mat := interp.gs().ctm
 	devX := mat.a*deltaX + mat.c*deltaY
 	devY := mat.b*deltaX + mat.d*deltaY
 	if err := interp.Push(RealObj(devX)); err != nil {
@@ -392,7 +382,7 @@ func opSetGray(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	state.gray = gray
 	state.red = gray
 	state.green = gray
@@ -416,7 +406,7 @@ func opSetRGBColor(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	state.red = red
 	state.green = green
 	state.blue = blue
@@ -427,8 +417,8 @@ func opGSave(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	state := gsFor(interp)
-	if len(state.saves) >= maxGSaveDepth {
+	state := interp.gs()
+	if len(state.saves) >= maxGSave {
 		return errOf(errLimitCheck, "gsave")
 	}
 	state.saves = append(state.saves, state.snapshot())
@@ -439,7 +429,7 @@ func opGRestore(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	if len(state.saves) == 0 {
 		return errOf(errLimitCheck, "grestore")
 	}
@@ -454,7 +444,10 @@ func opShowPage(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
+	if err := state.roomForPage(); err != nil {
+		return err
+	}
 	if state.pix != nil {
 		state.pix.ShowPage()
 	}
@@ -471,7 +464,7 @@ func opTranslate(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	state.ctm = concatMatrix(translation(tx, ty), state.ctm)
 	return nil
 }
@@ -484,7 +477,7 @@ func opScale(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	state.ctm = concatMatrix(scaling(sx, sy), state.ctm)
 	return nil
 }
@@ -497,7 +490,7 @@ func opRotate(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	state.ctm = concatMatrix(rotation(degrees), state.ctm)
 	return nil
 }
@@ -510,7 +503,7 @@ func opConcat(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	state := gsFor(interp)
+	state := interp.gs()
 	state.ctm = concatMatrix(mat, state.ctm)
 	return nil
 }
@@ -523,7 +516,7 @@ func opSetMatrix(ctx context.Context, interp *Interp) error {
 	if err != nil {
 		return err
 	}
-	gsFor(interp).ctm = mat
+	interp.gs().ctm = mat
 	return nil
 }
 
@@ -531,7 +524,7 @@ func opCurrentMatrix(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	mat := gsFor(interp).ctm
+	mat := interp.gs().ctm
 	values := []float64{mat.a, mat.b, mat.c, mat.d, mat.e, mat.f}
 	for _, val := range values {
 		if err := interp.Push(RealObj(val)); err != nil {
@@ -545,19 +538,21 @@ func paintOp(ctx context.Context, interp *Interp, kind string, evenOdd bool) err
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	gsFor(interp).notePaint(paintMark{kind: kind, evenOdd: evenOdd})
+	interp.gs().notePaint(paintMark{kind: kind, evenOdd: evenOdd})
 	return nil
 }
 
-func gsFor(interp *Interp) *gstate {
-	gsMu.Lock()
-	defer gsMu.Unlock()
-	state := gsByInterp[interp]
-	if state == nil {
-		state = newGState()
-		gsByInterp[interp] = state
+// roomForPage reports limitcheck when keeping another page would cross
+// maxRetainedPageBytes. The budget is computed from the device geometry, so a
+// small page allows more pages than a large one and the retained bytes stay
+// bounded either way.
+func (state *gstate) roomForPage() error {
+	page := int64(state.pageW) * int64(state.pageH) * bytesPerPixel
+	kept := int64(state.pages) * page
+	if kept+page > maxRetainedPageBytes {
+		return errOf(errLimitCheck, showpageName)
 	}
-	return state
+	return nil
 }
 
 func newGState() *gstate {

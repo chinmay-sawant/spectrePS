@@ -94,6 +94,26 @@ func (file *File) version() string {
 	return text[:digits]
 }
 
+// PageSize returns one page's resolved /MediaBox in points, inheriting from
+// the nearest /Pages ancestor and falling back to the reader default of 612 by
+// 792 when the tree carries no box. index is zero-based. An index past the
+// last page or a malformed box is a JobError with Op Info. A null file is
+// typecheck. The PostScript writer uses this so its %%BoundingBox is the
+// document's real page and not a fixed letter box.
+func (file *File) PageSize(index int) (PageSize, error) {
+	if file == nil {
+		return PageSize{}, NewError(opInfo, errType)
+	}
+	sizes, err := file.pageSizes()
+	if err != nil {
+		return PageSize{}, err
+	}
+	if index < 0 || index >= len(sizes) {
+		return PageSize{}, NewError(opInfo, errRange)
+	}
+	return sizes[index], nil
+}
+
 // pageSizes walks the page tree and resolves /MediaBox with inheritance.
 // The nearest ancestor box wins, and a tree with no box reports the reader
 // default.
