@@ -28,7 +28,7 @@ The corpus has two tiers:
 - The committed tier is checked in. Every file is at or under 1 MiB.
 - The external tier lives under the gitignored `sampledata/validation/external/`. It holds larger files and whole suites, and `go run internal/validation/gen.go -fetch-external` fetches it after checking every SHA-256. Tests skip the external tier when it is absent, and no test opens a network connection.
 
-`sampledata/validation/traceability.tsv` is the index. It carries one row per case below and one row per validation plan row, with the section, the case, the test function, and a status. A `live` row names a function that `go test -list` must report. `scripts/check-traceability.sh` checks the table against the live list and exits 1 on a `live` row whose function is missing. A row whose test has not landed yet is `pending:<scope>`, and the script reports it instead of failing.
+`sampledata/validation/traceability.tsv` is the index. It carries one row per case below and one row per validation plan row, with the section, the case, the test function, and a status. A `live` row names a function that `go test -list` must report. `scripts/check-traceability.sh` checks the table against the live list and exits 1 on a `live` row whose function is missing. A row whose test has not landed yet is `pending:<scope>`, and the script reports it instead of failing. No row is pending on the merged tree.
 
 Every corpus test is named `TestValidation<Area>`, so `go test -count=1 ./... -run TestValidation` runs the validation group, and `make test` runs it with everything else. The group names every `TestValidation` function in the suite:
 

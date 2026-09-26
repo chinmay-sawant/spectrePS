@@ -35,27 +35,27 @@ plan-3-postscript-raster	3.5 pixmap stroke and fill	TestValidationPixmapStrokeFi
 plan-3-postscript-raster	3.5 draw image edges	TestValidationDrawImageEdges	live
 plan-3-postscript-raster	3.6 raster geometry	TestValidationRasterGeometry	live
 plan-3-postscript-raster	3.7 pixel cap boundary	TestValidationPixelCap	live
-plan-3-postscript-raster	3.8 corpus PostScript run	TestValidationCorpusPostScript	pending:t-corpus
+plan-3-postscript-raster	3.8 corpus PostScript run	TestValidationCorpusPostScript	live
 plan-3-postscript-raster	3.9 closure	make lint && make test	proof
 plan-4-pdf-read	4.1 corpus expect classes	TestValidationManifest	live
-plan-4-pdf-read	4.2 open xref and object streams	TestValidationOpenStructs	pending:fix-xref
-plan-4-pdf-read	4.3 page tree errors	TestValidationPageTree	pending:fix-xref
-plan-4-pdf-read	4.4 unsupported operator refusals	TestValidationUnsupportedOps	pending:fix-content
-plan-4-pdf-read	4.5 Do mask and decode policy	TestValidationDoPolicy	pending:fix-content
-plan-4-pdf-read	4.6 corpus PDF run	TestValidationCorpusPDF	pending:t-corpus
+plan-4-pdf-read	4.2 open xref and object streams	TestValidationOpenStructs	live
+plan-4-pdf-read	4.3 page tree errors	TestValidationPageTree	live
+plan-4-pdf-read	4.4 unsupported operator refusals	TestValidationUnsupportedOps	live
+plan-4-pdf-read	4.5 Do mask and decode policy	TestValidationDoPolicy	live
+plan-4-pdf-read	4.6 corpus PDF run	TestValidationCorpusPDF	live
 plan-4-pdf-read	4.7 closure	make lint && make test	proof
 plan-5-decoders	5.1 image expect classes	TestValidationManifest	live
-plan-5-decoders	5.2 image error shapes	TestValidationImageErrorShapes	pending:fix-stream
-plan-5-decoders	5.3 filter chain	TestValidationFilterChain	pending:fix-stream
-plan-5-decoders	5.4 CCITT parameter errors	TestValidationCCITTParams	pending:fix-ccitt
-plan-5-decoders	5.5 corpus image run	TestValidationCorpusImages	pending:t-corpus
+plan-5-decoders	5.2 image error shapes	TestValidationImageErrorShapes	live
+plan-5-decoders	5.3 filter chain	TestValidationFilterChain	live
+plan-5-decoders	5.4 CCITT parameter errors	TestValidationCCITTParams	live
+plan-5-decoders	5.5 corpus image run	TestValidationCorpusImages	live
 plan-5-decoders	5.6 closure	make lint && make test	proof
 plan-6-text-fonts	6.1 corpus rows and embedded font review	TestValidationLicenses	live
-plan-6-text-fonts	6.2 extraction cases	TestValidationExtractCases	pending:fix-fonts
-plan-6-text-fonts	6.3 FontFile3 OpenType mapping	TestValidationFontFile3	pending:fix-fonts
-plan-6-text-fonts	6.3 no-outline policy	TestValidationNoOutlinePolicy	pending:fix-fonts
-plan-6-text-fonts	6.4 text operator errors	TestValidationTextOpErrors	pending:fix-fonts
-plan-6-text-fonts	6.5 corpus text run	TestValidationCorpusText	pending:t-corpus
+plan-6-text-fonts	6.2 extraction cases	TestValidationExtractCases	live
+plan-6-text-fonts	6.3 FontFile3 OpenType mapping	TestValidationFontFile3	live
+plan-6-text-fonts	6.3 no-outline policy	TestValidationNoOutlinePolicy	live
+plan-6-text-fonts	6.4 text operator errors	TestValidationTextOpErrors	live
+plan-6-text-fonts	6.5 corpus text run	TestValidationCorpusText	live
 plan-6-text-fonts	6.6 closure	make lint && make test	proof
 plan-7-measure-compare	7.1 measure edges	TestValidationMeasureEdges	live
 plan-7-measure-compare	7.2 compare edges	TestValidationCompareEdges	live
@@ -63,29 +63,29 @@ plan-7-measure-compare	7.2 compare CLI text	TestValidationCompareCLIText	live
 plan-7-measure-compare	7.3 corpus measure	TestValidationCorpusMeasure	live
 plan-7-measure-compare	7.4 closure	make lint && make test	proof
 plan-8-writers	8.1 corpus rewrite classes	TestValidationManifest	live
-plan-8-writers	8.2 rewrite tags	TestValidationRewriteTags	pending:t-writers
-plan-8-writers	8.2 rewrite containers	TestValidationRewriteContainers	pending:t-writers
-plan-8-writers	8.3 rewrite PDF/A levels	TestValidationRewritePDFA	pending:t-writers
-plan-8-writers	8.4 level override errors	TestValidationLevelOverridesErrors	pending:t-writers
-plan-8-writers	8.5 PSOut image refusal	TestValidationPSOutImage	pending:t-writers
-plan-8-writers	8.5 WritePostScript multi-page	TestValidationWritePostScript	pending:t-writers
-plan-8-writers	8.6 image PDF contract	TestValidationImagePDFContract	pending:t-writers
-plan-8-writers	8.7 corpus rewrite run	TestValidationCorpusRewrite	pending:t-corpus
+plan-8-writers	8.2 rewrite tags	TestValidationRewriteTags	live
+plan-8-writers	8.2 rewrite containers	TestValidationRewriteContainers	live
+plan-8-writers	8.3 rewrite PDF/A levels	TestValidationRewritePDFA	live
+plan-8-writers	8.4 level override errors	TestValidationLevelOverridesErrors	live
+plan-8-writers	8.5 PSOut image refusal	TestValidationPSOutImage	live
+plan-8-writers	8.5 WritePostScript multi-page	TestValidationWritePostScript	live
+plan-8-writers	8.6 image PDF contract	TestValidationImagePDFContract	live
+plan-8-writers	8.7 corpus rewrite run	TestValidationCorpusRewrite	live
 plan-8-writers	8.8 closure	make lint && make test	proof
 plan-9-pdfa-ua2	9.1 corpus rows and CC BY attribution	TestValidationLicenses	live
-plan-9-pdfa-ua2	9.2 PDF/A rules through the API	TestValidationPDFARules	pending:t-pdfa
-plan-9-pdfa-ua2	9.3 PDF/A CLI levels	TestValidationPDFACLI	pending:t-pdfa
-plan-9-pdfa-ua2	9.4 UA-2 edges	TestValidationUA2Edges	pending:t-pdfa
-plan-9-pdfa-ua2	9.4 UA-2 preserve	TestValidationUA2Preserve	pending:t-pdfa
+plan-9-pdfa-ua2	9.2 PDF/A rules through the API	TestValidationPDFARules	live
+plan-9-pdfa-ua2	9.3 PDF/A CLI levels	TestValidationPDFACLI	live
+plan-9-pdfa-ua2	9.4 UA-2 edges	TestValidationUA2Edges	live
+plan-9-pdfa-ua2	9.4 UA-2 preserve	TestValidationUA2Preserve	live
 plan-9-pdfa-ua2	9.5 validate runs the UA-2 checks (decision taken)	TestValidateUA2	live
-plan-9-pdfa-ua2	9.6 corpus PDF/A and tagged run	TestValidationCorpusPDFA	pending:t-corpus
+plan-9-pdfa-ua2	9.6 corpus PDF/A and tagged run	TestValidationCorpusPDFA	live
 plan-9-pdfa-ua2	9.7 closure	make lint && make test	proof
 plan-10-gs-argv	10.1 corpus device rows	TestValidationManifest	live
-plan-10-gs-argv	10.2 gs edges	TestValidationGSEdges	pending:t-gs
-plan-10-gs-argv	10.3 gs output rules	TestValidationGSOutputRules	pending:t-gs
-plan-10-gs-argv	10.4 gs parameter corners	TestValidationGSParamCorners	pending:t-gs
-plan-10-gs-argv	10.5 gs rejected devices	TestValidationGSRejectedDevices	pending:t-gs
-plan-10-gs-argv	10.6 corpus gs run	TestValidationCorpusGS	pending:t-corpus
+plan-10-gs-argv	10.2 gs edges	TestValidationGSEdges	live
+plan-10-gs-argv	10.3 gs output rules	TestValidationGSOutputRules	live
+plan-10-gs-argv	10.4 gs parameter corners	TestValidationGSParamCorners	live
+plan-10-gs-argv	10.5 gs rejected devices	TestValidationGSRejectedDevices	live
+plan-10-gs-argv	10.6 corpus gs run	TestValidationCorpusGS	live
 plan-10-gs-argv	10.7 closure	make lint && make test	proof
 plan-11-reference-proofs	11.1 reference proofs doc	test -f documentation/reference-proofs.md	proof
 plan-11-reference-proofs	11.2 refs corpus rows	TestValidationManifest	live
@@ -204,7 +204,7 @@ test.md-pdf-rewrite	containers and PackObjects	TestWritePackedObjects	live
 test.md-pdf-rewrite	level image rules	TestLevelImagePolicy	live
 test.md-pdf-rewrite	ccitt levels	TestLevelCCITTImage	live
 test.md-pdf-rewrite	two calls equal	TestRewriteStable	live
-test.md-pdf-rewrite	bytes not compared to gs	-	unowned
+test.md-pdf-rewrite	bytes not compared to gs	make test	proof
 test.md-pdf-rewrite	rewrite CLI flags	TestRewriteCLI	live
 test.md-pdf-rewrite	compress samples	TestRewriteSamples	live
 test.md-pdfa-preflight	pdfa header	TestPDFA4Header	live
@@ -212,7 +212,7 @@ test.md-pdfa-preflight	copyoptions append and catalog	TestCopyAppend	live
 test.md-pdfa-preflight	xmp packet	TestXMPPacket	live
 test.md-pdfa-preflight	icc profile tags	TestICCProfile	live
 test.md-pdfa-preflight	output intent	TestOutputIntent	live
-test.md-pdfa-preflight	nine refusals through the API	TestValidationPDFARules	pending:t-pdfa
+test.md-pdfa-preflight	nine refusals through the API	TestValidationPDFARules	live
 test.md-pdfa-preflight	separation and devicen refusals	TestPreflightSeparation	live
 test.md-pdfa-preflight	embedded files and 4f	TestPreflightEmbeddedFiles	live
 test.md-pdfa-preflight	rewrite pdfa roundtrip	TestRewritePDFA4Stable	live

@@ -221,34 +221,32 @@ producers and the pdf.js suite mixes in fonts from unrelated products.
 
 ## Measured gaps
 
-The `expect` column is the target verdict. The tree that added this corpus
-measures these differences, and the phase files own the fixes:
+The `expect` column is the measured verdict. `make validation-run` asserts it
+for every committed row, and `go test -count=1 ./... -run TestValidation`
+asserts the same facts in Go. The state after the v0.0.4 validation work:
 
-- `postscript/cups-smiley.ps` targets `paint` and now paints: it uses `arc`,
-  `rectstroke`, and `setlinecap`, which the interpreter implements.
-  `postscript/cups-testfile.ps` targets `refuse:invalidfont`: its text uses the
-  standard 14 fonts, and `documentation/language.md` and
-  `documentation/fonts.md` refuse a standard 14 `show` on a device because the
-  tree ships no substitute outlines. Every other operator the file uses now
-  runs, so a standard 14 outline program is the one remaining gate. Phase 3 row
-  3.8 owns the CUPS pair.
-- `paths/xobject-image.pdf`, `images/ccitt_EndOfBlock_false.pdf`, and
-  `images/bug_jpx.pdf` target `paint`; the current tree stops before painting:
-  `paths/xobject-image.pdf` at `/undefined in Do` for its two-name filter
-  chain, `images/ccitt_EndOfBlock_false.pdf` at `/undefined in Do`, and
-  `images/bug_jpx.pdf` at `/undefined in Predictor`. Phase 5 owns the decoder
-  cases.
-- `images/cmykjpeg.pdf` targets `paint`; the current content scan stops at
-  `/undefined in BDC` until the tags phase reads marked content.
-- `images/UnknownFilter-xrefstm.pdf` expects `/undefined in XXXDecode`. The
-  newest xref stream chains through `/Prev` to an older xref stream whose
-  `/Filter` is the unknown `/XXXDecode`, and the refusal names that filter.
-  The verdict replaced the earlier `/undefined in Predictor`, which named a
-  predictor the unknown filter never reads.
-- Every `text/` row is `struct`. `spectreps text` and `spectreps raster` on a
-  tagged source need marked content reading, which the tags phase adds.
+- Every committed row passes. `postscript/cups-smiley.ps` paints through the
+  new `arc`, `rectstroke`, and `setlinecap` operators. `paths/bug_jpx.pdf`,
+  `rewrite/bug_jpx.pdf`, `rewrite/UA1_Tpdf-G5_03.pdf`, and
+  `text/UA1_Tpdf-G5_03.pdf` open through the xref `/Prev` chain.
+  `paths/xobject-image.pdf` and its rewrite paint through the two-name
+  `[/ASCIIHexDecode /DCTDecode]` image chain.
+  `images/ccitt_EndOfBlock_false.pdf` paints through the Group 3 row decoder
+  and `/EndOfBlock false`. `images/cmykjpeg.pdf` paints. The tagged and
+  `simpletype3font` streams read through an indirect `/Length`. `text/dash`
+  content is a documented no-op.
+- Deviations from the plan's target wording, both recorded:
+  - `postscript/cups-testfile.ps` is `refuse:invalidfont`, not `paint`. Its
+    text uses the standard 14 fonts, and `documentation/language.md` and
+    `documentation/fonts.md` refuse a standard 14 `show` on a device because
+    the tree ships no substitute outlines. Every operator the file uses runs;
+    an outline program is the one remaining gate.
+  - `images/UnknownFilter-xrefstm.pdf` refuses `undefined in XXXDecode`, not
+    `undefined in Predictor`. The newest xref stream chains through `/Prev` to
+    an older xref stream whose `/Filter` is the unknown `/XXXDecode`, and the
+    refusal names that filter, the same contract the stream chain uses.
 
-`internal/cli/validation_corpus_run_test.go` carries the single `corpusPending`
-table with the measured failure per row and the fix worktree that owns it. The
-integrator enables a row by deleting it from that table and rerunning the
-corpus tests.
+The external tier (`external/`) holds fetched, non-committed files and is
+skipped cleanly when absent. The `Text` goldens under `text/expected/` are
+written by `UPDATE_FIXTURES=1 go test ./internal/cli -run
+TestValidationCorpusText` and checked in.
