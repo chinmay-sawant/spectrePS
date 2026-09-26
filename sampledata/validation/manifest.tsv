@@ -1,5 +1,5 @@
 path	sha256	bytes	source	license	feature	expect
-external/fax-decode-parms.pdf	6cf3a42a79698eb9a6649d51a78647dccb05dd88dbc0b384b843618963f8755e	1565966	https://raw.githubusercontent.com/qpdf/qpdf/54d6053af283bbeb8b325f4886c0f65cc51f2b80/qpdf/qtest/qpdf/fax-decode-parms.pdf	Apache-2.0	CCITT fax DecodeParms, 1.5 MiB	paint
+external/fax-decode-parms.pdf	6cf3a42a79698eb9a6649d51a78647dccb05dd88dbc0b384b843618963f8755e	1565966	https://raw.githubusercontent.com/qpdf/qpdf/54d6053af283bbeb8b325f4886c0f65cc51f2b80/qpdf/qtest/qpdf/fax-decode-parms.pdf	Apache-2.0	CCITT fax DecodeParms, 1.5 MiB, non-embedded standard 14 text layer	refuse:invalidfont in Tj
 external/pdf20examples/simple-pdf-2.0.pdf	296d2a0b2ce19b606f29265694f194a754fbc61783982b5b8d730e8637482236	5211	https://raw.githubusercontent.com/pdf-association/pdf20examples/c20f2c17bfcc4baab7cfe62e70fae64caf14d5fa/Simple%20PDF%202.0%20file.pdf	CC-BY-SA-4.0	PDF 2.0 container	struct
 gs-argv/gs-argv-input.pdf	24a87a42435a40f8852dd0693a9eba916e9f1f0306418c494330c3be2329c822	730	repo-authored	repo-authored	gs argv two-page red and green input	paint
 gs-argv/page.ps	7a22578e24030868d84d0316bd8e1915a048918e142426c77e29c3600cd3e1b3	220	repo-authored	repo-authored	gs argv PostScript input	paint

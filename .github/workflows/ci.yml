@@ -1,0 +1,96 @@
+# Continuous integration for Spectre PS.
+#
+# The gate is the pair the AGENTS.md defines: `make lint` and `make test`.
+# Both run on every push and every pull request. The Makefile's `test` target
+# is `go test -p $(NPROC) ./...`, and NPROC is a simple assignment, so a
+# command-line NPROC overrides `nproc` and pins the parallelism for the run.
+#
+# Parallelism is set high on purpose. The suite is 12 packages and the slowest
+# is internal/cli at about 4s, so the wall clock is dominated by package
+# startup rather than by any single package. -count=1 defeats the test cache so
+# a green run is a real run and never a replay of a previous one.
+#
+# No step fetches the external corpus tier. sampledata/validation/external/ is
+# gitignored, so those two rows skip here and the suite stays hermetic: no test
+# opens a network connection, and `go run internal/validation/gen.go
+# -fetch-external` is a deliberate local act. A job that wants the external tier
+# proves it separately and must not make the gate depend on the network.
+
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Overrides the Makefile's `nproc` for the test target. GitHub runners are
+  # 4-core, so 16 lets package binaries run ahead of the core count.
+  NPROC: "16"
+
+jobs:
+  test:
+    name: make test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Report the toolchain
+        run: go version
+
+      - name: make test
+        run: make test NPROC=${{ env.NPROC }}
+
+      - name: Show the parallel package count
+        if: always()
+        run: |
+          printf 'packages with test files: %s\n' \
+            "$(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./... | grep -c .)"
+          printf 'package binaries run in parallel: %s\n' '${{ env.NPROC }}'
+
+  lint:
+    name: make lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # The version is pinned to the one documentation/development.md records.
+      # install-mode is goinstall rather than the default binary because
+      # .golangci.yml requires golangci-lint to be built with Go >= the module
+      # version. The released v1.64.8 binary is built with go1.24 and refuses
+      # this config with "the Go language version (go1.24) used to build
+      # golangci-lint is lower than the targeted Go version (1.26.4)". Building
+      # from source with the toolchain setup-go takes from go.mod produces the
+      # same build the local binary reports.
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.8
+          install-mode: goinstall
+
+      - name: make lint
+        run: make lint
