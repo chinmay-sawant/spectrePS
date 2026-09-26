@@ -1,6 +1,6 @@
 ## v0.0.4
 
-Fourth release of Spectre PS. `spectreps version` prints `0.0.4`. This note covers `master` through `8be9947`, plus the version bump in `b90e999`, and the tag points at the merge commit `413aa16`.
+Fourth release of Spectre PS. `spectreps version` prints `0.0.4`. This note covers `master` through `8be9947` plus the version bump in `b90e999`, and the tag is cut from the master head that carries both release pull requests.
 
 The `plans/v0.0.4/` ledger split the release into seven files. Four are feature phases, one is a validation phase, one is a performance phase, and one is a writer-size acceptance gate. Those numbers are build steps inside the release, not product releases.
 
@@ -13,8 +13,8 @@ Spectre PS is a Go library and a `spectreps` command for a small slice of the jo
 - **Library:** `github.com/chinmay-sawant/spectrePS/spectreps`.
 - **Ledger:** `plans/v0.0.4/00-program.md`.
 - **Closure:** `plans/v0.0.4/v0.0.4-closure.md`, lint and test exit 0 on 2026-09-26.
-- **Commit:** `413aa16`, the merge of pull request #13.
-- **Pull requests:** [#13](https://github.com/chinmay-sawant/spectrePS/pull/13) the seven ledger files of `plans/v0.0.4/`, and [#11](https://github.com/chinmay-sawant/spectrePS/pull/11) the ten phases of `plans/v0.0.3/` that carried the v0.0.3 baseline.
+- **Commits:** `8be9947` is the last phase commit and `b90e999` is the version bump. The tag is cut from the master head above them.
+- **Pull requests:** [#13](https://github.com/chinmay-sawant/spectrePS/pull/13) the seven ledger files of `plans/v0.0.4/` and this note, [#14](https://github.com/chinmay-sawant/spectrePS/pull/14) the correction to this note's install block, and [#11](https://github.com/chinmay-sawant/spectrePS/pull/11) the ten phases of `plans/v0.0.3/` that carried the v0.0.3 baseline.
 - **Diff:** 294 files, 36,765 insertions, 1,002 deletions against v0.0.3, measured against the merged tree.
 
 ---
