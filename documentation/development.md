@@ -27,7 +27,7 @@
 
 ## Checklist
 
-`plans/v0.0.1/00-program.md`, `plans/v0.0.2/00-program.md`, and `plans/v0.0.3/00-program.md` are the maps. Each other file in those directories is the ledger for one phase. Check a row only after the proof in the row has been run on the current tree. `[~]` means deferred, and the deferred lists are `plans/v0.0.1/10-deferred.md` with `plans/v0.0.3/10-pdfua2.md` for the tag-level rows.
+`plans/v0.0.1/00-program.md`, `plans/v0.0.2/00-program.md`, `plans/v0.0.3/00-program.md`, and `plans/v0.0.4/00-program.md` are the maps. Each other file in those directories is the ledger for one phase. Check a row only after the proof in the row has been run on the current tree. `[~]` means deferred, and the deferred lists are `plans/v0.0.1/10-deferred.md` with `plans/v0.0.3/10-pdfua2.md` for the tag-level rows.
 
 When a tag ships, append the `make lint` and `make test` transcript to `plans/v0.0.1/09-release-records.md`. Dev-loop runs and the tag run are both recorded there if they differ. A green dev loop is not a substitute for the tag line.
 

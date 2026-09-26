@@ -48,7 +48,7 @@ The external reference proofs in phase 11 stay outside `make test`. Their verdic
 
 - `New` returns a non-nil instance. `Close` returns nil. A second `Close` on the same instance returns nil.
 - Two instances from two `New` calls both run. There is no process-wide singleton.
-- `Version` is `0.0.3`. `spectreps version` prints it and exits 0.
+- `Version` is `0.0.4`. `spectreps version` prints it and exits 0.
 - `cmd/spectreps` imports `internal/cli` only. `internal/cli` imports `github.com/chinmay-sawant/spectrePS/spectreps`. No Go file imports `os/exec` or uses cgo.
 - Unknown command, unknown flag, and a missing input file exit 2.
 - A missing input path that the program tries to read exits 3.

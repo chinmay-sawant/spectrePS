@@ -15,7 +15,7 @@ const (
 	languageLevel = 2
 	// interpreterVersion mirrors the release tag spectreps.Version returns.
 	// Bump the two together.
-	interpreterVersion = "0.0.3"
+	interpreterVersion = "0.0.4"
 	// interpreterProduct names this interpreter.
 	interpreterProduct = "Spectre PS"
 	// interpreterRevision is the sub-release integer. Spectre releases on tags

@@ -2,7 +2,7 @@
 
 Package `spectreps`. Import path `github.com/chinmay-sawant/spectrePS/spectreps`.
 
-These are the current signatures. Every method below is implemented. `CompareFiles`, `New`, `Close`, and `Version` landed first; the interpreter methods followed in the phases named in `plans/v0.0.1/00-program.md`, `plans/v0.0.2/00-program.md`, and `plans/v0.0.3/00-program.md`.
+These are the current signatures. Every method below is implemented. `CompareFiles`, `New`, `Close`, and `Version` landed first; the interpreter methods followed in the phases named in `plans/v0.0.1/00-program.md`, `plans/v0.0.2/00-program.md`, `plans/v0.0.3/00-program.md`, and `plans/v0.0.4/00-program.md`.
 
 Signatures may change while the module is below `v1`. Callers in this repo are the CLI and `spectreps_test`.
 

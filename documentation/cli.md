@@ -26,7 +26,7 @@ spectreps gs [switches] file.ps|file.pdf
 
 `gs` is the bounded compatibility mode. It accepts only the switches in `documentation/gs-argv-grammar.md` and routes the job to the commands above. Any other switch exits 2 with a message that names it.
 
-`version` prints `0.0.3`. Exit 0.
+`version` prints `0.0.4`. Exit 0.
 
 Shared options for `run`, `raster`, `pdfimage`, `bbox`, `inkcov`, `ink_cov`, and `compare raster`:
 

@@ -24,4 +24,4 @@ Read these in order when changing behavior.
 
 The checklist that tracks the work is the newest program file under `plans/`, which is `plans/v0.0.4/00-program.md`. Its closure record is `plans/v0.0.4/v0.0.4-closure.md`, and the one list of work that still waits is `plans/v0.0.1/10-deferred.md`. The older program files stay as the record of what each tag did.
 
-The released tag is v0.0.3, which is the version the command reports. The v0.0.4 phase is merged on `master` and is not tagged. Documentation that says a feature "landed in v0.0.4" means it is on `master` and will ship with the next tag, not that it is released.
+The released tag is v0.0.4, which is the version the command reports. Documentation that says a feature "landed in v0.0.4" means it shipped with that tag.

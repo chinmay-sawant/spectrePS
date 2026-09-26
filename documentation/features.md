@@ -2,9 +2,9 @@
 
 This file is the product inventory: what Spectre supports today and what waits. `documentation/covered-and-not-covered.md` maps the same ground against Ghostscript. `plans/v0.0.1/10-deferred.md` is the ledger for the work that waits, with a next gate on each row.
 
-The released tag is v0.0.3. v0.0.2 added the page summaries, JPEG and TIFF raster, page selection, PDF inputs in `compare raster`, gray and CMYK image PDF, and PDF compression levels 1 to 5. v0.0.3 adds weighted `ink_cov`, CCITT and JPEG2000 decode, painting `Do`, `spectreps ps`, the `spectreps gs` argv mode, the PDF/A-4 and PDF/UA-2 preflights, and the font and text machine with `spectreps text`. `spectreps version` prints `0.0.3`.
+The released tag is v0.0.4. v0.0.2 added the page summaries, JPEG and TIFF raster, page selection, PDF inputs in `compare raster`, gray and CMYK image PDF, and PDF compression levels 1 to 5. v0.0.3 adds weighted `ink_cov`, CCITT and JPEG2000 decode, painting `Do`, `spectreps ps`, the `spectreps gs` argv mode, the PDF/A-4 and PDF/UA-2 preflights, and the font and text machine with `spectreps text`. `spectreps version` prints `0.0.4`.
 
-The v0.0.4 phase is merged on `master` and is not tagged, so the features marked "landed in v0.0.4" below are on `master` and will ship with the next tag. They are the Type 1 font machine, `spectreps info`, PDF transparency, the extra stream filters and predictors, the `array`, `string`, step, and page-memory caps, and the checked-in validation corpus.
+The features marked "landed in v0.0.4" below shipped with that tag. They are the Type 1 font machine, `spectreps info`, PDF transparency, the extra stream filters and predictors, PDF/UA-2 tag generation, the `array`, `string`, step, and page-memory caps, and the checked-in validation corpus.
 
 ## Input
 
