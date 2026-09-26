@@ -128,6 +128,8 @@ upstream path; the commit is the full commit the URL pins.
 | `text/repo-tagged-text.pdf` | repo-authored | `repo` | repo-authored | `e4f5500fe4b6c8a50f847e22082fa33e43820e28692bcb265faf22e8f00d0e95` | Repo-authored tagged text, Differences and ToUnicode | `struct` |
 | `text/simpletype3font.pdf` | mozilla/pdf.js test/pdfs/simpletype3font.pdf | `d52fdf4` | Apache-2.0 | `a5697cbc51c19816944658b91e3a41f86e98ae63fbd1007798994b073385aef1` | Type 3 font with no program | `struct` |
 | `text/standard_fonts.pdf` | mozilla/pdf.js test/pdfs/standard_fonts.pdf | `d52fdf4` | Apache-2.0 | `4d48fc12e619a823bf70b3a4d8e9d916a85683ecb176d138af66a57351bd21f9` | Standard 14 metrics and extraction | `struct` |
+| `text/subset-text.pdf` | repo-authored | `repo` | repo-authored | `14b0bc415bbdafcc4177deb34c74ca7e555c4a2e1de114134857f25709220ceb` | Synthetic TrueType FontFile2 for subset validation | `struct` |
+| `text/type1-text.pdf` | repo-authored | `repo` | repo-authored | `23749b69f83db2b1a646757edbcebb9e79e878adb25b8b8b446abdea569b089e` | Symbolic Type 1 program with seac and flex glyphs | `struct` |
 
 ## Fetch and verify
 
@@ -177,6 +179,8 @@ replacement is recorded here. The review table:
 | `text/nonembedded_type1_tounicode.pdf` | none | not embedded | kept |
 | `text/simpletype3font.pdf` | Type 3, no program | no font file | kept |
 | `text/repo-tagged-text.pdf` | none, standard 14 | not embedded | kept |
+| `text/subset-text.pdf` | `Synth`, `/FontFile2` | one name record, no copyright or license notice | kept, synthetic program from `internal/truetypesynth` |
+| `text/type1-text.pdf` | `SynthType1`, `/FontFile` | one name record, no copyright or license notice | kept, synthetic program from `internal/type1synth` |
 | `paths/whatisthis.pdf`, `rewrite/whatisthis.pdf` | `Fira-Sans`, `Fira-Sans-Light`, `Fira-Sans-Bold`, `Fira-Sans-Light-Italic`, `/FontFile2` | Digitized data copyright 2012-2016, The Mozilla Foundation and Telefonica S.A., SIL Open Font License 1.1 | kept |
 | `text/arial_unicode_en_cidfont.pdf` | `ArialUnicodeMS`, `/FontFile2` | Monotype/Microsoft commercial font, no redistribution right | excluded, CID TrueType and ToUnicode coverage moved to `text/mixedfonts.pdf` |
 | `text/UA1_Tpdf-G2_01.pdf` and its rewrite copy | `Dutch801SWM`, `/FontFile2` | Bitstream Dutch 801, commercial Times clone | excluded, the CC BY 4.0 row moved to `text/UA1_Tpdf-G5_03.pdf` |
@@ -216,6 +220,15 @@ producers and the pdf.js suite mixes in fonts from unrelated products.
 - `structural/object-stream.pdf`, `paths/xobject-image.pdf`,
   `images/ccitt_EndOfBlock_false.pdf`, and `images/bug_jpx.pdf` are copied
   into `rewrite/` so each row keeps one canonical path inside the corpus.
+- `text/subset-text.pdf` and `text/type1-text.pdf` are copies of
+  `sampledata/fixtures/subset-text.pdf` and
+  `sampledata/fixtures/type1-text.pdf`. They are the two checked-in programs
+  that carry an embedded font outline, so the corpus can drive font subsetting
+  and the Type 1 machine without a network fetch. `sampledata/fixtures/`
+  keeps the originals, because `internal/cli` reads them there to hold its
+  import boundary and `internal/pdf` writes the subset one from
+  `TestGenSubsetFixture`. Both copies are listed separately so a change to
+  either file has to be made in two places on purpose.
 - The 1.5 MiB qpdf `fax-decode-parms.pdf` and the CC BY-SA 4.0 pdf20examples
   file are external-only rows.
 
@@ -245,6 +258,21 @@ asserts the same facts in Go. The state after the v0.0.4 validation work:
     `undefined in Predictor`. The newest xref stream chains through `/Prev` to
     an older xref stream whose `/Filter` is the unknown `/XXXDecode`, and the
     refusal names that filter, the same contract the stream chain uses.
+- `text/type1-text.pdf` is `struct`, not `paint`, and that is the measured
+  verdict rather than a shortfall. The page shows three codes and the
+  synthetic program carries two of them, so `spectreps text` returns `ABZ`
+  with the code-point fallback for the third while `spectreps raster` refuses
+  `invalidfont in Tj` and writes no output. The refusal is the no-outline
+  policy in `documentation/fonts.md`, applied to a code the program does not
+  carry. `TestValidationCorpusType1` asserts both halves.
+- Font subsetting and PDF/UA-2 tag generation have no dedicated corpus folder.
+  Both are driven over the committed rows by `TestValidationCorpusSubset` and
+  `TestValidationCorpusTagGeneration` in `internal/cli`, because each needs a
+  row with a particular structure rather than a row of its own: a `/FontFile2`
+  program for the subsetter, an untagged page for the tag generator. The rows
+  are named in those two tests, and the refusals they assert are the measured
+  ones: a clip is `undefined in W`, an image with no `/Alt` is `alt in Tag`,
+  and a tagged input is `tagged in RewritePDF`.
 
 The external tier (`external/`) holds fetched, non-committed files and is
 skipped cleanly when absent. The `Text` goldens under `text/expected/` are
