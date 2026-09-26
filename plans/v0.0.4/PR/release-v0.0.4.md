@@ -1,6 +1,6 @@
 ## v0.0.4
 
-Fourth release of Spectre PS. `spectreps version` prints `0.0.4`. This note covers the 62 commits from `2ca1c64` to `8be9947`, plus the version bump in this release branch.
+Fourth release of Spectre PS. `spectreps version` prints `0.0.4`. This note covers `master` through `8be9947`, plus the version bump in `b90e999`, and the tag points at the merge commit `413aa16`.
 
 The `plans/v0.0.4/` ledger split the release into seven files. Four are feature phases, one is a validation phase, one is a performance phase, and one is a writer-size acceptance gate. Those numbers are build steps inside the release, not product releases.
 
@@ -13,7 +13,9 @@ Spectre PS is a Go library and a `spectreps` command for a small slice of the jo
 - **Library:** `github.com/chinmay-sawant/spectrePS/spectreps`.
 - **Ledger:** `plans/v0.0.4/00-program.md`.
 - **Closure:** `plans/v0.0.4/v0.0.4-closure.md`, lint and test exit 0 on 2026-09-26.
-- **Diff:** 291 files, 36,290 insertions, 991 deletions against v0.0.3.
+- **Commit:** `413aa16`, the merge of pull request #13.
+- **Pull requests:** [#13](https://github.com/chinmay-sawant/spectrePS/pull/13) the seven ledger files of `plans/v0.0.4/`, and [#11](https://github.com/chinmay-sawant/spectrePS/pull/11) the ten phases of `plans/v0.0.3/` that carried the v0.0.3 baseline.
+- **Diff:** 294 files, 36,765 insertions, 1,002 deletions against v0.0.3, measured against the merged tree.
 
 ---
 
@@ -35,12 +37,12 @@ Of 212 ledger rows, 206 are checked and 6 are `[~]`. There is no unchecked row.
 
 ### Install / build
 
-From source, on the release branch:
+From source, on the release tag:
 
 ```sh
 git clone https://github.com/chinmay-sawant/spectrePS.git
 cd spectrePS
-git checkout feature/004-fonts-tags-and-coverage
+git checkout v0.0.4
 make build
 ```
 
