@@ -26,7 +26,8 @@ Fetch the two external corpus rows and record what they actually do, and add the
 
 - `.github/workflows/ci.yml`, two jobs on every push and pull request.
 - The `test` job runs `make test NPROC=16`. `NPROC` is a simple assignment in the Makefile, so a command-line value overrides `nproc`; `make -n test NPROC=16` prints `go test -p 16 ./...`, which is the proof the override reaches the tool.
-- The `lint` job runs `make lint` with golangci-lint pinned to `v1.64.8`, the version `documentation/development.md` records.
+- The `lint` job runs `make lint` with golangci-lint pinned to `v1.64.8`, the version `documentation/development.md` records, installed with `install-mode: goinstall`.
+- The `goinstall` mode is not a default. The first CI run failed on both events with `can't load config: the Go language version (go1.24) used to build golangci-lint is lower than the targeted Go version (1.26.4)`, because the action downloads the released binary and that binary is built with go1.24 while `.golangci.yml` already required a build of Go >= the module version. Building from source with the toolchain `setup-go` reads from `go.mod` produces the same build the local binary reports. The workflow caught its own bug on its first run; the `test` job passed on both events, so the parallelism override and the hermetic configuration were already right.
 - No step fetches the external tier, so CI is hermetic and those two rows skip rather than passing quietly. No test opens a network connection, and the gate does not depend on one.
 
 ### Ledger
