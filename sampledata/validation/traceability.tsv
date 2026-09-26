@@ -203,6 +203,13 @@ test.md-text-extraction	standard 14 paint invalidfont	TestStandard14Paint	live
 test.md-text-extraction	extracttext lines and crlf	TestExtractTextGolden	live
 test.md-text-extraction	text command	TestTextCommand	live
 test.md-text-extraction	ps show standard 14	TestShowPS	live
+test.md-type1-programs	built-in encoding resolves a code to a glyph name	TestType1Encoding	live
+test.md-type1-programs	committed symbolic FontFile row reports the embedded program	TestValidationCorpusType1	live
+test.md-type1-programs	committed row extraction is ABZ with the code-point fallback	TestValidationCorpusType1	live
+test.md-type1-programs	painting a code the program lacks refuses invalidfont with no output	TestValidationCorpusType1	live
+test.md-type1-programs	painted Type 1 A is locked and equals the synthetic TrueType A	TestType1Paint	live
+test.md-type1-programs	seac, flex, and corrupt-program paint paths	TestType1Paint	live
+test.md-type1-programs	PFA and PFB containers, hex and binary eexec, LenIV 0 and 4, flipped cipher	TestType1Cipher	live
 test.md-pdf-rewrite	rewrite roundtrip pixels	TestRewritePixels	live
 test.md-pdf-rewrite	default rewrite options	TestDefaultRewriteOptions	live
 test.md-pdf-rewrite	level 0 and levels 1 to 5	TestRewriteLevels	live
@@ -213,6 +220,16 @@ test.md-pdf-rewrite	two calls equal	TestRewriteStable	live
 test.md-pdf-rewrite	bytes not compared to gs	make test	proof
 test.md-pdf-rewrite	rewrite CLI flags	TestRewriteCLI	live
 test.md-pdf-rewrite	compress samples	TestRewriteSamples	live
+test.md-font-subsetting	flag and option rewrite an embedded TrueType program, off by default	TestRewriteSubsetCLI	live
+test.md-font-subsetting	level 0 ignores the option and still refuses Tj	TestValidationCorpusSubset	live
+test.md-font-subsetting	the committed FontFile2 rows are the three named ones	TestValidationCorpusSubset	live
+test.md-font-subsetting	the writer prepends a digest-derived tag to the original BaseFont	TestValidationCorpusSubset	live
+test.md-font-subsetting	a source with no ToUnicode gains a synthesized one	TestValidationCorpusSubset	live
+test.md-font-subsetting	the page count holds and two opted-in runs return equal bytes	TestValidationCorpusSubset	live
+test.md-font-subsetting	subsetting an already-subsetted program can grow the file	TestValidationCorpusSubset	live
+test.md-font-subsetting	glyph indices stay stable so Widths needs no re-encode	TestEmbedSubsetStable	live
+test.md-font-subsetting	composite glyph components are followed	TestEmbedSubsetComposite	live
+test.md-font-subsetting	FontFile3 and Type1 FontFile programs are copied whole	TestEmbedSubsetOpenType	live
 test.md-pdfa-preflight	pdfa header	TestPDFA4Header	live
 test.md-pdfa-preflight	copyoptions append and catalog	TestCopyAppend	live
 test.md-pdfa-preflight	xmp packet	TestXMPPacket	live
@@ -225,6 +242,14 @@ test.md-pdfa-preflight	rewrite pdfa roundtrip	TestRewritePDFA4Stable	live
 test.md-pdfa-preflight	rewrite pdfa cli	TestRewritePDFA4CLI	live
 test.md-pdfa-preflight	pdfa-check target	make pdfa-check	proof
 test.md-pdfa-preflight	pdfua2-check target	make pdfua2-check	proof
+test.md-pdfua2-tag-generation	untagged rows gain a structure tree, report Tagged true, and stay byte-stable	TestValidationCorpusTagGeneration	live
+test.md-pdfua2-tag-generation	the claim is written only after the preflight passes	TestTagClaim	live
+test.md-pdfua2-tag-generation	tag-title and tag-lang fill dc:title and Lang, and a claim with no title keeps the tree	TestTagTitleRequired	live
+test.md-pdfua2-tag-generation	the flags without -tags exit 2 and -tags with -pdfa refuses unsupported	TestTagCommand	live
+test.md-pdfua2-tag-generation	a page with a clip refuses undefined in W	TestValidationCorpusTagGeneration	live
+test.md-pdfua2-tag-generation	an image with no Alt source refuses alt in Tag	TestValidationCorpusTagGeneration	live
+test.md-pdfua2-tag-generation	a tagged input refuses tagged in RewritePDF	TestValidationCorpusTagGeneration	live
+test.md-pdfua2-tag-generation	reading order and role assignment	TestTagReadingOrder	live
 test.md-bitmap-pdf	imagepdf xobject fields	TestImagePDF	live
 test.md-bitmap-pdf	imagepdfcolor colorspaces	TestImageColorSpaces	live
 test.md-bitmap-pdf	gray luma	TestImageColorSpaces	live

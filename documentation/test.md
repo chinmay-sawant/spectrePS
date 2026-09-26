@@ -16,7 +16,7 @@ The v0.0.4 validation work adds a checked-in corpus at `sampledata/validation/` 
 - `paths/`: PDF path and paint operator files, including an image XObject page.
 - `structural/`: classic xref tables, xref streams, object streams, a page with no `/Resources`, and files that must refuse with a named xref error.
 - `images/`: Flate, DCT, CCITT G3 and G4, and JPEG2000 samples, including a filter chain and a named refusal.
-- `text/`: font-bearing PDFs for metrics, encodings, and extraction, with the embedded font review in the corpus README.
+- `text/`: font-bearing PDFs for metrics, encodings, extraction, font subsetting, and the Type 1 machine, with the embedded font review in the corpus README.
 - `tagged/`: PDF/UA-2 structure samples with a `negative/` subfolder.
 - `pdfa/`: PDF/A-4 and PDF/A-4f samples with a `negative/` subfolder.
 - `rewrite/`: the writer levels 0 to 5 over paths, containers, images, and tags.
@@ -32,7 +32,7 @@ The corpus has two tiers:
 
 Every corpus test is named `TestValidation<Area>`, so `go test -count=1 ./... -run TestValidation` runs the validation group, and `make test` runs it with everything else. The group names every `TestValidation` function in the suite:
 
-- `internal/cli`: `TestValidationExitCodes`, `TestValidationFlagSurface`, `TestValidationNoProcess`, `TestValidationRasterGeometry`, `TestValidationCompareCLIText`, `TestValidationCorpusMeasure`, `TestValidationCorpusPostScript`, `TestValidationCorpusPDF`, `TestValidationCorpusImages`, `TestValidationCorpusText`, `TestValidationCorpusRewrite`, `TestValidationCorpusPDFA`, `TestValidationCorpusGS`, `TestValidationPDFACLI`, `TestValidationGSEdges`, `TestValidationGSOutputRules`, `TestValidationGSParamCorners`, `TestValidationGSRejectedDevices`.
+- `internal/cli`: `TestValidationExitCodes`, `TestValidationFlagSurface`, `TestValidationNoProcess`, `TestValidationRasterGeometry`, `TestValidationCompareCLIText`, `TestValidationCorpusMeasure`, `TestValidationCorpusPostScript`, `TestValidationCorpusPDF`, `TestValidationCorpusImages`, `TestValidationCorpusText`, `TestValidationCorpusRewrite`, `TestValidationCorpusPDFA`, `TestValidationCorpusGS`, `TestValidationCorpusSubset`, `TestValidationCorpusTagGeneration`, `TestValidationCorpusType1`, `TestValidationPDFACLI`, `TestValidationGSEdges`, `TestValidationGSOutputRules`, `TestValidationGSParamCorners`, `TestValidationGSRejectedDevices`.
 - `internal/graphics`: `TestValidationPixmapStrokeFill`, `TestValidationDrawImageEdges`.
 - `internal/pdf`: `TestValidationPageTree`, `TestValidationUnsupportedOps`, `TestValidationImageErrorShapes`, `TestValidationFilterChain`, `TestValidationCCITTParams`, `TestValidationFontFile3`, `TestValidationNoOutlinePolicy`, `TestValidationTextOpErrors`.
 - `internal/pdfa`: `TestValidationUA2Edges`.
@@ -172,6 +172,14 @@ The external reference proofs in phase 11 stay outside `make test`. Their verdic
 - `spectreps text [-pages range] file.pdf` prints the selected pages to stdout. The command accepts no other option, and `-pages` follows the shared grammar.
 - PostScript `findfont`, `scalefont`, `setfont`, and `show` resolve the standard 14 names. `show` advances the current point, needs a current point, and returns `invalidfont` on a pixmap because the standard 14 have no outline program.
 
+## Type 1 programs
+
+- A simple `/Subtype /Type1` font with a `/FontFile` program loads, and its built-in encoding resolves a code to the glyph name the charstrings dictionary carries. `internal/pdf/type1_test.go` locks that resolution directly.
+- `sampledata/validation/text/type1-text.pdf` is a committed symbolic `/FontFile` row with no `/ToUnicode` and no `/Encoding`. `spectreps info` reports `SynthType1 embedded=true`, and `spectreps text` returns `ABZ\r\n`: the A and B come from the built-in encoding and the Adobe Glyph List, and the third code is not in the program, so it falls back to the code point.
+- That same file refuses to paint with `Error: /invalidfont in Tj` and writes no output, because the page shows a code the program does not carry. The page is not a blank success. This is the no-outline policy in `documentation/fonts.md`, and it is the reason the row's `expect` is `struct` rather than `paint`.
+- A program that carries every code a page shows paints through the same coverage path as an embedded sfnt outline. `sampledata/fixtures/type1-tj.ppm` locks the painted Type 1 `A`, its pixels equal the synthetic TrueType `A` under `CompareRaster`, and `TestType1Paint` covers the `seac`, flex, and corrupt-program paths in memory. Painting `seac` and flex glyphs is therefore a unit-test claim, not a corpus claim: the committed row shows two codes the program carries and one it does not.
+- `TestType1Seac`, `TestType1Flex`, `TestType1Cipher`, `TestType1Program`, and `TestType1Encoding` cover the PFA and PFB containers, the hex and binary eexec sections, `LenIV` 0 and 4, and the flipped-cipher refusal.
+
 ## PDF rewrite
 
 - `RewritePDF` on a document this module can rasterize returns a PDF. Opening that PDF and rasterizing page 0 matches `RasterizePage` of the input, via `CompareRaster`.
@@ -184,6 +192,15 @@ The external reference proofs in phase 11 stay outside `make test`. Their verdic
 - The rewritten bytes are not required to equal the input bytes, and they are not compared with Ghostscript `pdfwrite`.
 - `spectreps rewrite` without `-o` exits 2. `-compress=false` selects the uncompressed level 0 option. `-level 1` through `-level 5` succeed on a text stream that level 0 rejects with `undefined`. A successful rewrite exits 0.
 - `sampledata/compress/whatisthis.pdf` and `sampledata/compress/path.pdf` rewrite at every level with the input page count. The JPEG image decodes, the caps hold, and level 5 is the smallest of the five. The level 1 and 2 sizes for `whatisthis.pdf` stay at or under the recorded 610,034-byte ceiling. The test skips when `sampledata/` is absent.
+
+## Font subsetting
+
+- `rewrite -subset-fonts` and `RewriteOptions.SubsetFonts` rewrite an embedded TrueType program on a level 1 through 5 pass-through write. The option is off by default and level 0 ignores it, so a level 0 write of a text page still refuses with `undefined in Tj` and writes no output.
+- The committed rows that carry a `/FontFile2` program are `text/complex_ttf_font.pdf`, `text/mixedfonts.pdf`, and `text/subset-text.pdf`. A `/FontFile3` OpenType program and a Type 1 `/FontFile` program are copied whole, so `text/Embedded_font.pdf` and `text/type1-text.pdf` are not subsetting rows.
+- The writer prepends a six-letter tag derived from the subset digest to the original `/BaseFont`, so a subset name reads `TAG+original`. A name the source already carried passes through unchanged, so the claim is that at least one name was rewritten, not that every name was. The original producer tag also survives inside the embedded program's name table, which is why the test reads `/BaseFont` rather than scanning the payload.
+- A source with no `/ToUnicode` gains a synthesized one. `text/subset-text.pdf` is the only committed row that qualifies, so the `/ToUnicode` claim is a named case on that row rather than a claim over the corpus. `text/mixedfonts.pdf` already carries a `/ToUnicode` that the pass-through writer copies.
+- The page count holds, two opted-in runs return equal bytes, and an opted-in write differs from a plain write of the same source at the same level.
+- Subsetting an already-subsetted program can grow the file. The writer rebuilds `loca`, zeroes the unused glyphs, and adds the synthesized `/ToUnicode`, so a corpus source that is already a subset comes out larger than its plain pass-through. No case asserts that the subset write is smaller than the input.
 
 ## PDF/A-4 profile preflight
 
@@ -198,6 +215,14 @@ The external reference proofs in phase 11 stay outside `make test`. Their verdic
 - `spectreps rewrite -pdfa 4|4f` writes the file and exits 0, a refusal exits 1 with `Error: /rule in PDFA`, and any other `-pdfa` value exits 2. A refusal writes no output file.
 - `make pdfa-check` runs `verapdf --flavour 4` over the PDFs under `sampledata/pdfa/`, excludes a `negative/` subfolder, prefers a local copy at `./verapdf/verapdf`, falls back to `verapdf` on PATH, and prints a skip when neither exists. The local copy is gitignored. veraPDF is a proof tool, not a dependency, and it stays out of `make test`. On 2026-09-25, veraPDF 1.30.2 reported `compliant="2" nonCompliant="0"` for `path-a4.pdf` and `compliant-a4.pdf`. The verdict is veraPDF's; the claim wording stays "profile preflight".
 - `make pdfua2-check` runs `verapdf --flavour ua2 --format json` over the PDFs under `sampledata/pdfua2/`, uses the same local-copy preference and skip, and excludes `negative/`. On 2026-09-25, veraPDF 1.30.2 reported 1727 passed rules and 0 failed rules for `tagged-ua2.pdf` and `compliant-ua2.pdf`. The `negative/untagged.pdf` fixture fails `ua2-marked` by design.
+
+## PDF/UA-2 tag generation
+
+- `rewrite -tags` generates a structure tree for an untagged input. The committed rows it accepts are `paths/path.pdf`, `structural/object-stream.pdf`, and `gs-argv/gs-argv-input.pdf`: an untagged page with no clip and no image. Each gains `/StructTreeRoot`, `spectreps info` then reports `Tagged: true`, the page count holds, and two runs return equal bytes.
+- `-claim` writes `pdfuaid:part` 2 and `pdfuaid:rev` 2024 only after the built bytes pass the preflight, and `-tag-title` and `-tag-lang` fill `dc:title` and the catalog `/Lang`. A claim with no title keeps the tree and returns `Error: /ua2-title in PDFUA`. The claim is generate and preflight, never certification.
+- `-claim`, `-tag-title`, and `-tag-lang` without `-tags` exit 2, and `-tags` with `-pdfa` returns `Error: /unsupported in RewritePDF` with no output file.
+- Three refusal classes hold on the committed corpus, each with no output file. A page with a clip refuses through the level 0 path recorder with `Error: /undefined in W` (`paths/whatisthis.pdf`). An image with no `/Alt` source refuses the figure with `Error: /alt in Tag` (`paths/xobject-image.pdf` and `images/ccitt_EndOfBlock_false.pdf`). A tagged input refuses before any of that with `Error: /tagged in RewritePDF` (`text/repo-tagged-text.pdf`).
+- Reading order, role assignment, and the structure build stay a unit-test claim in `internal/tag`. The corpus proves the command contract on real files, not the `O(n^2)` step in `tag.DerivePlan`, which `make bench` times.
 
 ## PostScript output
 

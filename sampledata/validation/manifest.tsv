@@ -63,3 +63,5 @@ text/nonembedded_type1_tounicode.pdf	95ef7cc7e6c80b3ce6e884407b0b695898a6f47a30b
 text/repo-tagged-text.pdf	e4f5500fe4b6c8a50f847e22082fa33e43820e28692bcb265faf22e8f00d0e95	1944	repo-authored	repo-authored	Repo-authored tagged text, Differences and ToUnicode	struct
 text/simpletype3font.pdf	a5697cbc51c19816944658b91e3a41f86e98ae63fbd1007798994b073385aef1	1624	https://raw.githubusercontent.com/mozilla/pdf.js/d52fdf411a6e4d338180687456e0df019e28475e/test/pdfs/simpletype3font.pdf	Apache-2.0	Type 3 font with no program	struct
 text/standard_fonts.pdf	4d48fc12e619a823bf70b3a4d8e9d916a85683ecb176d138af66a57351bd21f9	94800	https://raw.githubusercontent.com/mozilla/pdf.js/d52fdf411a6e4d338180687456e0df019e28475e/test/pdfs/standard_fonts.pdf	Apache-2.0	Standard 14 metrics and extraction	struct
+text/subset-text.pdf	14b0bc415bbdafcc4177deb34c74ca7e555c4a2e1de114134857f25709220ceb	1119	repo-authored	repo-authored	Synthetic TrueType FontFile2 for subset validation	struct
+text/type1-text.pdf	23749b69f83db2b1a646757edbcebb9e79e878adb25b8b8b446abdea569b089e	1834	repo-authored	repo-authored	Symbolic Type 1 program with seac and flex glyphs	struct
