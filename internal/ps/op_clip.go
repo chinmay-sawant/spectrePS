@@ -41,7 +41,10 @@ func opClipRun(ctx context.Context, interp *Interp) error {
 		return err
 	}
 	state := gsFor(interp)
-	state.clips = append(state.clips, clipPath{pts: append([]devPt(nil), state.path...)})
+	state.clips = append(state.clips, clipPath{
+		pts:     append([]devPt(nil), state.path...),
+		evenOdd: false,
+	})
 	return nil
 }
 
@@ -118,10 +121,10 @@ func (state *gstate) clipBoundary() []devPt {
 		width, height := state.pageRect()
 		return []devPt{
 			{x: 0, y: 0, move: true},
-			{x: width, y: 0},
-			{x: width, y: height},
-			{x: 0, y: height},
-			{x: 0, y: 0},
+			{x: width, y: 0, move: false},
+			{x: width, y: height, move: false},
+			{x: 0, y: height, move: false},
+			{x: 0, y: 0, move: false},
 		}
 	}
 	var pts []devPt

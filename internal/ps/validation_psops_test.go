@@ -152,7 +152,8 @@ func validationStringWidth(t *testing.T) {
 	assertFloats(t, "/Courier findfont 1000 scalefont setfont (A) stringwidth", 600, 0)
 	// No current point is needed, and the current point is not moved.
 	assertFloats(t,
-		"/Helvetica findfont 1000 scalefont setfont 7 7 moveto (A) stringwidth pop pop currentpoint",
+		"/Helvetica findfont 1000 scalefont setfont 7 7 moveto (A) stringwidth pop "+
+			"pop currentpoint",
 		7, 7)
 	// A code with no StandardEncoding name advances nothing.
 	assertFloats(t, "/Helvetica findfont 1000 scalefont setfont (\000) stringwidth", 0, 0)
@@ -315,14 +316,26 @@ func validationInterpreterInfo(t *testing.T) {
 	if len(got) != 1 || got[0].Kind != KindInt || got[0].Int != languageLevel {
 		t.Fatalf("languagelevel stack = %+v, want int %d", got, languageLevel)
 	}
-	for _, name := range []string{"version", "product"} {
-		got = assertRun(t, name)
+	psopsWantStrings(t, "version", "product")
+	psopsWantInts(t, "revision", "serialnumber")
+}
+
+// psopsWantStrings proves each operator name pushes one non-empty string.
+func psopsWantStrings(t *testing.T, names ...string) {
+	t.Helper()
+	for _, name := range names {
+		got := assertRun(t, name)
 		if len(got) != 1 || got[0].Kind != KindString || len(got[0].Str.Bytes) == 0 {
 			t.Fatalf("%s stack = %+v, want a non-empty string", name, got)
 		}
 	}
-	for _, name := range []string{"revision", "serialnumber"} {
-		got = assertRun(t, name)
+}
+
+// psopsWantInts proves each operator name pushes one int.
+func psopsWantInts(t *testing.T, names ...string) {
+	t.Helper()
+	for _, name := range names {
+		got := assertRun(t, name)
 		if len(got) != 1 || got[0].Kind != KindInt {
 			t.Fatalf("%s stack = %+v, want an int", name, got)
 		}

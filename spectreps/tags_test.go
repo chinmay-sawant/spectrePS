@@ -104,7 +104,7 @@ func checkTaggedInputRefusal(t *testing.T, in *spectreps.Instance) {
 	}
 	out, err := in.RewritePDF(t.Context(), tagged, spectreps.RewriteOptions{Tag: true})
 	var job spectreps.JobError
-	if !errors.As(err, &job) || job.Op != rewriteOp || job.Msg != "tagged" {
+	if !errors.As(err, &job) || job.Op != rewriteOp || job.Msg != taggedMsg {
 		t.Fatalf("RewritePDF() error = %v, want tagged in RewritePDF", err)
 	}
 	if out != nil {

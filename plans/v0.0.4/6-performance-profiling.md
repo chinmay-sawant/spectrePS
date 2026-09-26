@@ -30,7 +30,7 @@ Benchmarks live in the package under profile as `Benchmark` functions in `*_test
 - [x] 1.4 `make bench` runs the suite with `-count=3` and writes `profiles/bench.txt`; `make bench-profile` writes the `-cpuprofile` and `-memprofile` files per package under `profiles/`; `/profiles/` joins `.gitignore` with a comment that it holds generated profiles. Proof: `make bench` and `make bench-profile` produce the files and `git status --porcelain` shows no new tracked file.
 - [x] 1.5 `documentation/performance.md` records the machine, the Go version, the exact commands, and the first baseline: ns/op, B/op, and allocs/op per benchmark, plus the application table from the overview. Proof: `grep -n -e ns/op -e i7-13700HX documentation/performance.md`.
 - [x] 1.6 `documentation/development.md` names `make bench` and `make bench-profile` and states that neither runs inside `make test`. Proof: `grep -n bench documentation/development.md`.
-- [~] 1.7 Closure: `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] 1.7 Closure: `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 2: Application profiling
 
@@ -40,7 +40,7 @@ The application is the built binary and `internal/cli`. The in-process benchmark
 - [x] 2.2 Startup split: record `version` (2 to 7 ms across five runs), `validate` on a small PostScript program, and the in-process `BenchmarkCLIRaster`, so the fixed per-process cost and the per-job cost are separate rows in the table. Proof: the three recorded rows and the stated delta.
 - [x] 2.3 Profiles: `make bench-profile` over the CLI benchmarks, `go tool pprof -top -nodecount=20` per profile, and a `GODEBUG=gctrace=1` run of the heaviest job with the GC summary. The top 20 functions and the GC share go into `documentation/performance.md`. Proof: the pprof output and the gctrace summary.
 - [x] 2.4 Scaling table: raster the stroke program and `path.pdf` at 72, 150, 300, 600, and 1200 dpi within the caps, and rewrite `whatisthis.pdf` at levels 2 to 5. Record seconds, pixels, and peak RSS per cell, and state for each superlinear cell whether the cause is pixel count, stroke width, allocation, or DCT encode. Proof: the table in `documentation/performance.md`.
-- [~] 2.5 Closure: `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] 2.5 Closure: `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 3: Library profiling
 
@@ -50,14 +50,14 @@ The library surface is the `spectreps` package. An embedded consumer calls `New`
 - [x] 3.2 Allocation profile: `-memprofile` and `-benchmem` per job, and a `pprof -alloc_space` list of the largest sites. Proof: the allocation table with B/op and allocs/op per benchmark.
 - [x] 3.3 Embedded pattern: `BenchmarkReuseInstance` (one `New`, one `OpenPDF`, rasterize every page) against `BenchmarkPerCallInstance` (a `New` and `Close` per page). Record the per-call overhead of the context check and the engine shim, which is the shape a consumer pays when it imports the package. Proof: both benchmarks and the recorded delta.
 - [x] 3.4 Escape analysis: `go build -gcflags=-m ./spectreps ./internal/...` filtered to the hot files, with the heap escapes and any full-buffer copies recorded (page content, decoded image, Flate output, glyph boxes). Proof: the summary in `documentation/performance.md` with the file names.
-- [~] 3.5 Closure: `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] 3.5 Closure: `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 4: Findings and scaling
 
 - [x] 4.1 `documentation/performance.md` gains a findings table with one row per hot area: the top function with file:line, its percent of the job, and whether the cost is linear in the expected variable (pages, pixels, bytes, glyphs). Proof: `grep -n findings documentation/performance.md` and the table rows.
 - [x] 4.2 Each finding with a plausible win gets a phase 5 row and names the measurement that will accept or reject it. Each finding without a win is recorded as accepted with the reason, so a later reader knows the cost was seen and kept. Proof: every findings table row names a phase 5 row or an accepted reason.
 - [x] 4.3 The 300 dpi to 600 dpi gap measured on 2026-09-25 (81 ms to 742 ms, 4 times the pixels and about 9 times the time) is attributed to a cause or recorded as unexplained with the next step. Proof: the attribution row in the table.
-- [~] 4.4 Closure: no timing assertion joins `make test`; `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] 4.4 Closure: no timing assertion joins `make test`; `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 5: Measured fixes
 
@@ -70,7 +70,7 @@ Every row here starts from a phase 4 finding and ends with a before and after nu
 - [x] 5.5 `CompareRaster`: act on the comparison finding by using `bytes.Equal` when both strides are tight and keeping the byte loop otherwise, with ns/op before and after. Behavior proof: `go test -count=1 ./spectreps -run TestCompareRaster`.
 - [~] 5.6 The 300 dpi to 600 dpi scaling row, if phase 4 attributes it to an allocator or a per-scanline path, gets its own fix row with the same before and after shape. Behavior proof: `go test -count=1 ./spectreps -run 'TestPaint|TestYFlip'`. Deferred to `plans/v0.0.1/10-deferred.md` 10.5: the 9x gap did not reproduce on the merged tree (3.9x for 4x pixels), so no fix row follows.
 - [x] 5.7 A row that phase 4 cannot confirm is rewritten as `[~]` and handed to the integrator for `plans/v0.0.1/10-deferred.md` with the reason and the next gate. Proof: the deferred row exists and this file points at it.
-- [~] 5.8 Closure: `documentation/performance.md` records each landed fix with its before and after; `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] 5.8 Closure: `documentation/performance.md` records each landed fix with its before and after; `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 6: Budgets, docs, and closure
 

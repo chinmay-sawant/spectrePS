@@ -110,7 +110,7 @@ An untagged PDF stores no semantics. Reading order comes from the extraction geo
 - [x] Open decision 11 decides whether `validate` calls `PreflightUA2`, and `documentation/cli.md` matches the answer. Proof: `go test -count=1 ./internal/cli -run TestValidateUA2` exits 0, or the decision records the deferral.
 
 ### 6.5 Docs and closure
-- [~] `documentation/features.md`, `devices.md`, `covered-and-not-covered.md`, `cli.md`, and `public-api.md` state the generate-and-preflight scope, the refusal matrix, and the claim wording, and `make lint` and `make test` pass with outcomes recorded on the day. Proof: `grep -n 'generate and preflight' documentation/features.md documentation/devices.md` exits 0, `make lint` exits 0, and `make test` exits 0. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] `documentation/features.md`, `devices.md`, `covered-and-not-covered.md`, `cli.md`, and `public-api.md` state the generate-and-preflight scope, the refusal matrix, and the claim wording, and `make lint` and `make test` pass with outcomes recorded on the day. Proof: `grep -n 'generate and preflight' documentation/features.md documentation/devices.md` exits 0, `make lint` exits 0, and `make test` exits 0. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Open decisions
 

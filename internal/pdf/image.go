@@ -264,6 +264,8 @@ func imageParams(file *File, stream Value, opName string) (int, int, colorSpace,
 // final filter name, its /DecodeParms, and the decoded bytes. A single filter,
 // a one-name array, and no filter pass through unchanged. A non-name chain
 // item is undefined in Image.
+//
+//nolint:cyclop // one branch per chain item and per final filter.
 func normalizeImageChain(val Value) (Value, error) {
 	entry, ok := val.ValueEntry(keyFilter)
 	if !ok || entry.Kind != KindArray || len(entry.Array) < 2 {

@@ -30,38 +30,58 @@ func TestValidationRewriteTags(t *testing.T) {
 		t.Fatal("Tagged() = false for the tagged fixture")
 	}
 	t.Run("level 0 refuses", func(t *testing.T) {
-		out, err := in.RewritePDF(t.Context(), doc, spectreps.DefaultRewriteOptions())
-		var job spectreps.JobError
-		if !errors.As(err, &job) || job.Op != rewriteOp || job.Msg != "tagged" ||
-			job.Error() != "Error: /tagged in RewritePDF" {
-			t.Fatalf("RewritePDF() error = %v, want Error: /tagged in RewritePDF", err)
-		}
-		if out != nil {
-			t.Fatalf("RewritePDF() bytes = %#v, want nil", out)
-		}
+		checkRewriteTagsRefusal(t, in, doc)
 	})
 	for level := 1; level <= 5; level++ {
 		t.Run(fmt.Sprintf("level %d", level), func(t *testing.T) {
-			out, err := in.RewritePDF(t.Context(), doc, spectreps.RewriteOptions{Level: level})
-			if err != nil {
-				t.Fatalf("level %d: %v", level, err)
-			}
-			for i, body := range bodies {
-				if !bytes.Contains(out, body) {
-					t.Fatalf("level %d dropped source object %d: %q", level, i+1, body)
-				}
-			}
-			reopened, err := in.OpenPDF(t.Context(), out)
-			if err != nil {
-				t.Fatalf("level %d reopen: %v", level, err)
-			}
-			if !reopened.Tagged() {
-				t.Fatalf("level %d dropped the structure tree", level)
-			}
-			if reopened.PageCount() != 1 {
-				t.Fatalf("level %d PageCount = %d, want 1", level, reopened.PageCount())
-			}
+			checkRewriteTagsLevel(t, in, doc, bodies, level)
 		})
+	}
+}
+
+// checkRewriteTagsRefusal proves level 0 refuses the tagged fixture by name
+// and returns no bytes.
+func checkRewriteTagsRefusal(t *testing.T, in *spectreps.Instance, doc *spectreps.Document) {
+	t.Helper()
+	out, err := in.RewritePDF(t.Context(), doc, spectreps.DefaultRewriteOptions())
+	var job spectreps.JobError
+	if !errors.As(err, &job) || job.Op != rewriteOp || job.Msg != taggedMsg ||
+		job.Error() != "Error: /tagged in RewritePDF" {
+		t.Fatalf("RewritePDF() error = %v, want Error: /tagged in RewritePDF", err)
+	}
+	if out != nil {
+		t.Fatalf("RewritePDF() bytes = %#v, want nil", out)
+	}
+}
+
+// checkRewriteTagsLevel proves one rewrite level keeps every source object and
+// the structure tree, and keeps the page count.
+func checkRewriteTagsLevel(
+	t *testing.T,
+	in *spectreps.Instance,
+	doc *spectreps.Document,
+	bodies [][]byte,
+	level int,
+) {
+	t.Helper()
+	out, err := in.RewritePDF(t.Context(), doc, spectreps.RewriteOptions{Level: level})
+	if err != nil {
+		t.Fatalf("level %d: %v", level, err)
+	}
+	for i, body := range bodies {
+		if !bytes.Contains(out, body) {
+			t.Fatalf("level %d dropped source object %d: %q", level, i+1, body)
+		}
+	}
+	reopened, err := in.OpenPDF(t.Context(), out)
+	if err != nil {
+		t.Fatalf("level %d reopen: %v", level, err)
+	}
+	if !reopened.Tagged() {
+		t.Fatalf("level %d dropped the structure tree", level)
+	}
+	if reopened.PageCount() != 1 {
+		t.Fatalf("level %d PageCount = %d, want 1", level, reopened.PageCount())
 	}
 }
 
@@ -95,7 +115,7 @@ func TestValidationRewriteContainers(t *testing.T) {
 	src := validationReadFile(t, filepath.Join(
 		"..", "sampledata", "validation", "rewrite", "object-stream.pdf",
 	))
-	for _, needle := range [][]byte{[]byte("/Type /ObjStm"), []byte("/Type /XRef")} {
+	for _, needle := range validationContainerNeedles() {
 		if !bytes.Contains(src, needle) {
 			t.Fatalf("source is missing %q", needle)
 		}
@@ -110,23 +130,41 @@ func TestValidationRewriteContainers(t *testing.T) {
 	}
 	for level := 1; level <= 5; level++ {
 		t.Run(fmt.Sprintf("level %d", level), func(t *testing.T) {
-			out, err := in.RewritePDF(t.Context(), doc, spectreps.RewriteOptions{Level: level})
-			if err != nil {
-				t.Fatalf("level %d: %v", level, err)
-			}
-			for _, needle := range [][]byte{[]byte("/Type /ObjStm"), []byte("/Type /XRef")} {
-				if bytes.Contains(out, needle) {
-					t.Fatalf("level %d copied the dead container %q", level, needle)
-				}
-			}
-			reopened, err := in.OpenPDF(t.Context(), out)
-			if err != nil {
-				t.Fatalf("level %d reopen: %v", level, err)
-			}
-			if reopened.PageCount() != pages {
-				t.Fatalf("level %d PageCount = %d, want %d", level, reopened.PageCount(), pages)
-			}
+			checkRewriteContainersLevel(t, in, doc, pages, level)
 		})
+	}
+}
+
+// validationContainerNeedles are the dead container headers the source carries
+// and a rewrite must drop.
+func validationContainerNeedles() [][]byte {
+	return [][]byte{[]byte("/Type /ObjStm"), []byte("/Type /XRef")}
+}
+
+// checkRewriteContainersLevel proves one rewrite level drops both dead
+// containers and keeps the page count.
+func checkRewriteContainersLevel(
+	t *testing.T,
+	in *spectreps.Instance,
+	doc *spectreps.Document,
+	pages, level int,
+) {
+	t.Helper()
+	out, err := in.RewritePDF(t.Context(), doc, spectreps.RewriteOptions{Level: level})
+	if err != nil {
+		t.Fatalf("level %d: %v", level, err)
+	}
+	for _, needle := range validationContainerNeedles() {
+		if bytes.Contains(out, needle) {
+			t.Fatalf("level %d copied the dead container %q", level, needle)
+		}
+	}
+	reopened, err := in.OpenPDF(t.Context(), out)
+	if err != nil {
+		t.Fatalf("level %d reopen: %v", level, err)
+	}
+	if reopened.PageCount() != pages {
+		t.Fatalf("level %d PageCount = %d, want %d", level, reopened.PageCount(), pages)
 	}
 }
 
@@ -158,25 +196,25 @@ func TestValidationRewritePDFA(t *testing.T) {
 			mode: spectreps.PDFA4F, conformance: true,
 		},
 	}
-	for _, tc := range cases {
-		src := validationReadFile(t, tc.path)
+	for _, testCase := range cases {
+		src := validationReadFile(t, testCase.path)
 		doc, err := in.OpenPDF(t.Context(), src)
 		if err != nil {
-			t.Fatalf("%s open: %v", tc.name, err)
+			t.Fatalf("%s open: %v", testCase.name, err)
 		}
 		pages := doc.PageCount()
 		for level := 1; level <= 5; level++ {
-			t.Run(fmt.Sprintf("%s level %d", tc.name, level), func(t *testing.T) {
-				opt := spectreps.RewriteOptions{Level: level, PDFA: tc.mode}
+			t.Run(fmt.Sprintf("%s level %d", testCase.name, level), func(t *testing.T) {
+				opt := spectreps.RewriteOptions{Level: level, PDFA: testCase.mode}
 				out := rewritePair(t, in, doc, opt)
-				wantPDFA4Payload(t, out, tc.conformance)
+				wantPDFA4Payload(t, out, testCase.conformance)
 				reopened, err := in.OpenPDF(t.Context(), out)
 				if err != nil {
-					t.Fatalf("%s level %d reopen: %v", tc.name, level, err)
+					t.Fatalf("%s level %d reopen: %v", testCase.name, level, err)
 				}
 				if reopened.PageCount() != pages {
 					t.Fatalf("%s level %d PageCount = %d, want %d",
-						tc.name, level, reopened.PageCount(), pages)
+						testCase.name, level, reopened.PageCount(), pages)
 				}
 			})
 		}
@@ -188,50 +226,64 @@ func TestValidationRewritePDFA(t *testing.T) {
 func TestValidationWritePostScript(t *testing.T) {
 	in := newInst(t)
 	t.Run("multi page", func(t *testing.T) {
-		doc, err := in.OpenPDF(t.Context(), validationTwoPagePDF(t))
-		if err != nil {
-			t.Fatal(err)
-		}
-		program, err := in.WritePostScript(t.Context(), doc, spectreps.PostScriptOptions{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		second, err := in.WritePostScript(t.Context(), doc, spectreps.PostScriptOptions{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if compared := spectreps.CompareFiles(program, second); !compared.Equal {
-			t.Fatalf("CompareFiles = %+v", compared)
-		}
-		if !bytes.HasPrefix(program, []byte("%!PS-Adobe-3.0")) {
-			t.Fatalf("program prefix = %q, want %%!PS-Adobe-3.0", program)
-		}
-		if !bytes.Contains(program, []byte("%%Pages: 2")) {
-			t.Fatalf("program has no page count: %q", program)
-		}
-		if got := bytes.Count(program, []byte("%%Page: ")); got != 2 {
-			t.Fatalf("%%Page count = %d, want 2", got)
-		}
-		if got := bytes.Count(program, []byte("showpage")); got != 2 {
-			t.Fatalf("showpage count = %d, want 2", got)
-		}
-		checkPostScriptRoundTrip(t, in, doc, program)
+		checkWritePostScriptMultiPage(t, in)
 	})
 	t.Run("image refused", func(t *testing.T) {
-		doc, err := in.OpenPDF(t.Context(), validationImagePagePDF(t))
-		if err != nil {
-			t.Fatal(err)
-		}
-		out, err := in.WritePostScript(t.Context(), doc, spectreps.PostScriptOptions{})
-		var job spectreps.JobError
-		if !errors.As(err, &job) || job.Op != "Do" || job.Msg != "undefined" ||
-			job.Error() != "Error: /undefined in Do" {
-			t.Fatalf("WritePostScript() error = %v, want Error: /undefined in Do", err)
-		}
-		if out != nil {
-			t.Fatalf("WritePostScript() bytes = %#v, want nil", out)
-		}
+		checkWritePostScriptImageRefused(t, in)
 	})
+}
+
+// checkWritePostScriptMultiPage locks the program shape for a two-page
+// document and the round trip back through the interpreter.
+func checkWritePostScriptMultiPage(t *testing.T, in *spectreps.Instance) {
+	t.Helper()
+	doc, err := in.OpenPDF(t.Context(), validationTwoPagePDF(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := in.WritePostScript(t.Context(), doc, spectreps.PostScriptOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := in.WritePostScript(t.Context(), doc, spectreps.PostScriptOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if compared := spectreps.CompareFiles(program, second); !compared.Equal {
+		t.Fatalf("CompareFiles = %+v", compared)
+	}
+	if !bytes.HasPrefix(program, []byte("%!PS-Adobe-3.0")) {
+		t.Fatalf("program prefix = %q, want %%!PS-Adobe-3.0", program)
+	}
+	if !bytes.Contains(program, []byte("%%Pages: 2")) {
+		t.Fatalf("program has no page count: %q", program)
+	}
+	if got := bytes.Count(program, []byte("%%Page: ")); got != 2 {
+		t.Fatalf("%%Page count = %d, want 2", got)
+	}
+	if got := bytes.Count(program, []byte("showpage")); got != 2 {
+		t.Fatalf("showpage count = %d, want 2", got)
+	}
+	checkPostScriptRoundTrip(t, in, doc, program)
+}
+
+// checkWritePostScriptImageRefused locks the image refusal through the public
+// API: undefined in Do and no output bytes.
+func checkWritePostScriptImageRefused(t *testing.T, in *spectreps.Instance) {
+	t.Helper()
+	doc, err := in.OpenPDF(t.Context(), validationImagePagePDF(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := in.WritePostScript(t.Context(), doc, spectreps.PostScriptOptions{})
+	var job spectreps.JobError
+	if !errors.As(err, &job) || job.Op != "Do" || job.Msg != undefinedMsg ||
+		job.Error() != "Error: /undefined in Do" {
+		t.Fatalf("WritePostScript() error = %v, want Error: /undefined in Do", err)
+	}
+	if out != nil {
+		t.Fatalf("WritePostScript() bytes = %#v, want nil", out)
+	}
 }
 
 // validationTwoPagePDF is two path pages: a stroke and a fill.
@@ -297,84 +349,118 @@ func checkPostScriptRoundTrip(
 func TestValidationImagePDFContract(t *testing.T) {
 	in := newInst(t)
 	t.Run("cmyk bytes", func(t *testing.T) {
-		pages := []spectreps.PageImage{{
-			Width: 2, Height: 1, Stride: 6,
-			Pixels: []byte{255, 0, 0, 255, 255, 255},
-		}}
-		out, err := in.ImagePDFColor(t.Context(), pages, 72, spectreps.ImageColorCMYK)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.Contains(out, []byte("/DeviceCMYK")) {
-			t.Fatal("output is missing /DeviceCMYK")
-		}
-		got := inflatePageImage(t, out)
-		want := []byte{0, 255, 255, 0, 0, 0, 0, 0}
-		if !bytes.Equal(got, want) {
-			t.Fatalf("CMYK stream = %v, want %v", got, want)
-		}
+		checkImagePDFCMYKBytes(t, in)
 	})
 	t.Run("dpi floor", func(t *testing.T) {
-		pages := []spectreps.PageImage{validationPageImage(2, 1)}
-		want := imagePDFBytes(t, in, pages, 72)
-		for _, dpi := range []float64{0, -4} {
-			got, err := in.ImagePDF(t.Context(), pages, dpi)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if compared := spectreps.CompareFiles(want, got); !compared.Equal {
-				t.Fatalf("dpi %v bytes differ: %+v", dpi, compared)
-			}
-			if !bytes.Contains(got, []byte("/MediaBox [0 0 2 1]")) {
-				t.Fatalf("dpi %v has no 2 by 1 MediaBox", dpi)
-			}
-		}
+		checkImagePDFDPIFloor(t, in)
 	})
 	t.Run("empty pages", func(t *testing.T) {
-		for _, pages := range [][]spectreps.PageImage{nil, {}} {
-			out, err := in.ImagePDF(t.Context(), pages, 72)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.HasPrefix(out, []byte("%PDF-1.4")) {
-				t.Fatalf("empty output prefix = %q", out[:min(8, len(out))])
-			}
-			if !bytes.Contains(out, []byte("/Count 0")) {
-				t.Fatal("empty output has no /Count 0")
-			}
-			doc, err := in.OpenPDF(t.Context(), out)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if doc.PageCount() != 0 {
-				t.Fatalf("empty PageCount = %d, want 0", doc.PageCount())
-			}
-		}
+		checkImagePDFEmptyPages(t, in)
 	})
 	t.Run("unknown color", func(t *testing.T) {
-		pages := []spectreps.PageImage{validationPageImage(3, 2)}
-		fallback, err := in.ImagePDFColor(t.Context(), pages, 72, spectreps.ImageColor(99))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if compared := spectreps.CompareFiles(imagePDFBytes(t, in, pages, 72), fallback); !compared.Equal {
-			t.Fatalf("unknown color bytes differ: %+v", compared)
-		}
-		if !bytes.Contains(fallback, []byte("/DeviceRGB")) {
-			t.Fatal("unknown color did not select /DeviceRGB")
-		}
+		checkImagePDFUnknownColor(t, in)
 	})
 	t.Run("media box formula", func(t *testing.T) {
-		out, err := in.ImagePDFColor(t.Context(), []spectreps.PageImage{
-			validationPageImage(3, 2),
-		}, 96, spectreps.ImageColorRGB)
+		checkImagePDFMediaBox(t, in)
+	})
+}
+
+// checkImagePDFCMYKBytes proves ImagePDFColor stores CMYK samples inverted and
+// names the device.
+func checkImagePDFCMYKBytes(t *testing.T, in *spectreps.Instance) {
+	t.Helper()
+	pages := []spectreps.PageImage{{
+		Width: 2, Height: 1, Stride: 6,
+		Pixels: []byte{255, 0, 0, 255, 255, 255},
+	}}
+	out, err := in.ImagePDFColor(t.Context(), pages, 72, spectreps.ImageColorCMYK)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(out, []byte("/DeviceCMYK")) {
+		t.Fatal("output is missing /DeviceCMYK")
+	}
+	got := inflatePageImage(t, out)
+	want := []byte{0, 255, 255, 0, 0, 0, 0, 0}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("CMYK stream = %v, want %v", got, want)
+	}
+}
+
+// checkImagePDFDPIFloor proves a dpi at or below zero falls back to 72.
+func checkImagePDFDPIFloor(t *testing.T, in *spectreps.Instance) {
+	t.Helper()
+	pages := []spectreps.PageImage{validationPageImage(2, 1)}
+	want := imagePDFBytes(t, in, pages)
+	for _, dpi := range []float64{0, -4} {
+		got, err := in.ImagePDF(t.Context(), pages, dpi)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !bytes.Contains(out, []byte("/MediaBox [0 0 2.25 1.5]")) {
-			t.Fatalf("MediaBox = pixels*72/dpi missing: %q", out)
+		if compared := spectreps.CompareFiles(want, got); !compared.Equal {
+			t.Fatalf("dpi %v bytes differ: %+v", dpi, compared)
 		}
-	})
+		if !bytes.Contains(got, []byte("/MediaBox [0 0 2 1]")) {
+			t.Fatalf("dpi %v has no 2 by 1 MediaBox", dpi)
+		}
+	}
+}
+
+// checkImagePDFEmptyPages proves a nil and an empty page slice both produce a
+// readable zero-page PDF.
+func checkImagePDFEmptyPages(t *testing.T, in *spectreps.Instance) {
+	t.Helper()
+	for _, pages := range [][]spectreps.PageImage{nil, {}} {
+		out, err := in.ImagePDF(t.Context(), pages, 72)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.HasPrefix(out, []byte("%PDF-1.4")) {
+			t.Fatalf("empty output prefix = %q", out[:min(8, len(out))])
+		}
+		if !bytes.Contains(out, []byte("/Count 0")) {
+			t.Fatal("empty output has no /Count 0")
+		}
+		doc, err := in.OpenPDF(t.Context(), out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if doc.PageCount() != 0 {
+			t.Fatalf("empty PageCount = %d, want 0", doc.PageCount())
+		}
+	}
+}
+
+// checkImagePDFUnknownColor proves an unknown color falls back to the RGB
+// bytes.
+func checkImagePDFUnknownColor(t *testing.T, in *spectreps.Instance) {
+	t.Helper()
+	pages := []spectreps.PageImage{validationPageImage(3, 2)}
+	fallback, err := in.ImagePDFColor(t.Context(), pages, 72, spectreps.ImageColor(99))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if compared := spectreps.CompareFiles(imagePDFBytes(t, in, pages), fallback); !compared.Equal {
+		t.Fatalf("unknown color bytes differ: %+v", compared)
+	}
+	if !bytes.Contains(fallback, []byte("/DeviceRGB")) {
+		t.Fatal("unknown color did not select /DeviceRGB")
+	}
+}
+
+// checkImagePDFMediaBox proves the MediaBox formula is pixels times 72 over
+// dpi.
+func checkImagePDFMediaBox(t *testing.T, in *spectreps.Instance) {
+	t.Helper()
+	out, err := in.ImagePDFColor(t.Context(), []spectreps.PageImage{
+		validationPageImage(3, 2),
+	}, 96, spectreps.ImageColorRGB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(out, []byte("/MediaBox [0 0 2.25 1.5]")) {
+		t.Fatalf("MediaBox = pixels*72/dpi missing: %q", out)
+	}
 }
 
 // validationPageImage is one width by height RGB page with a tight stride.

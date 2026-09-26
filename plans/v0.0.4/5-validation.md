@@ -1,7 +1,7 @@
 # v0.0.4 - Validation
 
 > **Parent:** `plans/v0.0.4/00-program.md` - program ledger
-> **Status:** implemented with the lint findings recorded in `plans/v0.0.4/v0.0.4-closure.md`.
+> **Status:** implemented. `make lint` and `make test` pass on the merged tree.
 > **Estimated effort:** about two weeks across twelve phases. Phase 11 is the cut line.
 
 ---
@@ -29,7 +29,7 @@ Every new test is named `TestValidation<Area>` so `go test -count=1 ./... -run T
 - [x] 1.3 The verifier `internal/validation/manifest.go` parses the manifest, requires a non-empty source, license, and SHA-256 per row, rejects an unlisted file, and checks every committed digest. `TestValidationManifest` proves it. Proof: `go test -count=1 ./internal/validation -run TestValidationManifest`; guard proof: with one digest edited the test fails with the file name, then the digest is restored.
 - [x] 1.4 The license gate admits Apache-2.0, MIT, BSD-3-Clause, CC0, CC BY 4.0, US public domain, and repo-authored files only. The Isartor test files, GhostPDL and MuPDF examples, iText resources, the PDFBox testfiles, and the pdf.js third-party-named files (`tracemonkey.pdf`, `TAMReview.pdf`, `firefox_logo.pdf`, `pdfjs_wikipedia.pdf`, `22060_A1_01_Plans.pdf`, `openoffice.pdf`) stay out of the committed tier. A CC BY-SA 4.0 file, such as the pdf20examples set, is external-only unless a later row records the decision. Proof: `go test -count=1 ./internal/validation -run TestValidationLicenses` and `grep -n -e Isartor -e AGPL -e 'CC BY-SA' sampledata/validation/README.md`.
 - [x] 1.5 `documentation/folder-structure.md` names `sampledata/validation/`, the two tiers, and the `TestValidation` naming rule. `/sampledata/validation/external/` is added to `.gitignore` with a comment that it holds fetched, non-committed corpus files. Proof: `grep -n 'sampledata/validation' documentation/folder-structure.md .gitignore`.
-- [~] 1.6 Closure: `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] 1.6 Closure: `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 2: Library and CLI contract
 
@@ -42,7 +42,7 @@ The contract is `documentation/public-api.md` and `documentation/cli.md`. `TestN
 - [x] 2.5 `TestValidationFlagSurface` locks the accepted-and-ignored flags (`run -o`, `compare raster -o`) and the rejected ones (`run -colorspace`, `pdfimage -format`, `pdfimage -jpegq`, `pdfimage -tiffcompress`), each with its exit code. Proof: `go test -count=1 ./internal/cli -run TestValidationFlagSurface`.
 - [x] 2.6 `TestValidationNoProcess` walks the module's non-ignored Go files with `go/parser` and fails on an `os/exec`, `net`, or cgo import, and checks that `internal/cli` imports only the public package, the standard library, and `golang.org/x/image/tiff`. The claims are `documentation/test.md:14` and `:69`. Proof: `go test -count=1 ./internal/cli -run TestValidationNoProcess`.
 - [x] 2.7 Reconciliation: `documentation/cli.md` drops the stale "Phase 02 behavior" paragraph, and `documentation/cli.md` and `documentation/test.md:17` stop naming `ErrNotImplemented` as a live exit-1 cause, or the sentinel and `internal/engine.Ready` are deleted. `spectreps/api_test.go` `TestNotImplemented` is renamed to the behavior it tests. Proof: `grep -rn -e ErrNotImplemented -e 'not implemented' documentation/cli.md documentation/test.md spectreps/api_test.go` shows only the chosen wording.
-- [~] 2.8 Closure: `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] 2.8 Closure: `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 3: PostScript interpreter and raster output
 
@@ -58,7 +58,7 @@ Corpus: `postscript/` gets repo-authored programs (`line.ps`, `rect.ps`, `eofill
 - [x] 3.6 `internal/cli` gains `TestValidationRasterGeometry`: the default is 612 by 792 at 72 dpi, a negative `-w`, `-h`, or `-r` exits 1 with `limitcheck`, and `-pages` selects the documented forms with the recorded error codes. Proof: `go test -count=1 ./internal/cli -run TestValidationRasterGeometry`.
 - [x] 3.7 The 600 dpi claim is resolved. Either the cap rises, or `documentation/test.md:41` and `documentation/language.md:124` state the measured boundary and `TestValidationPixelCap` locks the chosen side. Proof: `grep -n '600 dpi' documentation/test.md documentation/language.md` shows the chosen wording and `go test -count=1 ./spectreps -run TestValidationPixelCap`.
 - [x] 3.8 Corpus run: `spectreps raster` paints every `postscript/` file to PPM with recorded geometry, `spectreps run` exits 0, and the CUPS files paint without a `JobError`. `TestValidationCorpusPostScript`. Proof: `go test -count=1 ./internal/cli -run TestValidationCorpusPostScript`. As landed, `cups-smiley.ps` paints and `cups-testfile.ps` is the recorded `refuse:invalidfont`, because its standard 14 text has no outline program; the manifest row and README record the deviation.
-- [~] 3.9 Closure: `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] 3.9 Closure: `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 4: PDF reading and painting
 
@@ -72,7 +72,7 @@ Corpus: `structural/` gets qpdf `object-stream.pdf`, `compress-objstm-xref.pdf`,
 - [x] 4.4 `TestValidationUnsupportedOps` locks one named refusal per operator: `W`, `W*`, `B`, `B*`, `b`, `b*`, `BX`, `EX`, `gs`, `K`, `k`, `CS`, `cs`, `SC`, `sc`, `SCN`, `scn`, `sh`, `BMC`, `BDC`, and `EMC`, each `undefined` with the operator name and a white page. Proof: `go test -count=1 ./internal/pdf -run TestValidationUnsupportedOps`.
 - [x] 4.5 The `/Mask` and `/Decode` contradiction is resolved. The reader refuses either with `undefined in Do`, as `documentation/covered-and-not-covered.md:31` says, or the two docs change to say the keys are ignored, and `TestValidationDoPolicy` locks the chosen behavior together with a missing name, a non-image subtype, an `/SMask`, and a decode error. Proof: `go test -count=1 ./spectreps -run TestValidationDoPolicy` and `grep -n 'Mask' documentation/covered-and-not-covered.md`.
 - [x] 4.6 Corpus run: each `structural/` and `paths/` file opens and paints, or refuses with its manifest error, never a blank success, and `spectreps raster` over the accepted files matches the recorded geometry. `TestValidationCorpusPDF`. Proof: `go test -count=1 ./internal/cli -run TestValidationCorpusPDF`.
-- [~] 4.7 Closure: `documentation/devices.md` and `documentation/covered-and-not-covered.md` state the final `Do` policy, and `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] 4.7 Closure: `documentation/devices.md` and `documentation/covered-and-not-covered.md` state the final `Do` policy, and `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 5: Image decoders
 
@@ -85,7 +85,7 @@ Corpus: `images/` gets pdf.js `ccitt_EndOfBlock_false.pdf`, `jp2k-resetprob.pdf`
 - [x] 5.3 `TestValidationFilterChain` locks `/Filter [/FlateDecode]` with `/DecodeParms [null]`, a chain with one unknown name, and a non-name array item. Proof: `go test -count=1 ./internal/pdf -run TestValidationFilterChain`.
 - [x] 5.4 `TestValidationCCITTParams` locks `/DecodeParms` that is not a dict, non-bool `/EndOfLine`, `/BlackIs1`, and `/EncodedByteAlign`, a `/Columns` of 0 or negative, and a real or name `/K`. Proof: `go test -count=1 ./internal/pdf -run TestValidationCCITTParams`.
 - [x] 5.5 Corpus run: every committed `images/` file paints with the recorded pixel facts or fails with its recorded error, and each case is checked through `spectreps raster` as well as the package. `TestValidationCorpusImages`. Proof: `go test -count=1 ./internal/cli -run TestValidationCorpusImages`.
-- [~] 5.6 Closure: `documentation/devices.md` and `documentation/test.md` record the locked error shapes, and `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] 5.6 Closure: `documentation/devices.md` and `documentation/test.md` record the locked error shapes, and `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 6: Text, fonts, and extraction
 
@@ -98,7 +98,7 @@ Corpus: `text/` gets pdf.js `standard_fonts.pdf`, `complex_ttf_font.pdf`, `Embed
 - [x] 6.3 `internal/pdf` gains `TestValidationFontFile3` (the synthetic sfnt wrapped as `/FontFile3 /Subtype /OpenType` maps a code, an advance, and painted pixels) and `TestValidationNoOutlinePolicy` (a Type 1 `/FontFile` and a bare CFF stream paint `invalidfont` while the sink records the advance and Unicode). Proof: `go test -count=1 ./internal/pdf -run 'TestValidationFontFile3|TestValidationNoOutlinePolicy'`.
 - [x] 6.4 `TestValidationTextOpErrors` locks `Tf` with an unknown resource name, `TJ` with an inline dict, a Type0 `show` with an odd trailing byte, and a text size over the glyph pixel cap. Proof: `go test -count=1 ./internal/pdf -run TestValidationTextOpErrors`.
 - [x] 6.5 Corpus run: `spectreps text` over each committed `text/` file emits the recorded text, in order, with CRLF ends, and `spectreps raster` paints the paint-class files with the recorded glyph boxes. The expected text files are written by the test on first run with `UPDATE_FIXTURES=1` and checked in, per `documentation/folder-structure.md:72`. `TestValidationCorpusText`. Proof: `go test -count=1 ./internal/cli -run TestValidationCorpusText`.
-- [~] 6.6 Closure: `documentation/fonts.md` and `documentation/test.md` name the new cases, and `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] 6.6 Closure: `documentation/fonts.md` and `documentation/test.md` name the new cases, and `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 7: Measurement and compare
 
@@ -107,7 +107,7 @@ Corpus: `text/` gets pdf.js `standard_fonts.pdf`, `complex_ttf_font.pdf`, `Embed
 - [x] 7.1 `spectreps/measure_test.go` gains `TestValidationMeasureEdges`: a black page returns 1 on all three `MeasureInkAmount` channels, a pixel with one channel below 255 marks for `MeasureBox`, and a zero-size image returns the zero `Ink`. Proof: `go test -count=1 ./spectreps -run TestValidationMeasureEdges`.
 - [x] 7.2 `TestValidationCompareEdges` locks `CompareFiles(nil, []byte{})` as `length` at 0 and `CompareRaster` reporting `width` before `height` when both differ. `TestValidationCompareCLIText` locks the reachable `mismatch` strings, and the unreachable `mismatch width` and `mismatch height` branches are either made reachable through a crafted fixture or removed with the doc line corrected. Proof: `go test -count=1 ./spectreps -run TestValidationCompareEdges` and `go test -count=1 ./internal/cli -run TestValidationCompareCLIText`.
 - [x] 7.3 `internal/cli` gains `TestValidationCorpusMeasure`: `bbox`, `inkcov`, and `ink_cov` over a two-page PDF and a path corpus PDF, without `-pages` and with `-pages`, against recorded outputs, including floor and ceiling on a fractional edge. Proof: `go test -count=1 ./internal/cli -run TestValidationCorpusMeasure`.
-- [~] 7.4 Closure: `documentation/devices.md` and `documentation/cli.md` state the final compare text rule, and `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] 7.4 Closure: `documentation/devices.md` and `documentation/cli.md` state the final compare text rule, and `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 8: Writers
 
@@ -122,7 +122,7 @@ Corpus: `rewrite/` gets the existing `sampledata/compress/path.pdf` and `whatist
 - [x] 8.5 The PostScript writer matches its documentation. `internal/psout` refuses an image page with `undefined in Do` instead of dropping it, or `documentation/devices.md:142` says images are dropped. `TestValidationPSOutImage` locks the chosen behavior, and `spectreps/ps_test.go` gains `TestValidationWritePostScript` for a multi-page program. Proof: `go test -count=1 ./internal/psout -run TestValidationPSOutImage` and `go test -count=1 ./spectreps -run TestValidationWritePostScript`.
 - [x] 8.6 `spectreps/image_test.go` gains `TestValidationImagePDFContract`: `ImagePDFColor` CMYK through the public package, `dpi <= 0` selects 72, an empty page slice, an unknown `ImageColor` falls back to RGB, and the `MediaBox` is `pixels * 72 / dpi`. Proof: `go test -count=1 ./spectreps -run TestValidationImagePDFContract`.
 - [x] 8.7 Corpus run: every `rewrite/` file rewrites at its accepted levels, reopens, rasterizes, and matches the source under `CompareRaster`; two runs are `CompareFiles` equal; every refusal is the recorded named error. `TestValidationCorpusRewrite`. Proof: `go test -count=1 ./internal/cli -run TestValidationCorpusRewrite`.
-- [~] 8.8 Closure: `documentation/devices.md`, `documentation/features.md`, and `documentation/public-api.md` state the final writer behavior, and `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] 8.8 Closure: `documentation/devices.md`, `documentation/features.md`, and `documentation/public-api.md` state the final writer behavior, and `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 9: PDF/A-4 and PDF/UA-2
 
@@ -136,7 +136,7 @@ Corpus: `pdfa/` gets veraPDF `PDF_A-4f` version-identification pass files and `P
 - [x] 9.4 `internal/pdfa` gains `TestValidationUA2Edges`: a Flate `/Metadata` stream reads, `dc:title` escapes `&`, `<`, and `>`, the BCP 47 edges are the chosen behavior, and a canceled and a nil context are the documented error or panic. `TestValidationUA2Preserve` proves levels 1 through 5 through the public `RewritePDF`. Proof: `go test -count=1 ./internal/pdfa -run TestValidationUA2Edges` and `go test -count=1 ./spectreps -run TestValidationUA2Preserve`.
 - [x] 9.5 The `validate` gap is decided. Either `validate` calls `PreflightUA2` behind a flag and the rule list joins `documentation/cli.md`, or the current behavior stays and `TestValidationValidateNoUA2` locks it, with `documentation/features.md:55` and `documentation/cli.md` as the only statements. Proof: the chosen test and `grep -n 'PreflightUA2' documentation/cli.md documentation/features.md`. Decided: `validate` runs `PreflightUA2` for a tagged input and leaves an untagged file untouched; `TestValidateUA2` and `documentation/cli.md` match.
 - [x] 9.6 Corpus run: every accepted `pdfa/` and `tagged/` file rewrites with its claim, reopens, and keeps its page count, and every refusal is the recorded named error. `TestValidationCorpusPDFA`. Proof: `go test -count=1 ./internal/cli -run TestValidationCorpusPDFA`.
-- [~] 9.7 Closure: `documentation/devices.md` and `documentation/test.md` name the new cases, and `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] 9.7 Closure: `documentation/devices.md` and `documentation/test.md` name the new cases, and `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 10: `gs` argv mode
 
@@ -150,7 +150,7 @@ Corpus: `gs-argv/` gets `sampledata/fixtures/gs-argv-input.pdf`, a repo-authored
 - [x] 10.4 `TestValidationGSParamCorners` locks bare and empty `-sPageList`, empty `-dFirstPage=`, `-dLastPage=0` and `=x`, a missing or invalid `-dDEVICEHEIGHTPOINTS`, missing or empty `-dJPEGQ` with clamping, `-g0x0` and a negative `-g`, `-g` with `-r72`, and `-g` on `pdfwrite`. Proof: `go test -count=1 ./internal/cli -run TestValidationGSParamCorners`.
 - [x] 10.5 `TestValidationGSRejectedDevices` adds `jpeggray`, `pgmraw`, `pngalpha`, `pamcmyk32`, and `eps2write` to the reject set. Proof: `go test -count=1 ./internal/cli -run TestValidationGSRejectedDevices`.
 - [x] 10.6 Corpus run: each accepted device over a corpus PDF writes the recorded output, and `spectreps gs -sDEVICE=pdfwrite` reopens as a PDF with the same page count. `TestValidationCorpusGS`. Proof: `go test -count=1 ./internal/cli -run TestValidationCorpusGS`.
-- [~] 10.7 Closure: `documentation/gs-argv-grammar.md` and `documentation/gs-argv-mapping.md` name the new cases, and `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] 10.7 Closure: `documentation/gs-argv-grammar.md` and `documentation/gs-argv-mapping.md` name the new cases, and `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 11: Reference proofs
 
@@ -161,7 +161,7 @@ This phase is the cut line and it never runs under `make test` or `make lint`. I
 - [x] 11.3 `scripts/ref-gs-check.sh` and `make refs-gs-check` resolve `./ghostscript/bin/gs` then `gs` on PATH, print a skip when neither exists, normalize both PPMs to bodies, require exact equality for the axis-aligned cases, and print the recorded diff count for the diagonal and curve cases. `/references/` joins `.gitignore`. Proof: `make refs-gs-check` with the recorded per-case table.
 - [x] 11.4 Rewrite cross-check: gs reopens and paints a level 2 rewrite of `sampledata/compress/path.pdf` and of one corpus file, the page count and the recorded diff count hold, `qpdf --check` or `pdfcpu validate` runs when present, the verdict is recorded, and the step prints a skip when neither is installed. Proof: the run output, pasted into `documentation/reference-proofs.md`.
 - [x] 11.5 `make pdfa-check` and `make pdfua2-check` run over `sampledata/validation/pdfa/` and `sampledata/validation/tagged/`, negative cases stay under a `negative/` subfolder, and the veraPDF verdicts are recorded with the version. Proof: `make pdfa-check` and `make pdfua2-check` with the recorded counts.
-- [~] 11.6 Closure: the reference-proof doc is complete, no pixel under `sampledata/validation/` was produced by Ghostscript, and `make lint` and `make test` still exit 0, recorded in this row. Proof: `find sampledata/validation -name '*.ppm'` prints nothing and `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] 11.6 Closure: the reference-proof doc is complete, no pixel under `sampledata/validation/` was produced by Ghostscript, and `make lint` and `make test` still exit 0, recorded in this row. Proof: `find sampledata/validation -name '*.ppm'` prints nothing and `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 12: Findings and closure
 
@@ -170,7 +170,7 @@ Every phase routes its findings here. A finding is fixed in place, moved to the 
 - [x] 12.1 Each known finding has a destination row in this file, a row in `plans/v0.0.4/1-writer-ceiling.md`, `2-type1-fonts.md`, `3-pdfua2-tags.md`, or `4-pdf-coverage.md`, or a `[~]` entry in `plans/v0.0.1/10-deferred.md`. Proof: `grep -n -e ErrNotImplemented -e '600 dpi' -e PackObjects -e 'graphics.State' -e 'whatisthis_level' plans/v0.0.4/5-validation.md plans/v0.0.1/10-deferred.md` and the destination row names. Destinations: the 59 lint findings stay noted in the closure file; `tiffsep`, bare CFF, and performance rows 5.4 and 5.6 are `[~]` in `plans/v0.0.1/10-deferred.md` 10.5; the rest are fixed in place with tests.
 - [x] 12.2 Traceability: `scripts/check-traceability.sh` runs `go test -list '.*' ./...`, reads `sampledata/validation/traceability.tsv` (one row per `documentation/test.md` section and case, with the test function that proves it), and exits 1 on a case with no live test. Proof: `bash scripts/check-traceability.sh`; guard proof: with one test name edited the script exits 1 with the case name, then the name is restored.
 - [x] 12.3 `documentation/test.md` gains the corpus cases and the run of `go test -count=1 ./... -run TestValidation` naming every `TestValidation` function, and `documentation/features.md` names `sampledata/validation/` as the validation corpus. Proof: `grep -c TestValidation documentation/test.md` and `grep -n 'sampledata/validation' documentation/features.md`.
-- [~] 12.4 Closure: `make lint` and `make test` exit 0 on the merged tree, the outcome is recorded in this row, and the integrator records it in `plans/v0.0.4/v0.0.4-closure.md`. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] 12.4 Closure: `make lint` and `make test` exit 0 on the merged tree, the outcome is recorded in this row, and the integrator records it in `plans/v0.0.4/v0.0.4-closure.md`. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Dependencies
 

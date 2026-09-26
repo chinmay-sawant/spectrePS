@@ -21,7 +21,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/chinmay-sawant/spectrePS/internal/validation"
@@ -39,14 +38,12 @@ const (
 	corpusUpdateEnv = "UPDATE_FIXTURES"
 )
 
-// corpusRows loads and checks the manifest once per test run and returns the
-// committed rows under the named folders. Every returned row is sorted as the
-// manifest is.
-func corpusRows(t *testing.T, dirs ...string) []validation.Row {
+// corpusRows returns the committed rows under the named folders from the
+// loaded manifest. Every returned row is sorted as the manifest is.
+func corpusRows(t *testing.T, manifest []validation.Row, dirs ...string) []validation.Row {
 	t.Helper()
-	rows := corpusManifest(t)
-	selected := make([]validation.Row, 0, len(rows))
-	for _, row := range rows {
+	selected := make([]validation.Row, 0, len(manifest))
+	for _, row := range manifest {
 		if row.External() || !corpusUnder(row.Path, dirs) {
 			continue
 		}
@@ -58,13 +55,13 @@ func corpusRows(t *testing.T, dirs ...string) []validation.Row {
 	return selected
 }
 
-// corpusExternalRows returns the named external rows. corpusRowPath skips a
-// row whose fetched file is absent, because the external tier is optional.
-func corpusExternalRows(t *testing.T, paths ...string) []validation.Row {
+// corpusExternalRows returns the named external rows from the loaded manifest.
+// corpusRowPath skips a row whose fetched file is absent, because the external
+// tier is optional.
+func corpusExternalRows(t *testing.T, manifest []validation.Row, paths ...string) []validation.Row {
 	t.Helper()
-	rows := corpusManifest(t)
-	byPath := make(map[string]validation.Row, len(rows))
-	for _, row := range rows {
+	byPath := make(map[string]validation.Row, len(manifest))
+	for _, row := range manifest {
 		byPath[row.Path] = row
 	}
 	selected := make([]validation.Row, 0, len(paths))
@@ -79,26 +76,19 @@ func corpusExternalRows(t *testing.T, paths ...string) []validation.Row {
 }
 
 // corpusManifest loads the manifest and checks every digest, byte count, and
-// unlisted file once for the whole package run.
+// unlisted file. Each corpus test calls it once and passes the rows to the
+// selection helpers.
 func corpusManifest(t *testing.T) []validation.Row {
 	t.Helper()
-	corpusOnce.Do(func() {
-		corpusAll, corpusLoadErr = validation.Load()
-		if corpusLoadErr == nil {
-			corpusLoadErr = validation.CheckFiles(corpusAll, validation.CorpusDir())
-		}
-	})
-	if corpusLoadErr != nil {
-		t.Fatalf("validation corpus: %v", corpusLoadErr)
+	rows, err := validation.Load()
+	if err != nil {
+		t.Fatalf("validation corpus: %v", err)
 	}
-	return corpusAll
+	if err := validation.CheckFiles(rows, validation.CorpusDir()); err != nil {
+		t.Fatalf("validation corpus: %v", err)
+	}
+	return rows
 }
-
-var (
-	corpusOnce    sync.Once
-	corpusAll     []validation.Row
-	corpusLoadErr error
-)
 
 // corpusUnder reports whether path sits in one of the named folders.
 func corpusUnder(path string, dirs []string) bool {
@@ -359,7 +349,8 @@ func corpusCheckPPM(t *testing.T, rowPath, path string) {
 
 // TestValidationCorpusPostScript runs postscript/ and refs/.
 func TestValidationCorpusPostScript(t *testing.T) {
-	for _, row := range corpusRows(t, "postscript", "refs") {
+	manifest := corpusManifest(t)
+	for _, row := range corpusRows(t, manifest, "postscript", "refs") {
 		corpusSubtest(t, row)
 	}
 }
@@ -367,8 +358,9 @@ func TestValidationCorpusPostScript(t *testing.T) {
 // TestValidationCorpusPDF runs structural/ and paths/, plus the external PDF
 // 2.0 container when the fetched tier is present.
 func TestValidationCorpusPDF(t *testing.T) {
-	rows := corpusRows(t, "structural", "paths")
-	rows = append(rows, corpusExternalRows(t, "external/pdf20examples/simple-pdf-2.0.pdf")...)
+	manifest := corpusManifest(t)
+	rows := corpusRows(t, manifest, "structural", "paths")
+	rows = append(rows, corpusExternalRows(t, manifest, "external/pdf20examples/simple-pdf-2.0.pdf")...)
 	for _, row := range rows {
 		corpusSubtest(t, row)
 	}
@@ -377,8 +369,9 @@ func TestValidationCorpusPDF(t *testing.T) {
 // TestValidationCorpusImages runs images/, plus the external CCITT file when
 // the fetched tier is present.
 func TestValidationCorpusImages(t *testing.T) {
-	rows := corpusRows(t, "images")
-	rows = append(rows, corpusExternalRows(t, "external/fax-decode-parms.pdf")...)
+	manifest := corpusManifest(t)
+	rows := corpusRows(t, manifest, "images")
+	rows = append(rows, corpusExternalRows(t, manifest, "external/fax-decode-parms.pdf")...)
 	for _, row := range rows {
 		corpusSubtest(t, row)
 	}
@@ -387,21 +380,24 @@ func TestValidationCorpusImages(t *testing.T) {
 // TestValidationCorpusText runs text/ and compares each extraction with its
 // golden file.
 func TestValidationCorpusText(t *testing.T) {
-	for _, row := range corpusRows(t, "text") {
+	manifest := corpusManifest(t)
+	for _, row := range corpusRows(t, manifest, "text") {
 		corpusSubtest(t, row)
 	}
 }
 
 // TestValidationCorpusRewrite runs rewrite/ at level 2 and reopens the output.
 func TestValidationCorpusRewrite(t *testing.T) {
-	for _, row := range corpusRows(t, "rewrite") {
+	manifest := corpusManifest(t)
+	for _, row := range corpusRows(t, manifest, "rewrite") {
 		corpusSubtest(t, row)
 	}
 }
 
 // TestValidationCorpusPDFA runs pdfa/ and tagged/.
 func TestValidationCorpusPDFA(t *testing.T) {
-	for _, row := range corpusRows(t, "pdfa", "tagged") {
+	manifest := corpusManifest(t)
+	for _, row := range corpusRows(t, manifest, "pdfa", "tagged") {
 		corpusSubtest(t, row)
 	}
 }
@@ -409,7 +405,8 @@ func TestValidationCorpusPDFA(t *testing.T) {
 // TestValidationCorpusGS runs gs-argv/ and proves the gs pdfwrite output
 // reopens with the source page count.
 func TestValidationCorpusGS(t *testing.T) {
-	rows := corpusRows(t, "gs-argv")
+	manifest := corpusManifest(t)
+	rows := corpusRows(t, manifest, "gs-argv")
 	for _, row := range rows {
 		corpusSubtest(t, row)
 	}

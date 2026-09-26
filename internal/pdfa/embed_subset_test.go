@@ -10,6 +10,9 @@ import (
 	"github.com/chinmay-sawant/spectrePS/internal/truetypesynth"
 )
 
+// enUSLang is the language tag the tagged fixtures and assertions share.
+const enUSLang = "en-US"
+
 // TestEmbedSubsetPDFA proves the PDF/A preflight still refuses a font with no
 // embedded program whether or not the subset option ran, and that a font with
 // /FontFile2 still passes after a subsetting rewrite.
@@ -79,8 +82,8 @@ func checkTagsKept(t *testing.T, file *pdf.File) {
 	if err != nil || tree == nil {
 		t.Fatalf("StructTree = %v, %v", tree, err)
 	}
-	if tree.Lang != "en-US" {
-		t.Fatalf("Lang = %q, want en-US", tree.Lang)
+	if tree.Lang != enUSLang {
+		t.Fatalf("Lang = %q, want %s", tree.Lang, enUSLang)
 	}
 	elem := checkTreeShape(t, tree)
 	checkMCID(t, tree, elem)

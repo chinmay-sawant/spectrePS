@@ -205,29 +205,29 @@ func validationGSJPEGQCorners(t *testing.T) {
 
 	// The quality reaches the encoder, so the clamped pairs cannot match by
 	// accident of a dropped -jpegq flag.
-	q1 := filepath.Join(dir, "q1.jpg")
-	q100 := filepath.Join(dir, "q100.jpg")
-	want(t, args(q1, "-dJPEGQ=1"), exitOK, "", "")
-	want(t, args(q100, "-dJPEGQ=100"), exitOK, "", "")
-	if bytes.Equal(readPayload(t, q1), readPayload(t, q100)) {
+	minQuality := filepath.Join(dir, "q1.jpg")
+	maxQuality := filepath.Join(dir, "q100.jpg")
+	want(t, args(minQuality, "-dJPEGQ=1"), exitOK, "", "")
+	want(t, args(maxQuality, "-dJPEGQ=100"), exitOK, "", "")
+	if bytes.Equal(readPayload(t, minQuality), readPayload(t, maxQuality)) {
 		t.Fatal("-dJPEGQ did not change the JPEG bytes")
 	}
 
-	for _, tc := range []struct {
+	for _, testCase := range []struct {
 		name string
 		arg  string
 		ref  string
 	}{
-		{"zero clamps to 1", "-dJPEGQ=0", q1},
-		{"negative clamps to 1", "-dJPEGQ=-7", q1},
-		{"over clamps to 100", "-dJPEGQ=101", q100},
-		{"far over clamps to 100", "-dJPEGQ=1000", q100},
+		{"zero clamps to 1", "-dJPEGQ=0", minQuality},
+		{"negative clamps to 1", "-dJPEGQ=-7", minQuality},
+		{"over clamps to 100", "-dJPEGQ=101", maxQuality},
+		{"far over clamps to 100", "-dJPEGQ=1000", maxQuality},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			out := filepath.Join(dir, "clamp.jpg")
-			want(t, args(out, tc.arg), exitOK, "", "")
-			if !bytes.Equal(readPayload(t, out), readPayload(t, tc.ref)) {
-				t.Fatalf("%s did not clamp to the reference bytes", tc.arg)
+			want(t, args(out, testCase.arg), exitOK, "", "")
+			if !bytes.Equal(readPayload(t, out), readPayload(t, testCase.ref)) {
+				t.Fatalf("%s did not clamp to the reference bytes", testCase.arg)
 			}
 		})
 	}

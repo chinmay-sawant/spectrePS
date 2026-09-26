@@ -11,11 +11,11 @@ import (
 // read through Content.
 func TestValidationPageTree(t *testing.T) {
 	t.Parallel()
-	t.Run("kids cycle", validationKidsCycle)
-	t.Run("missing pages", validationMissingPages)
-	t.Run("non-page kid", validationNonPageKid)
-	t.Run("direct contents", validationDirectContents)
-	t.Run("array contents", validationArrayContents)
+	t.Run("kids cycle", func(t *testing.T) { t.Parallel(); validationKidsCycle(t) })
+	t.Run("missing pages", func(t *testing.T) { t.Parallel(); validationMissingPages(t) })
+	t.Run("non-page kid", func(t *testing.T) { t.Parallel(); validationNonPageKid(t) })
+	t.Run("direct contents", func(t *testing.T) { t.Parallel(); validationDirectContents(t) })
+	t.Run("array contents", func(t *testing.T) { t.Parallel(); validationArrayContents(t) })
 }
 
 func validationKidsCycle(t *testing.T) {

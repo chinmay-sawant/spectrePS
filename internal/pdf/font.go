@@ -192,16 +192,16 @@ func (file *File) entryName(node Value, key string) (string, bool) {
 }
 
 // loadWidths reads /Widths, /FirstChar, and /MissingWidth.
-func (file *File) loadWidths(f *Font, val, desc Value) {
+func (file *File) loadWidths(font *Font, val, desc Value) {
 	if width, ok := file.entryInt(desc, keyMissingWidth); ok {
-		f.missingWidth = float64(width)
+		font.missingWidth = float64(width)
 	}
 	items, ok := file.entryArray(val, keyWidths)
 	if !ok {
 		return
 	}
-	f.hasWidths = true
-	f.widths = map[byte]float64{}
+	font.hasWidths = true
+	font.widths = map[byte]float64{}
 	first, _ := file.entryInt(val, keyFirstChar)
 	for i, item := range items {
 		code := first + i
@@ -209,7 +209,7 @@ func (file *File) loadWidths(f *Font, val, desc Value) {
 			continue
 		}
 		if width, ok := realOf(item); ok {
-			f.widths[byte(code)] = width
+			font.widths[byte(code)] = width
 		}
 	}
 }

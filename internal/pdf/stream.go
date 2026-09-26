@@ -69,6 +69,7 @@ func (lex *lexer) declaredLength(dict map[string]Value) (int, bool, error) {
 	if !ok {
 		return 0, false, syntaxErr(wordLength)
 	}
+	//nolint:exhaustive // a non-integer, non-reference length is syntaxerror.
 	switch entry.Kind {
 	case KindInt:
 		length, fit := fitInt(entry.Int)
@@ -198,6 +199,7 @@ func (file *File) resolvedStream(ref Value) (Value, bool) {
 	if !ok || !entry.InUse || entry.Compressed || !genOK(entry, ref.RefGen) {
 		return NullVal(), false
 	}
+	//nolint:dogsled // parseIndirect returns five values; only the stream is used here.
 	_, _, stream, _, err := parseIndirect(file.src, entry.Offset, file)
 	if err != nil || stream.Kind != KindStream {
 		return NullVal(), false

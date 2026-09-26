@@ -71,7 +71,7 @@ func newLexer(src []byte, offset int) (*lexer, error) {
 	if offset < 0 || offset > len(src) {
 		return nil, syntaxErr(opScan)
 	}
-	return &lexer{src: src, pos: offset}, nil
+	return &lexer{src: src, pos: offset, resolveLength: nil}, nil
 }
 
 func (lex *lexer) skipIgnored() {

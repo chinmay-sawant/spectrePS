@@ -10,19 +10,59 @@ import (
 	"github.com/chinmay-sawant/spectrePS/spectreps"
 )
 
+// validationPDFACase is one refusal rule input: the catalog and page resources
+// the fixture needs, the extra objects from object 5 on, and the rule the
+// writer must report.
+type validationPDFACase struct {
+	name      string
+	mode      spectreps.PDFAMode
+	catalog   string
+	resources string
+	extra     []string
+	rule      string
+}
+
 // TestValidationPDFARules locks all nine PDF/A refusal rules through the
 // public RewritePDF. Each refusal is a JobError with Op "PDFA", the rule in
 // Msg, and no output bytes.
 func TestValidationPDFARules(t *testing.T) {
 	in := newInst(t)
-	cases := []struct {
-		name      string
-		mode      spectreps.PDFAMode
-		catalog   string
-		resources string
-		extra     []string
-		rule      string
-	}{
+	for _, testCase := range validationPDFACases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			checkValidationPDFARule(t, in, testCase)
+		})
+	}
+}
+
+// checkValidationPDFARule proves one rewrite refuses one rule by name and
+// returns no bytes.
+func checkValidationPDFARule(t *testing.T, in *spectreps.Instance, testCase validationPDFACase) {
+	t.Helper()
+	src := validationPDFAInput(t, testCase.catalog, testCase.resources, testCase.extra...)
+	doc, err := in.OpenPDF(t.Context(), src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := in.RewritePDF(t.Context(), doc, spectreps.RewriteOptions{PDFA: testCase.mode})
+	var job spectreps.JobError
+	if !errors.As(err, &job) || job.Op != "PDFA" || job.Msg != testCase.rule {
+		t.Fatalf("RewritePDF() error = %v, want %s in PDFA", err, testCase.rule)
+	}
+	if out != nil {
+		t.Fatalf("RewritePDF() bytes = %#v, want nil", out)
+	}
+}
+
+// validationPDFACases is the full nine-rule refusal table.
+func validationPDFACases() []validationPDFACase {
+	cases := validationPDFAFontFilterCases()
+	cases = append(cases, validationPDFAColorImageCases()...)
+	return append(cases, validationPDFACatalogCases()...)
+}
+
+// validationPDFAFontFilterCases covers the font and stream filter refusals.
+func validationPDFAFontFilterCases() []validationPDFACase {
+	return []validationPDFACase{
 		{
 			name:      "font-not-embedded",
 			mode:      spectreps.PDFA4,
@@ -46,6 +86,12 @@ func TestValidationPDFARules(t *testing.T) {
 			},
 			rule: "filter-not-allowed",
 		},
+	}
+}
+
+// validationPDFAColorImageCases covers the color and image refusals.
+func validationPDFAColorImageCases() []validationPDFACase {
+	return []validationPDFACase{
 		{
 			name:      "cmyk-without-profile",
 			mode:      spectreps.PDFA4,
@@ -72,6 +118,12 @@ func TestValidationPDFARules(t *testing.T) {
 				"/BitsPerComponent 8 /ColorSpace /DeviceRGB /OPI << /Version 1.3 >> >>"},
 			rule: "opi-not-allowed",
 		},
+	}
+}
+
+// validationPDFACatalogCases covers the graphics state and catalog refusals.
+func validationPDFACatalogCases() []validationPDFACase {
+	return []validationPDFACase{
 		{
 			name:      "blend-mode-not-allowed",
 			mode:      spectreps.PDFA4,
@@ -91,23 +143,6 @@ func TestValidationPDFARules(t *testing.T) {
 			mode: spectreps.PDFA4F,
 			rule: "4f-needs-embedded-files",
 		},
-	}
-	for _, testCase := range cases {
-		t.Run(testCase.name, func(t *testing.T) {
-			src := validationPDFAInput(t, testCase.catalog, testCase.resources, testCase.extra...)
-			doc, err := in.OpenPDF(t.Context(), src)
-			if err != nil {
-				t.Fatal(err)
-			}
-			out, err := in.RewritePDF(t.Context(), doc, spectreps.RewriteOptions{PDFA: testCase.mode})
-			var job spectreps.JobError
-			if !errors.As(err, &job) || job.Op != "PDFA" || job.Msg != testCase.rule {
-				t.Fatalf("RewritePDF() error = %v, want %s in PDFA", err, testCase.rule)
-			}
-			if out != nil {
-				t.Fatalf("RewritePDF() bytes = %#v, want nil", out)
-			}
-		})
 	}
 }
 
@@ -132,39 +167,59 @@ func TestValidationUA2Preserve(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			doc, err := in.OpenPDF(t.Context(), testCase.src)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !doc.Tagged() {
-				t.Fatal("Tagged() = false before the rewrite")
-			}
-			wantPages := doc.PageCount()
-			for level := 1; level <= 5; level++ {
-				out, err := in.RewritePDF(t.Context(), doc, spectreps.RewriteOptions{Level: level})
-				if err != nil {
-					t.Fatalf("level %d: RewritePDF() = %v", level, err)
-				}
-				if !bytes.Contains(out, []byte("/StructTreeRoot")) {
-					t.Fatalf("level %d dropped /StructTreeRoot", level)
-				}
-				reopened, err := in.OpenPDF(t.Context(), out)
-				if err != nil {
-					t.Fatalf("level %d: OpenPDF() = %v", level, err)
-				}
-				if !reopened.Tagged() {
-					t.Fatalf("level %d: Tagged() = false", level)
-				}
-				if got := reopened.PageCount(); got != wantPages {
-					t.Fatalf("level %d: PageCount = %d, want %d", level, got, wantPages)
-				}
-				if testCase.preflight {
-					if err := in.PreflightUA2(t.Context(), reopened); err != nil {
-						t.Fatalf("level %d: PreflightUA2() = %v", level, err)
-					}
-				}
-			}
+			checkUA2Preserve(t, in, testCase.src, testCase.preflight)
 		})
+	}
+}
+
+// checkUA2Preserve proves every rewrite level of one tagged source keeps the
+// tree and the page count, and passes the preflight when asked.
+func checkUA2Preserve(t *testing.T, in *spectreps.Instance, src []byte, preflight bool) {
+	t.Helper()
+	doc, err := in.OpenPDF(t.Context(), src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !doc.Tagged() {
+		t.Fatal("Tagged() = false before the rewrite")
+	}
+	wantPages := doc.PageCount()
+	for level := 1; level <= 5; level++ {
+		checkUA2Level(t, in, doc, level, wantPages, preflight)
+	}
+}
+
+// checkUA2Level proves one rewrite level keeps /StructTreeRoot, the tagged
+// flag, and the page count, and passes the preflight when asked.
+func checkUA2Level(
+	t *testing.T,
+	in *spectreps.Instance,
+	doc *spectreps.Document,
+	level, wantPages int,
+	preflight bool,
+) {
+	t.Helper()
+	out, err := in.RewritePDF(t.Context(), doc, spectreps.RewriteOptions{Level: level})
+	if err != nil {
+		t.Fatalf("level %d: RewritePDF() = %v", level, err)
+	}
+	if !bytes.Contains(out, []byte("/StructTreeRoot")) {
+		t.Fatalf("level %d dropped /StructTreeRoot", level)
+	}
+	reopened, err := in.OpenPDF(t.Context(), out)
+	if err != nil {
+		t.Fatalf("level %d: OpenPDF() = %v", level, err)
+	}
+	if !reopened.Tagged() {
+		t.Fatalf("level %d: Tagged() = false", level)
+	}
+	if got := reopened.PageCount(); got != wantPages {
+		t.Fatalf("level %d: PageCount = %d, want %d", level, got, wantPages)
+	}
+	if preflight {
+		if err := in.PreflightUA2(t.Context(), reopened); err != nil {
+			t.Fatalf("level %d: PreflightUA2() = %v", level, err)
+		}
 	}
 }
 

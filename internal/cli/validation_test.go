@@ -133,29 +133,11 @@ func TestValidationNoProcess(t *testing.T) {
 	var cliImports []validationImport
 
 	walkErr := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+		imports, entryErr := validationWalkEntry(t, fset, root, cliDir, path, entry, err)
+		if entryErr != nil {
+			return entryErr
 		}
-		if entry.IsDir() {
-			if path != root && validationSkipDir(path, entry.Name()) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		imports, skip, parseErr := validationFileImports(fset, path, entry.Name())
-		if parseErr != nil {
-			return parseErr
-		}
-		if skip {
-			return nil
-		}
-		validationCheckProcessImports(t, path, imports)
-		if filepath.Dir(path) == cliDir {
-			testFile := strings.HasSuffix(entry.Name(), "_test.go")
-			for _, importPath := range imports {
-				cliImports = append(cliImports, validationImport{path: importPath, test: testFile})
-			}
-		}
+		cliImports = append(cliImports, imports...)
 		return nil
 	})
 	if walkErr != nil {
@@ -165,6 +147,39 @@ func TestValidationNoProcess(t *testing.T) {
 		t.Fatal("walk found no internal/cli imports")
 	}
 	validationCheckCLIImports(t, cliImports)
+}
+
+// validationWalkEntry handles one WalkDir entry and returns the internal/cli
+// imports the entry lists. A skipped directory is reported as filepath.SkipDir.
+func validationWalkEntry(t *testing.T, fset *token.FileSet, root, cliDir, path string,
+	entry fs.DirEntry, err error) ([]validationImport, error) {
+	t.Helper()
+	if err != nil {
+		return nil, err
+	}
+	if entry.IsDir() {
+		if path != root && validationSkipDir(path, entry.Name()) {
+			return nil, filepath.SkipDir
+		}
+		return nil, nil
+	}
+	imports, skip, parseErr := validationFileImports(fset, path, entry.Name())
+	if parseErr != nil {
+		return nil, parseErr
+	}
+	if skip {
+		return nil, nil
+	}
+	validationCheckProcessImports(t, path, imports)
+	if filepath.Dir(path) != cliDir {
+		return nil, nil
+	}
+	testFile := strings.HasSuffix(entry.Name(), "_test.go")
+	collected := make([]validationImport, 0, len(imports))
+	for _, importPath := range imports {
+		collected = append(collected, validationImport{path: importPath, test: testFile})
+	}
+	return collected, nil
 }
 
 // validationFileImports parses one Go file. The bool is true when the build

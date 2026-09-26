@@ -118,7 +118,7 @@ func refuseDo(t *testing.T, in *spectreps.Instance, payload []byte, opt spectrep
 	}
 	img, err := in.RasterizePage(t.Context(), doc, 0, opt)
 	var job spectreps.JobError
-	if !errors.As(err, &job) || job.Op != "Do" || job.Msg != "undefined" {
+	if !errors.As(err, &job) || job.Op != "Do" || job.Msg != undefinedMsg {
 		t.Fatalf("error = %v, want undefined in Do", err)
 	}
 	requireZeroPageImage(t, img)

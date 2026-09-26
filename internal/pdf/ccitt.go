@@ -31,6 +31,9 @@ const (
 	ccittMakeupMin   = 64
 	ccittEOLZeros    = 11
 	ccittAlignPadMax = 7
+	ccittDeltaTwo    = 2
+	ccittDeltaThree  = 3
+	ccittWhiteByte   = 0xFF
 )
 
 // ccittImage is the decoded /DecodeParms of one CCITT stream plus the size.
@@ -99,6 +102,8 @@ func ccittImageParams(stream Value) (ccittImage, error) {
 // defaults: /K 0, /EndOfLine false, /EndOfBlock true, /BlackIs1 false,
 // /EncodedByteAlign false, and the /Width and /Height sizes. Any entry of the
 // wrong kind returns undefined.
+//
+//nolint:cyclop // one branch per /DecodeParms entry.
 func ccittDecodeParms(stream Value, width, height int) (ccittImage, error) {
 	parms, ok := stream.ValueEntry(keyCCITTParms)
 	if !ok {
@@ -237,6 +242,7 @@ type ccittDecodeTables struct {
 	mode  [ccittLookupSize]ccittModeEntry
 }
 
+//nolint:gochecknoglobals // built once from the T.4 code lists.
 var ccittDecode = buildCCITTDecodeTables()
 
 // buildCCITTDecodeTables expands every code into all lookahead suffixes, so a
@@ -383,11 +389,12 @@ func (bits *ccittBits) runTotal(black bool) (int, bool) {
 // streams whose rows begin with an end-of-line marker and a one-bit tag.
 func decodeCCITTG3(pic *image.Gray, data []byte, params ccittImage) error {
 	width := params.columns
-	bits := ccittBits{data: data}
+	bits := ccittBits{data: data, pos: 0}
 	ref := make([]bool, width)
 	cur := make([]bool, width)
 	for row := range params.rows {
 		var err error
+		//nolint:nestif // the four G3 row-start steps are sequential.
 		if params.k > 0 {
 			if params.byteAlign {
 				bits.align()
@@ -437,6 +444,8 @@ func ccittOneDimensionalRow(bits *ccittBits, row []bool) error {
 // it: pass, horizontal, and vertical modes from the T.4 2-D set. A vertical
 // mode moves the next changing element to b1 plus its delta. An extension
 // code is unsupported and reports syntaxerror.
+//
+//nolint:cyclop,funlen // one branch per T.4 2-D mode, all in one row loop.
 func ccittTwoDimensionalRow(bits *ccittBits, row, ref []bool) error {
 	changes := ccittChanges(ref)
 	width := len(row)
@@ -529,15 +538,17 @@ func ccittVerticalDelta(mode ccittMode) int {
 	case ccittModeVR1:
 		return 1
 	case ccittModeVR2:
-		return 2
+		return ccittDeltaTwo
 	case ccittModeVR3:
-		return 3
+		return ccittDeltaThree
 	case ccittModeVL1:
 		return -1
 	case ccittModeVL2:
 		return -2
 	case ccittModeVL3:
 		return -3
+	case ccittModePass, ccittModeHorizontal, ccittModeExtension:
+		return 0
 	}
 	return 0
 }
@@ -553,16 +564,16 @@ func ccittFillRow(row []bool, from, to int, black bool) {
 // 255 and a black pixel is 0, and /BlackIs1 inverts both, matching the
 // golang.org/x/image/ccitt option the Group 4 and Group 3 paths pass.
 func ccittStoreRow(pic *image.Gray, row int, pixels []bool, blackIs1 bool) {
-	at := row * pic.Stride
+	start := row * pic.Stride
 	for column, black := range pixels {
-		value := byte(0xFF)
+		value := byte(ccittWhiteByte)
 		if black {
 			value = 0
 		}
 		if blackIs1 {
 			value = ^value
 		}
-		pic.Pix[at+column] = value
+		pic.Pix[start+column] = value
 	}
 }
 
@@ -589,6 +600,7 @@ type ccittModeCode struct {
 // The values were checked against golang.org/x/image/ccitt (BSD-3-Clause),
 // which generates the same tables from the T.6 specification.
 
+//nolint:dupl,gochecknoglobals // the white and black run tables share the T.4 code layout and load once.
 var ccittWhiteRunCodes = []ccittRunCode{
 	{0x7, 4, 2},
 	{0x8, 4, 3},
@@ -696,6 +708,7 @@ var ccittWhiteRunCodes = []ccittRunCode{
 	{0x1f, 12, 2560},
 }
 
+//nolint:dupl,gochecknoglobals // the black table mirrors the white table and loads once.
 var ccittBlackRunCodes = []ccittRunCode{
 	{0x2, 2, 3},
 	{0x3, 2, 2},
@@ -803,6 +816,7 @@ var ccittBlackRunCodes = []ccittRunCode{
 	{0x77, 13, 1216},
 }
 
+//nolint:gochecknoglobals // built once from the T.4 2-D mode list.
 var ccittModeCodes = []ccittModeCode{
 	{0x1, 1, ccittModeV0},
 	{0x1, 3, ccittModeHorizontal},

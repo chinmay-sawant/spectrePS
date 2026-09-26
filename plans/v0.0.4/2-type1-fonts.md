@@ -92,7 +92,7 @@ One decoder in `internal/font` and one read path in `internal/pdf`. The eexec an
 
 ### 6.2 Lint
 
-- [~] `make lint` passes. Outcome recorded on the day. Proof: `make lint`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] `make lint` passes. Outcome recorded on the day. Proof: `make lint`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ### 6.3 Test
 

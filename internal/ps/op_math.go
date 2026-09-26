@@ -241,7 +241,7 @@ func opSin(ctx context.Context, interp *Interp) error {
 	return trigDegrees(ctx, interp, "sin", math.Sin)
 }
 
-func trigDegrees(ctx context.Context, interp *Interp, opName string, fn func(float64) float64) error {
+func trigDegrees(ctx context.Context, interp *Interp, _ string, fn func(float64) float64) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}

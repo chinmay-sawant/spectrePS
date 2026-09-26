@@ -291,6 +291,7 @@ func (lex *scanner) skipCompat() error {
 	}
 }
 
+//nolint:cyclop // the dispatch table is the operator list.
 func (run *runner) take(ctx context.Context, tok ctok) error {
 	if tok.kind != tokOperator {
 		run.stack = append(run.stack, itemOf(tok))
@@ -1431,7 +1432,7 @@ func (run *runner) setExtGState(ctx context.Context) error {
 // entry when the marker cannot host the seam, which keeps the rewrite
 // recorder honest.
 //
-//nolint:cyclop // one case per ExtGState entry
+//nolint:cyclop,funlen // the ExtGState table is linear: one case per entry and one statement per entry.
 func (run *runner) applyExtGState(ctx context.Context, entry Value, opName string) error {
 	state := extGState{
 		width:       run.width,

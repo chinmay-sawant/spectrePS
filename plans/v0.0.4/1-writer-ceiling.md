@@ -53,7 +53,7 @@ Levels 1 and 2 stay at or under 610,034 bytes on `sampledata/compress/whatisthis
 
 ### 2.1 Lint
 
-- [~] `make lint` passes. Outcome recorded on the day. Proof: `make lint`; `gofmt -l .` prints nothing, `golangci-lint run ./...` exits 0, and `size-check` reports 0 over-limit files. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] `make lint` passes. Outcome recorded on the day. Proof: `make lint`; `gofmt -l .` prints nothing, `golangci-lint run ./...` exits 0, and `size-check` reports 0 over-limit files. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ### 2.2 Test
 

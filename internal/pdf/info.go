@@ -258,6 +258,8 @@ func fontName(val Value) string {
 // fontEmbedded reports whether the font carries an outline program. A Type 3
 // font counts as embedded because its glyph procedures live in the file. A
 // Type0 font needs every descendant to carry one.
+//
+//nolint:cyclop // one branch per font subtype.
 func (file *File) fontEmbedded(val Value) bool {
 	subtype, _ := val.NameEntry(keySubtype)
 	if subtype == subtypeType3 {

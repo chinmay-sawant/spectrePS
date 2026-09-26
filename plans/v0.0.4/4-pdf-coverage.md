@@ -27,7 +27,7 @@ Clip, forms, and `gs` are the gate for phases 2 and 3: a transparency group and 
 - [x] `/ExtGState` resolves from `/Resources` by name and `gs` pushes the known parameters into the graphics state; `q`/`Q` restore them. An unknown name is `undefined in gs`, and an unsupported entry is a named refusal, not a silent skip. Proof: `go test -count=1 ./internal/pdf -run TestPaintExtGStateResource`.
 - [x] Decide and document `J`, `j`, `M`, `i`, and `ri`: accept as no-ops with the current capsule stroke and a docs deviation, or refuse by name. Proof: the chosen behavior in `go test -count=1 ./internal/pdf -run TestPaintLineParams`.
 - [x] Level 0 stays honest: a page that clips still returns `undefined` with the operator name from `Emit`. Proof: `go test -count=1 ./internal/pdfout -run TestEmitClipUnchanged`.
-- [~] Closure: `documentation/devices.md`, `features.md`, `covered-and-not-covered.md`, and `test.md` state the new operators; `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] Closure: `documentation/devices.md`, `features.md`, `covered-and-not-covered.md`, and `test.md` state the new operators; `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 2: Transparency
 
@@ -42,7 +42,7 @@ The painter refuses `/SMask`, ignores `/Mask` and `/Decode`, and refuses `/Image
 - [x] The separable blend modes paint with the ISO 32000-1 formulas: Normal, Multiply, Screen, Overlay, Darken, Lighten, ColorDodge, ColorBurn, HardLight, SoftLight, Difference, Exclusion. The non-separable modes (Hue, Saturation, Color, Luminosity) are a named refusal. Proof: `go test -count=1 ./internal/pdf -run TestPaintBlendMode` (exact bytes for Multiply and Screen) and `go test -count=1 ./internal/pdf -run TestPaintBlendModeDefault`.
 - [x] `/ExtGState /SMask` with `/S /Alpha` and `/S /Luminosity` builds the state soft mask and applies it to later marks; `/TR` carries identity only. Proof: `go test -count=1 ./internal/pdf -run TestPaintSoftMask` and `go test -count=1 ./internal/pdf -run TestPaintSoftMaskLuminosity`.
 - [x] A Form XObject with `/Group /S /Transparency` paints into a scratch pixmap and composites once with group alpha, blend, `/CS`, `/I`, and `/K`. The scratch obeys the page pixel and side caps in `documentation/language.md:119-123`. Proof: `go test -count=1 ./internal/pdf -run TestPaintGroupTransparency` and `go test -count=1 ./internal/pdf -run TestPaintGroupIsolation`.
-- [~] Closure: `documentation/features.md:11`, `devices.md:91`, `:93`, `covered-and-not-covered.md:31`, `test.md:76`, and `test.md:98` are corrected; `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] Closure: `documentation/features.md:11`, `devices.md:91`, `:93`, `covered-and-not-covered.md:31`, `test.md:76`, and `test.md:98` are corrected; `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 3: Separations and spot colors
 
@@ -55,7 +55,7 @@ The painter refuses `/SMask`, ignores `/Mask` and `/Decode`, and refuses `/Image
 - [x] A separation page rasterizes to the RGB preview. Proof: `go test -count=1 ./internal/pdf -run TestSeparationRaster`.
 - [~] A separation accumulator behind a new optional device seam records process C, M, Y, K and each named spot ink as its own plane. `tiffsep` is in scope: `spectreps tiffsep -o out.tif in.pdf` writes one grayscale TIFF per ink plus a composite, with deterministic names (`out.Cyan.tif`, `out.Black.tif`, `out.<SpotName>.tif`), reusing `golang.org/x/image/tiff` and the existing page selection. This is the largest row in the phase and the first to cut to v0.0.5 if phase 3 slips. Proof: `go test -count=1 ./internal/pdf -run TestSeparationPlates` and `go test -count=1 ./internal/cli -run TestTiffSep`, `TestTiffSepStable`, and `TestTiffSepCLI`. Cut to `plans/v0.0.1/10-deferred.md` 10.5 as the plan's declared first cut; the reader still resolves Separation and DeviceN to the RGB preview.
 - [x] The PDF/A preflight applies `cmyk-without-profile` to a `/Separation` or `/DeviceN` value nested inside a page `/ColorSpace` resource, through a name, array, or reference. Direct dictionaries already refuse. Proof: `go test -count=1 ./internal/pdfa -run TestPreflightSeparation`.
-- [~] Closure: freeze the CMYK to RGB rule next to the existing RGB to CMYK rule in `documentation/devices.md`; `features.md`, `covered-and-not-covered.md`, `cli.md`, and `test.md` state the new behavior; `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] Closure: freeze the CMYK to RGB rule next to the existing RGB to CMYK rule in `documentation/devices.md`; `features.md`, `covered-and-not-covered.md`, `cli.md`, and `test.md` state the new behavior; `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 4: Font embedding and subsetting
 
@@ -72,7 +72,7 @@ The read side is done for the supported subset: `/Widths`, `/FirstChar`, `/Missi
 - [x] `RewriteOptions.SubsetFonts` (off by default) and `spectreps rewrite -subset-fonts` apply subsetting on levels 1 through 5, leave level 0 refusing text, and exit 2 on a bad flag. Bytes change only when the caller opts in. Proof: `go test -count=1 ./internal/cli -run TestRewriteSubsetCLI`.
 - [x] The PDF/A preflight still refuses a font with no embedded program with or without the option, and a conforming file with `/FontFile2` still passes. Proof: `go test -count=1 ./internal/pdfa -run TestEmbedSubsetPDFA`.
 - [x] A tagged input keeps its tree, MCIDs, `/Alt`, `/ActualText`, and `/Lang` through a subsetting rewrite, and the synthesized `/ToUnicode` makes `TaggedFontOK` pass for a simple font with a nonstandard encoding. Proof: `go test -count=1 ./internal/pdfa -run TestEmbedSubsetUA2`.
-- [~] Closure: `documentation/fonts.md`, `devices.md`, `features.md`, `covered-and-not-covered.md`, `public-api.md`, and `cli.md` state the option and the refusal policy; `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] Closure: `documentation/fonts.md`, `devices.md`, `features.md`, `covered-and-not-covered.md`, `public-api.md`, and `cli.md` state the option and the refusal policy; `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 5: Filters and optional content
 
@@ -85,7 +85,7 @@ The generic stream decoder decodes Flate only, and every filter in a chain goes 
 - [x] The existing chain decode is locked by a test: each stage decodes in order, and an unknown stage returns `undefined` with that filter name. Proof: `go test -count=1 ./internal/pdf -run TestFilterChain`.
 - [x] Optional content: `/OCProperties /D` is read, content under an `OFF` group is skipped, and `/OC` on XObjects and property dictionaries is honored. Alternate configs, the `/AS` usage map, and the visibility flag stay out. Proof: `go test -count=1 ./internal/pdf -run TestOCGVisibility` and `go test -count=1 ./internal/pdf -run TestOCGXObject`.
 - [x] Level 2 re-encodes an LZW image the way it re-encodes CCITT. Proof: `go test -count=1 ./internal/pdfout -run TestLevelLZWImage`.
-- [~] Closure: `documentation/devices.md`, `language.md`, `features.md`, `covered-and-not-covered.md`, and `test.md` state the decoders and the OCG rule; the `JBIG2Decode` disagreement between `allowedFilter` and the reader is recorded; `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] Closure: `documentation/devices.md`, `language.md`, `features.md`, `covered-and-not-covered.md`, and `test.md` state the decoders and the OCG rule; the `JBIG2Decode` disagreement between `allowedFilter` and the reader is recorded; `make lint` and `make test` exit 0, recorded in this row. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Phase 6: `spectreps info`
 
@@ -93,7 +93,7 @@ Read-only and the cut line. The writers omit `/Info` on purpose (`documentation/
 
 - [x] `spectreps info file.pdf` prints the PDF version, page count and sizes, the tagged flag, an `Encrypt` refusal when the trailer carries `/Encrypt`, fonts with the embedded flag, and image count. Proof: `go test -count=1 ./internal/pdf -run TestPDFInfo`.
 - [x] The CLI command maps bad input and a bad flag to the documented exit codes. Proof: `go test -count=1 ./internal/cli -run TestPDFInfoCLI`.
-- [~] Closure: `documentation/cli.md`, `features.md`, and `public-api.md` state the command, and `make lint` and `make test` exit 0, recorded in this row. If phases 1 through 5 run long, this phase moves to v0.0.5 whole. Proof: `make lint` and `make test`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
+- [x] Closure: `documentation/cli.md`, `features.md`, and `public-api.md` state the command, and `make lint` and `make test` exit 0, recorded in this row. If phases 1 through 5 run long, this phase moves to v0.0.5 whole. Proof: `make lint` and `make test`. Lint passes as of 2026-09-26: `make lint` exits 0 with gofmt, golangci-lint, and size-check clean.
 
 ## Open decisions
 

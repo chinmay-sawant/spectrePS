@@ -384,10 +384,7 @@ func checkRowFiles(rows []Row, dir string) error {
 
 // checkUnlisted walks the committed tier and fails on a file with no row.
 func checkUnlisted(rows []Row, dir string) error {
-	listed := make(map[string]bool, len(rows))
-	for _, row := range rows {
-		listed[row.Path] = true
-	}
+	listed := listedPaths(rows)
 	return filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -398,12 +395,12 @@ func checkUnlisted(rows []Row, dir string) error {
 		}
 		rel = filepath.ToSlash(rel)
 		if entry.IsDir() {
-			if rel == strings.TrimSuffix(ExternalPrefix, "/") || rel == ExpectedTextDir {
+			if skippedCorpusDir(rel) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if rel == ManifestName || rel == TraceabilityName || filepath.Base(rel) == ReadmeName {
+		if corpusMetaFile(rel) {
 			return nil
 		}
 		if !listed[rel] {
@@ -411,6 +408,27 @@ func checkUnlisted(rows []Row, dir string) error {
 		}
 		return nil
 	})
+}
+
+// listedPaths returns the manifest row paths as a set.
+func listedPaths(rows []Row) map[string]bool {
+	listed := make(map[string]bool, len(rows))
+	for _, row := range rows {
+		listed[row.Path] = true
+	}
+	return listed
+}
+
+// skippedCorpusDir reports whether the walk ignores rel: the fetched external
+// tier and the checked-in golden text carry no manifest rows.
+func skippedCorpusDir(rel string) bool {
+	return rel == strings.TrimSuffix(ExternalPrefix, "/") || rel == ExpectedTextDir
+}
+
+// corpusMetaFile reports whether rel names a file that carries no manifest
+// row: the manifest, the traceability table, and any README.
+func corpusMetaFile(rel string) bool {
+	return rel == ManifestName || rel == TraceabilityName || filepath.Base(rel) == ReadmeName
 }
 
 // CheckLicenses applies the license gate.

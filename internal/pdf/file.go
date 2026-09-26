@@ -131,19 +131,21 @@ func startOffset(src []byte) (int, error) {
 // A /Prev cycle, a chain past xrefChainLimit, a malformed /Prev, and a missing
 // section are syntaxerror in xref. A single section keeps the map the section
 // reader returned, so the common path adds no allocation.
+//
+//nolint:cyclop // one branch per trailer /Prev section step.
 func readCrossRef(src []byte, offset int) (map[int]XEntry, Value, error) {
 	entries := map[int]XEntry(nil)
 	trailer := NullVal()
 	var seen map[int]bool
-	at := offset
+	current := offset
 	for section := 0; ; section++ {
 		if section >= xrefChainLimit {
 			return nil, NullVal(), NewError(opXRef, errSyntax)
 		}
-		if at < 0 || at >= len(src) || seen[at] {
+		if current < 0 || current >= len(src) || seen[current] {
 			return nil, NullVal(), NewError(opXRef, errSyntax)
 		}
-		sectionEntries, sectionTrailer, err := readXRefSection(src, at)
+		sectionEntries, sectionTrailer, err := readXRefSection(src, current)
 		if err != nil {
 			return nil, NullVal(), err
 		}
@@ -162,11 +164,11 @@ func readCrossRef(src []byte, offset int) (map[int]XEntry, Value, error) {
 			break
 		}
 		if seen == nil {
-			seen = map[int]bool{at: true}
+			seen = map[int]bool{current: true}
 		} else {
-			seen[at] = true
+			seen[current] = true
 		}
-		at = prev
+		current = prev
 	}
 	delete(trailer.Dict, keyPrev)
 	return entries, trailer, nil

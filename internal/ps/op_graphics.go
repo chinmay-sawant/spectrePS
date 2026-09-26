@@ -357,13 +357,12 @@ func rectPaint(ctx context.Context, interp *Interp, opName, kind string) error {
 	if err := state.addRect(userX, userY, width, height); err != nil {
 		return err
 	}
-	state.notePaint(paintMark{kind: kind})
+	state.notePaint(paintMark{kind: kind, evenOdd: false})
 	state.putPath(saved)
 	return nil
 }
 
-// opDTransformRun transforms a distance vector by the CTM.
-// dx dy dtransform dx' dy'
+// opDTransformRun transforms a distance vector dx dy by the CTM into dx' dy'.
 func opDTransformRun(ctx context.Context, interp *Interp) error {
 	if err := ctx.Err(); err != nil {
 		return err

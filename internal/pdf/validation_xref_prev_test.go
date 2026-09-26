@@ -12,13 +12,14 @@ import (
 // a chain past the cap, and a broken older section each fail by name.
 func TestValidationXRefPrev(t *testing.T) {
 	t.Parallel()
-	t.Run("newest wins and older fills", validationPrevMerge)
-	t.Run("cycle", validationPrevCycle)
-	t.Run("malformed prev", validationPrevMalformed)
-	t.Run("chain cap", validationPrevChainCap)
-	t.Run("broken older section", validationPrevBrokenOlder)
+	t.Run("newest wins and older fills", func(t *testing.T) { t.Parallel(); validationPrevMerge(t) })
+	t.Run("cycle", func(t *testing.T) { t.Parallel(); validationPrevCycle(t) })
+	t.Run("malformed prev", func(t *testing.T) { t.Parallel(); validationPrevMalformed(t) })
+	t.Run("chain cap", func(t *testing.T) { t.Parallel(); validationPrevChainCap(t) })
+	t.Run("broken older section", func(t *testing.T) { t.Parallel(); validationPrevBrokenOlder(t) })
 }
 
+//nolint:cyclop // the fixture walks every /Prev chain shape in one place.
 func validationPrevMerge(t *testing.T) {
 	t.Helper()
 	var body bytes.Buffer
@@ -162,7 +163,8 @@ func validationPrevBrokenOlder(t *testing.T) {
 	body.WriteString("%PDF-1.4\n")
 	body.WriteString("1 0 obj\n<< /Type /Catalog >>\nendobj\n")
 	brokenAt := body.Len()
-	body.WriteString("6 0 obj\n<< /Type /XRef /W [1 2 1] /Length 3 /Filter /FooDecode >>\nstream\nabc\nendstream\nendobj\n")
+	body.WriteString("6 0 obj\n<< /Type /XRef /W [1 2 1] /Length 3 /Filter /FooDecode >>\n" +
+		"stream\nabc\nendstream\nendobj\n")
 	newestAt := body.Len()
 	body.Write(validationClassicSection(
 		[]objPos{{num: 0}}, fmt.Sprintf("/Root 1 0 R /Prev %d", brokenAt)))

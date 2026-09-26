@@ -57,18 +57,41 @@ func checkValidationPDFA4FLetter(t *testing.T) {
 	}
 }
 
+// validationPDFARefusalCase is one refusal fixture: the catalog and resources
+// overrides, the extra object bodies, and the rule the rewrite must name.
+type validationPDFARefusalCase struct {
+	name      string
+	pdfa      string
+	catalog   string
+	resources string
+	extra     []string
+	rule      string
+}
+
 // checkValidationPDFARefusals proves each of the nine rules exits 1 with the
 // rule line and writes no file.
 func checkValidationPDFARefusals(t *testing.T) {
 	t.Helper()
-	cases := []struct {
-		name      string
-		pdfa      string
-		catalog   string
-		resources string
-		extra     []string
-		rule      string
-	}{
+	cases := validationPDFAFontAndStreamCases()
+	cases = append(cases, validationPDFAColorAndCatalogCases()...)
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			src := writeTemp(t, testCase.name+".pdf",
+				validationPDFAFixture(t, testCase.catalog, testCase.resources, testCase.extra...))
+			out := filepath.Join(t.TempDir(), "out.pdf")
+			args := []string{"rewrite", "-pdfa", testCase.pdfa, "-o", out, src}
+			want(t, args, 1, "", "Error: /"+testCase.rule+" in PDFA\n")
+			if _, err := os.Stat(out); err == nil {
+				t.Fatalf("refused rewrite wrote %s", out)
+			}
+		})
+	}
+}
+
+// validationPDFAFontAndStreamCases returns the font and stream filter refusal
+// fixtures.
+func validationPDFAFontAndStreamCases() []validationPDFARefusalCase {
+	return []validationPDFARefusalCase{
 		{
 			name:      "font-not-embedded",
 			pdfa:      "4",
@@ -92,6 +115,13 @@ func checkValidationPDFARefusals(t *testing.T) {
 			},
 			rule: "filter-not-allowed",
 		},
+	}
+}
+
+// validationPDFAColorAndCatalogCases returns the color, object, and catalog
+// refusal fixtures.
+func validationPDFAColorAndCatalogCases() []validationPDFARefusalCase {
+	return []validationPDFARefusalCase{
 		{
 			name:      "cmyk-without-profile",
 			pdfa:      "4",
@@ -137,18 +167,6 @@ func checkValidationPDFARefusals(t *testing.T) {
 			pdfa: "4f",
 			rule: "4f-needs-embedded-files",
 		},
-	}
-	for _, testCase := range cases {
-		t.Run(testCase.name, func(t *testing.T) {
-			src := writeTemp(t, testCase.name+".pdf",
-				validationPDFAFixture(t, testCase.catalog, testCase.resources, testCase.extra...))
-			out := filepath.Join(t.TempDir(), "out.pdf")
-			args := []string{"rewrite", "-pdfa", testCase.pdfa, "-o", out, src}
-			want(t, args, 1, "", "Error: /"+testCase.rule+" in PDFA\n")
-			if _, err := os.Stat(out); err == nil {
-				t.Fatalf("refused rewrite wrote %s", out)
-			}
-		})
 	}
 }
 
