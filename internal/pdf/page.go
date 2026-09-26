@@ -73,7 +73,7 @@ func (file *File) contentNumPages() ([][]int, error) {
 	}
 	pages, ok := catalog.ValueEntry(keyPages)
 	if !ok || pages.Kind == KindNull {
-		return nil, NewError(opPDF, errSyntax)
+		return nil, NewError(opPDF, errUndefined)
 	}
 	return file.walkRefNums(pages, map[int]bool{})
 }
@@ -81,7 +81,7 @@ func (file *File) contentNumPages() ([][]int, error) {
 func (file *File) walkRefNums(val Value, seen map[int]bool) ([][]int, error) {
 	if val.Kind == KindRef {
 		if seen[val.RefNum] {
-			return nil, NewError(opPDF, errSyntax)
+			return nil, NewError(opPDF, errLimit)
 		}
 		seen[val.RefNum] = true
 	}
@@ -174,7 +174,7 @@ func (file *File) walkRoot() ([]pageLeaf, error) {
 	}
 	pages, ok := catalog.ValueEntry(keyPages)
 	if !ok || pages.Kind == KindNull {
-		return nil, NewError(opPDF, errSyntax)
+		return nil, NewError(opPDF, errUndefined)
 	}
 	return file.walkRef(pages, map[int]bool{}, NullVal())
 }
@@ -182,7 +182,7 @@ func (file *File) walkRoot() ([]pageLeaf, error) {
 func (file *File) walkRef(val Value, seen map[int]bool, resources Value) ([]pageLeaf, error) {
 	if val.Kind == KindRef {
 		if seen[val.RefNum] {
-			return nil, NewError(opPDF, errSyntax)
+			return nil, NewError(opPDF, errLimit)
 		}
 		seen[val.RefNum] = true
 	}
