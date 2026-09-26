@@ -20,11 +20,11 @@ Levels 1 and 2 stay at or under 610,034 bytes on `sampledata/compress/whatisthis
 
 ### 1.1 Close the v0.0.3 row
 
-- [ ] `plans/v0.0.3/4-writer-cleanup.md` row 1.2 is accepted on 2026-09-25 and rewritten as `[x]`: the level 1 and 2 sizes for `whatisthis.pdf` are recorded as a 610,034-byte ceiling, the post-container-skip measurement, and `TestRewriteSamples` asserts both levels stay at or under it. The measured sizes are input 596,341 bytes, 614,343 before the container skip, 610,034 after it, and 596,491 with the optional packed writer; the source packs 78 non-stream objects, so a not-larger-than-input guard cannot pass. The status line becomes `implemented` with 1.2 accepted under this phase file. Proof: `grep -n -e '1.2 is accepted' -e 'Accepted on 2026-09-25' plans/v0.0.3/4-writer-cleanup.md`.
+- [x] `plans/v0.0.3/4-writer-cleanup.md` row 1.2 is accepted on 2026-09-25 and rewritten as `[x]`: the level 1 and 2 sizes for `whatisthis.pdf` are recorded as a 610,034-byte ceiling, the post-container-skip measurement, and `TestRewriteSamples` asserts both levels stay at or under it. The measured sizes are input 596,341 bytes, 614,343 before the container skip, 610,034 after it, and 596,491 with the optional packed writer; the source packs 78 non-stream objects, so a not-larger-than-input guard cannot pass. The status line becomes `implemented` with 1.2 accepted under this phase file. Proof: `grep -n -e '1.2 is accepted' -e 'Accepted on 2026-09-25' plans/v0.0.3/4-writer-cleanup.md`.
 
 ### 1.2 The ceiling assertion
 
-- [ ] `internal/cli/run_test.go` gains the ceiling constant after `squarePath` and the boundary check at the end of `checkSampleSizes`, with these exact edits:
+- [x] `internal/cli/run_test.go` gains the ceiling constant after `squarePath` and the boundary check at the end of `checkSampleSizes`, with these exact edits:
 
   ```go
   // whatisthisLevel12Ceiling is the accepted level 1 and 2 output size for
@@ -47,17 +47,17 @@ Levels 1 and 2 stay at or under 610,034 bytes on `sampledata/compress/whatisthis
 
 ### 1.3 Docs
 
-- [ ] `documentation/devices.md` appends to the `CopyOptions.PackObjects` paragraph: "Levels 1 and 2 stay at or under 610,034 bytes on `sampledata/compress/whatisthis.pdf`, the recorded ceiling: the source packs 78 non-stream objects, so the classic form is 13,693 bytes over the 596,341-byte input and `PackObjects` stays opt-in." `documentation/test.md` states before the skip sentence: "The level 1 and 2 sizes for `whatisthis.pdf` stay at or under the recorded 610,034-byte ceiling." Proof: `grep -n '610,034' documentation/devices.md documentation/test.md`.
+- [x] `documentation/devices.md` appends to the `CopyOptions.PackObjects` paragraph: "Levels 1 and 2 stay at or under 610,034 bytes on `sampledata/compress/whatisthis.pdf`, the recorded ceiling: the source packs 78 non-stream objects, so the classic form is 13,693 bytes over the 596,341-byte input and `PackObjects` stays opt-in." `documentation/test.md` states before the skip sentence: "The level 1 and 2 sizes for `whatisthis.pdf` stay at or under the recorded 610,034-byte ceiling." Proof: `grep -n '610,034' documentation/devices.md documentation/test.md`.
 
 ## Phase 2: Closure
 
 ### 2.1 Lint
 
-- [ ] `make lint` passes. Outcome recorded on the day. Proof: `make lint`; `gofmt -l .` prints nothing, `golangci-lint run ./...` exits 0, and `size-check` reports 0 over-limit files.
+- [~] `make lint` passes. Outcome recorded on the day. Proof: `make lint`; `gofmt -l .` prints nothing, `golangci-lint run ./...` exits 0, and `size-check` reports 0 over-limit files. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
 
 ### 2.2 Test
 
-- [ ] `make test` passes. Outcome recorded on the day. Proof: `make test`.
+- [x] `make test` passes. Outcome recorded on the day. Proof: `make test`.
 
 ## Dependencies
 

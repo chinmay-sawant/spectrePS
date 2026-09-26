@@ -1,7 +1,7 @@
 # v0.0.4 - Fonts, tags, and PDF coverage
 
 > **Parent:** `plans/v0.0.3/00-program.md` - the previous tag
-> **Status:** plan open. No phase is started.
+> **Status:** implemented. Phases 1 to 6 landed. `tiffsep`, bare CFF, and performance rows 5.4 and 5.6 are deferred to `plans/v0.0.1/10-deferred.md` 10.1, 10.2, and 10.5. The lint findings stay recorded in `plans/v0.0.4/v0.0.4-closure.md`.
 > **Estimated effort:** days for phase 1, weeks for phases 2 to 4, about two weeks for phase 5, about a week for phase 6.
 
 ---

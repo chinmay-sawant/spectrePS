@@ -1,7 +1,7 @@
 # v0.0.4 - Type 1 fonts
 
 > **Parent:** `plans/v0.0.4/00-program.md` - program ledger
-> **Status:** not started.
+> **Status:** implemented (phases 1 to 6). Phase 7 is deferred to `plans/v0.0.1/10-deferred.md` 10.5.
 > **Estimated effort:** about two weeks for phases 1 to 6. Phase 7 is a stretch gated on the tag budget.
 
 ---
@@ -18,85 +18,85 @@ One decoder in `internal/font` and one read path in `internal/pdf`. The eexec an
 
 ### 1.1 Scope in the docs
 
-- [ ] `documentation/fonts.md` replaces the Type 1 deferral in "Type 1 and CFF scope" with the supported subset: PFA and PFB `/FontFile`, eexec seed 55665, charstring seed 4330 and `lenIV`, CharStrings and Subrs, the `hsbw` width, the built-in `/Encoding`, `seac`, and OtherSubrs flex. Hinting, `Type1C`, and `CIDFontType0C` stay out. `documentation/test.md` splits the Type 1 case out of the `invalidfont` bullet. Proof: `grep -n -e 'PFA' -e 'eexec' documentation/fonts.md` exits 0.
+- [x] `documentation/fonts.md` replaces the Type 1 deferral in "Type 1 and CFF scope" with the supported subset: PFA and PFB `/FontFile`, eexec seed 55665, charstring seed 4330 and `lenIV`, CharStrings and Subrs, the `hsbw` width, the built-in `/Encoding`, `seac`, and OtherSubrs flex. Hinting, `Type1C`, and `CIDFontType0C` stay out. `documentation/test.md` splits the Type 1 case out of the `invalidfont` bullet. Proof: `grep -n -e 'PFA' -e 'eexec' documentation/fonts.md` exits 0.
 
 ## Phase 2: Read the program
 
 ### 2.1 PFA and PFB containers
 
-- [ ] `font.LoadType1(data []byte, lengths [3]int) (*font.Type1Font, error)` accepts PFA and PFB bytes, prefers the stream's `/Length1`, `/Length2`, and `/Length3` when present, falls back to `eexec` and `cleartomark` or 512-zero markers, accepts hex and binary eexec, and drops the trailer. A truncated or undecryptable program returns an error. Proof: `go test -count=1 ./internal/font -run TestType1Program`.
+- [x] `font.LoadType1(data []byte, lengths [3]int) (*font.Type1Font, error)` accepts PFA and PFB bytes, prefers the stream's `/Length1`, `/Length2`, and `/Length3` when present, falls back to `eexec` and `cleartomark` or 512-zero markers, accepts hex and binary eexec, and drops the trailer. A truncated or undecryptable program returns an error. Proof: `go test -count=1 ./internal/font -run TestType1Program`.
 
 ### 2.2 Private dict and encrypted glyph data
 
-- [ ] The tokenizer recovers `/FontName`, `/FontMatrix`, the built-in `/Encoding`, `Private /lenIV`, `Private /Subrs`, and `Private /CharStrings` through the seed 4330 cipher, including `RD` byte runs and hex-string values, `lenIV` 0 and 4, and the `256 array ... dup code /name put` encoding loop. Proof: `go test -count=1 ./internal/font -run 'TestType1Charstring|TestType1Encoding'`.
+- [x] The tokenizer recovers `/FontName`, `/FontMatrix`, the built-in `/Encoding`, `Private /lenIV`, `Private /Subrs`, and `Private /CharStrings` through the seed 4330 cipher, including `RD` byte runs and hex-string values, `lenIV` 0 and 4, and the `256 array ... dup code /name put` encoding loop. Proof: `go test -count=1 ./internal/font -run 'TestType1Charstring|TestType1Encoding'`.
 
 ### 2.3 Charstring paths and widths
 
-- [ ] The interpreter supports `hsbw` and `sbw`, the moveto, lineto, and curveto families, `closepath`, `callsubr` and `return` with direct and negative indexes, `div`, `endchar`, and the hint operators parsed and dropped. The first stack-clearing operator yields the advance. Caps bound the operand stack, call depth, subroutine count, and total points; a malformed program returns an error and paints nothing. Proof: `go test -count=1 ./internal/font -run TestType1Charstring`.
+- [x] The interpreter supports `hsbw` and `sbw`, the moveto, lineto, and curveto families, `closepath`, `callsubr` and `return` with direct and negative indexes, `div`, `endchar`, and the hint operators parsed and dropped. The first stack-clearing operator yields the advance. Caps bound the operand stack, call depth, subroutine count, and total points; a malformed program returns an error and paints nothing. Proof: `go test -count=1 ./internal/font -run TestType1Charstring`.
 
 ### 2.4 seac
 
-- [ ] `seac` resolves `bchar` and `achar` through StandardEncoding, takes the base charstring width, offsets the accent by the sidebearing rule checked against fontTools `op_seac`, and appends the accent outline; a base that is itself `seac` is malformed. Proof: `go test -count=1 ./internal/font -run TestType1Seac`.
+- [x] `seac` resolves `bchar` and `achar` through StandardEncoding, takes the base charstring width, offsets the accent by the sidebearing rule checked against fontTools `op_seac`, and appends the accent outline; a base that is itself `seac` is malformed. Proof: `go test -count=1 ./internal/font -run TestType1Seac`.
 
 ### 2.5 OtherSubrs
 
-- [ ] Flex (OtherSubr 0, 1, and 14 to 18) emits the two flex curves and leaves the final point for the following `pop`; hint replacement (`n 3 callothersubr pop callsubr`) executes the replacement Subr; unknown OtherSubrs pop their arguments and keep the stack balanced. Proof: `go test -count=1 ./internal/font -run TestType1Flex`.
+- [x] Flex (OtherSubr 0, 1, and 14 to 18) emits the two flex curves and leaves the final point for the following `pop`; hint replacement (`n 3 callothersubr pop callsubr`) executes the replacement Subr; unknown OtherSubrs pop their arguments and keep the stack balanced. Proof: `go test -count=1 ./internal/font -run TestType1Flex`. As landed, flex is OtherSubrs 0, 1, and 2, and 14 to 18 are the Multiple Master blend operators the Adobe supplement defines.
 
 ## Phase 3: PDF font model
 
 ### 3.1 /FontFile loads
 
-- [ ] `loadProgram` reads `/FontFile` for a simple `/Subtype /Type1` font and `Font` carries the program; a broken or missing program still loads the font with no outline source. Proof: `go test -count=1 ./internal/pdf -run TestType1Glyph`.
+- [x] `loadProgram` reads `/FontFile` for a simple `/Subtype /Type1` font and `Font` carries the program; a broken or missing program still loads the font with no outline source. Proof: `go test -count=1 ./internal/pdf -run TestType1Glyph`.
 
 ### 3.2 Glyph lookup and outline conversion
 
-- [ ] A code resolves through the PDF encoding, then the built-in encoding of a symbolic font, to a CharStrings name, and the outline converts to `sfnt.Segments` at `outlinePPEM` with Y down so `glyphMask` and `rasterizeGlyph` stay unchanged. A name missing from CharStrings paints as `invalidfont`. Proof: `go test -count=1 ./internal/pdf -run TestType1Glyph`.
+- [x] A code resolves through the PDF encoding, then the built-in encoding of a symbolic font, to a CharStrings name, and the outline converts to `sfnt.Segments` at `outlinePPEM` with Y down so `glyphMask` and `rasterizeGlyph` stay unchanged. A name missing from CharStrings paints as `invalidfont`. Proof: `go test -count=1 ./internal/pdf -run TestType1Glyph`.
 
 ### 3.3 Width fallback
 
-- [ ] `/Widths` and standard 14 metrics still win, the charstring `hsbw` width fills a missing `/Widths`, `/MissingWidth` stays last, and `/MMType1` keeps its PDF widths and paints `invalidfont`. Proof: `go test -count=1 ./internal/pdf -run TestType1Widths`.
+- [x] `/Widths` and standard 14 metrics still win, the charstring `hsbw` width fills a missing `/Widths`, `/MissingWidth` stays last, and `/MMType1` keeps its PDF widths and paints `invalidfont`. Proof: `go test -count=1 ./internal/pdf -run TestType1Widths`.
 
 ### 3.4 Built-in encoding and Unicode
 
-- [ ] A symbolic font with no PDF `/Encoding` starts from the program's built-in encoding, `/BaseEncoding` and `/Differences` still apply on top, and `Font.Unicode` uses the resolved name before the code-point fallback. Proof: `go test -count=1 ./internal/pdf -run TestType1Unicode`.
+- [x] A symbolic font with no PDF `/Encoding` starts from the program's built-in encoding, `/BaseEncoding` and `/Differences` still apply on top, and `Font.Unicode` uses the resolved name before the code-point fallback. Proof: `go test -count=1 ./internal/pdf -run TestType1Unicode`.
 
 ## Phase 4: Painting
 
 ### 4.1 Pixels through the existing coverage path
 
-- [ ] `Tj` on the synthetic Type 1 `A` paints the same pixels as the synthetic TrueType `A` from `synthFont` in `internal/pdf/font_fixture_test.go`, compared with `CompareRaster`. Proof: `go test -count=1 ./internal/pdf -run TestType1Paint`.
+- [x] `Tj` on the synthetic Type 1 `A` paints the same pixels as the synthetic TrueType `A` from `synthFont` in `internal/pdf/font_fixture_test.go`, compared with `CompareRaster`. Proof: `go test -count=1 ./internal/pdf -run TestType1Paint`.
 
 ### 4.2 Locked fixture
 
-- [ ] `sampledata/fixtures/type1-tj.ppm` is the locked page, written by `UPDATE_FIXTURES=1` and read with the recorded SHA-256. Proof: `go test -count=1 ./internal/pdf -run TestType1Paint`.
+- [x] `sampledata/fixtures/type1-tj.ppm` is the locked page, written by `UPDATE_FIXTURES=1` and read with the recorded SHA-256. Proof: `go test -count=1 ./internal/pdf -run TestType1Paint`.
 
 ### 4.3 seac, Subrs, and a corrupt program
 
-- [ ] A `seac` glyph and a Subr-drawn glyph paint through the same path, and a corrupt program still returns `invalidfont` and leaves the page white. Proof: `go test -count=1 ./internal/pdf -run TestType1Paint`.
+- [x] A `seac` glyph and a Subr-drawn glyph paint through the same path, and a corrupt program still returns `invalidfont` and leaves the page white. Proof: `go test -count=1 ./internal/pdf -run TestType1Paint`.
 
 ## Phase 5: Extraction
 
 ### 5.1 Built-in encoding
 
-- [ ] A Type 1 page with no `/ToUnicode` and a symbolic built-in encoding extracts the AGL names, and a code with no name still uses the code-point fallback. Proof: `go test -count=1 ./internal/pdf -run TestType1Extract`.
+- [x] A Type 1 page with no `/ToUnicode` and a symbolic built-in encoding extracts the AGL names, and a code with no name still uses the code-point fallback. Proof: `go test -count=1 ./internal/pdf -run TestType1Extract`.
 
 ### 5.2 Public path
 
-- [ ] `File.ExtractText` and `spectreps text` on a fixture that embeds the synthetic Type 1 font print the expected lines. Proof: `go test -count=1 ./spectreps -run TestType1Extract`.
+- [x] `File.ExtractText` and `spectreps text` on a fixture that embeds the synthetic Type 1 font print the expected lines. Proof: `go test -count=1 ./spectreps -run TestType1Extract`.
 
 ## Phase 6: Docs and closure
 
 ### 6.1 Feature docs
 
-- [ ] `documentation/fonts.md`, `features.md`, `devices.md`, `covered-and-not-covered.md`, `copyright-and-rewrite.md`, `test.md`, and `folder-structure.md` state the Type 1 subset and keep bare CFF, CID-keyed CFF, Type 3, vertical writing, color, and variable fonts out. Proof: `grep -n 'Type 1' documentation/fonts.md documentation/covered-and-not-covered.md` exits 0.
+- [x] `documentation/fonts.md`, `features.md`, `devices.md`, `covered-and-not-covered.md`, `copyright-and-rewrite.md`, `test.md`, and `folder-structure.md` state the Type 1 subset and keep bare CFF, CID-keyed CFF, Type 3, vertical writing, color, and variable fonts out. Proof: `grep -n 'Type 1' documentation/fonts.md documentation/covered-and-not-covered.md` exits 0.
 
 ### 6.2 Lint
 
-- [ ] `make lint` passes. Outcome recorded on the day. Proof: `make lint`.
+- [~] `make lint` passes. Outcome recorded on the day. Proof: `make lint`. Lint outcome recorded in `plans/v0.0.4/v0.0.4-closure.md`: 59 golangci-lint findings are noted and stay unfixed for now.
 
 ### 6.3 Test
 
-- [ ] `make test` passes. Outcome recorded on the day. Proof: `make test`.
+- [x] `make test` passes. Outcome recorded on the day. Proof: `make test`.
 
 ## Phase 7: Bare CFF, stretch, gated
 
@@ -104,15 +104,15 @@ Start only after phases 1 to 6 land. If the tag budget runs out, the integrator 
 
 ### 7.1 CFF container
 
-- [ ] The reader parses CFF version 1: header, INDEXes, DICTs, charset, and encoding. CFF2 and FDSelect are refused, which keeps `/CIDFontType0C` out. Proof: `go test -count=1 ./internal/font -run TestCFFGlyph`.
+- [~] The reader parses CFF version 1: header, INDEXes, DICTs, charset, and encoding. CFF2 and FDSelect are refused, which keeps `/CIDFontType0C` out. Proof: `go test -count=1 ./internal/font -run TestCFFGlyph`. Returned to `plans/v0.0.1/10-deferred.md` 10.5.
 
 ### 7.2 Type 2 charstrings
 
-- [ ] The interpreter covers the Type 2 operator set, `hintmask` and `cntrmask`, `callsubr` and `callgsubr` with the 107, 1131, and 32768 bias, the flex operators, and `endchar` seac; width comes from `nominalWidthX`, `defaultWidthX`, and the leading operand. Proof: `go test -count=1 ./internal/font -run TestCFFGlyph`.
+- [~] The interpreter covers the Type 2 operator set, `hintmask` and `cntrmask`, `callsubr` and `callgsubr` with the 107, 1131, and 32768 bias, the flex operators, and `endchar` seac; width comes from `nominalWidthX`, `defaultWidthX`, and the leading operand. Proof: `go test -count=1 ./internal/font -run TestCFFGlyph`. Returned to `plans/v0.0.1/10-deferred.md` 10.5 as its own item.
 
 ### 7.3 Simple Type1C paints
 
-- [ ] `/FontFile3 /Subtype /Type1C` loads in a simple font and paints; `/CIDFontType0C` and `/CIDFontType0` stay `invalidfont`. Proof: `go test -count=1 ./internal/pdf -run TestCFFPaint`.
+- [~] `/FontFile3 /Subtype /Type1C` loads in a simple font and paints; `/CIDFontType0C` and `/CIDFontType0` stay `invalidfont`. Returned to `plans/v0.0.1/10-deferred.md` 10.5 as its own item. Returned to `plans/v0.0.1/10-deferred.md` 10.5 as its own item; the tag budget ran out.
 
 ## Fixtures and licensing
 
