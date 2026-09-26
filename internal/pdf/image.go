@@ -130,6 +130,11 @@ func (file *File) decodeImageValue(val Value, opName string) (image.Image, error
 	if !hasImageSubtype(val) {
 		return nil, NewError(opName, errUndefined)
 	}
+	normalized, err := normalizeImageChain(val)
+	if err != nil {
+		return nil, err
+	}
+	val = normalized
 	if imageMaskFlag(val) {
 		return file.decodeImageMaskValue(val, opName)
 	}
@@ -251,6 +256,51 @@ func imageParams(file *File, stream Value, opName string) (int, int, colorSpace,
 		return 0, 0, colorSpace{}, err
 	}
 	return width, height, space, nil
+}
+
+// normalizeImageChain rewrites a multi-filter image value so the codec path
+// sees one filter. The leading stages decode through the shared filter chain
+// with their parallel /DecodeParms entries, and the returned value carries the
+// final filter name, its /DecodeParms, and the decoded bytes. A single filter,
+// a one-name array, and no filter pass through unchanged. A non-name chain
+// item is undefined in Image.
+func normalizeImageChain(val Value) (Value, error) {
+	entry, ok := val.ValueEntry(keyFilter)
+	if !ok || entry.Kind != KindArray || len(entry.Array) < 2 {
+		return val, nil
+	}
+	for _, item := range entry.Array {
+		if item.Kind != KindName {
+			return NullVal(), NewError(opImage, errUndefined)
+		}
+	}
+	parms := NullVal()
+	if found, okParms := val.ValueEntry(keyParms); okParms {
+		parms = found
+	}
+	current := val.Stream
+	last := len(entry.Array) - 1
+	for idx := range last {
+		decoded, err := Decode(entry.Array[idx].Name, paramAt(parms, idx, true), current)
+		if err != nil {
+			return NullVal(), err
+		}
+		current = decoded
+	}
+	out := val
+	out.Stream = current
+	dict := make(map[string]Value, len(val.Dict)+1)
+	for key, item := range val.Dict {
+		dict[key] = item
+	}
+	dict[keyFilter] = NameVal(entry.Array[last].Name)
+	if finalParms := paramAt(parms, last, true); finalParms.Kind != KindNull {
+		dict[keyParms] = finalParms
+	} else {
+		delete(dict, keyParms)
+	}
+	out.Dict = dict
+	return out, nil
 }
 
 // imageFilterName returns the one filter name on an image stream.
@@ -691,6 +741,11 @@ func derefImageEntry(file *File, entry Value, opName string) (Value, error) {
 // sample. /Decode [1 0] inverts the mask. A marker of 1 paints; the caller
 // tints the plane with the current fill color.
 func (file *File) decodeImageMaskValue(val Value, opName string) (*image.Alpha, error) {
+	normalized, err := normalizeImageChain(val)
+	if err != nil {
+		return nil, err
+	}
+	val = normalized
 	if !imageMaskFlag(val) {
 		return nil, NewError(opName, errUndefined)
 	}

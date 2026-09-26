@@ -118,6 +118,33 @@ func TestImageXObjectUnknownFilter(t *testing.T) {
 	wantErr(t, err, "LZWDecode", errUndefined)
 }
 
+// TestImageXObjectFilterChain decodes a two-name chain: the leading
+// ASCIIHexDecode unwraps a DCT body, the final stage decodes the JPEG.
+func TestImageXObjectFilterChain(t *testing.T) {
+	t.Parallel()
+	dict := "/Subtype /Image /Width 8 /Height 8 /ColorSpace /DeviceRGB " +
+		"/BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode]"
+	file, num := oneImageDoc(t, dict, asciiHexBytes(jpegBytes(t)))
+	pic, err := file.DecodeImage(num)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pic.Bounds().Dx() != imageSide || pic.Bounds().Dy() != imageSide {
+		t.Fatalf("bounds %v", pic.Bounds())
+	}
+	checkNearColor(t, pic, color.RGBA{R: flatRed, G: flatGreen, B: flatBlue, A: opaqueAlpha})
+}
+
+// asciiHexBytes encodes raw as an ASCIIHexDecode body with the EOD marker.
+func asciiHexBytes(raw []byte) []byte {
+	const hexDigits = "0123456789ABCDEF"
+	out := make([]byte, 0, len(raw)*2+1)
+	for _, value := range raw {
+		out = append(out, hexDigits[value>>hexShift], hexDigits[value&0x0F])
+	}
+	return append(out, '>')
+}
+
 func TestImageXObjectUnsupported(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
