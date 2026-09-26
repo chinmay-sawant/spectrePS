@@ -138,7 +138,7 @@ func (file *File) loadFont(val Value) (*Font, error) {
 }
 
 func (file *File) loadSimple(out *Font, val, desc Value) error {
-	out.loadWidths(val, desc)
+	file.loadWidths(out, val, desc)
 	if err := file.loadEncoding(out, val, desc); err != nil {
 		return err
 	}
@@ -148,18 +148,61 @@ func (file *File) loadSimple(out *Font, val, desc Value) error {
 	return nil
 }
 
+// entryValue reads one dictionary entry and follows an indirect reference.
+// A missing entry and a broken reference both report false.
+func (file *File) entryValue(node Value, key string) (Value, bool) {
+	entry, ok := node.ValueEntry(key)
+	if !ok || entry.Kind == KindNull {
+		return NullVal(), false
+	}
+	resolved, err := file.deref(entry)
+	if err != nil {
+		return NullVal(), false
+	}
+	return resolved, true
+}
+
+// entryInt reads an integer dictionary entry, following an indirect
+// reference. A whole real is accepted.
+func (file *File) entryInt(node Value, key string) (int, bool) {
+	resolved, ok := file.entryValue(node, key)
+	if !ok {
+		return 0, false
+	}
+	return intOf(resolved)
+}
+
+// entryArray reads an array dictionary entry, following an indirect
+// reference.
+func (file *File) entryArray(node Value, key string) ([]Value, bool) {
+	resolved, ok := file.entryValue(node, key)
+	if !ok || resolved.Kind != KindArray {
+		return nil, false
+	}
+	return resolved.Array, true
+}
+
+// entryName reads a name dictionary entry, following an indirect reference.
+func (file *File) entryName(node Value, key string) (string, bool) {
+	resolved, ok := file.entryValue(node, key)
+	if !ok || resolved.Kind != KindName {
+		return "", false
+	}
+	return resolved.Name, true
+}
+
 // loadWidths reads /Widths, /FirstChar, and /MissingWidth.
-func (f *Font) loadWidths(val, desc Value) {
-	if width, ok := desc.IntEntry(keyMissingWidth); ok {
+func (file *File) loadWidths(f *Font, val, desc Value) {
+	if width, ok := file.entryInt(desc, keyMissingWidth); ok {
 		f.missingWidth = float64(width)
 	}
-	items, ok := val.ArrayEntry(keyWidths)
+	items, ok := file.entryArray(val, keyWidths)
 	if !ok {
 		return
 	}
 	f.hasWidths = true
 	f.widths = map[byte]float64{}
-	first, _ := val.IntEntry(keyFirstChar)
+	first, _ := file.entryInt(val, keyFirstChar)
 	for i, item := range items {
 		code := first + i
 		if code < 0 || code > 255 {
@@ -194,10 +237,10 @@ func (file *File) loadEncoding(out *Font, val, desc Value) error {
 	if entry.Kind != KindDict {
 		return NewError(opFont, errType)
 	}
-	if base, ok := entry.NameEntry(keyBaseEncoding); ok {
+	if base, ok := file.entryName(entry, keyBaseEncoding); ok {
 		out.encoding = namedEncoding(base)
 	}
-	diffs, ok := entry.ArrayEntry(keyDifferences)
+	diffs, ok := file.entryArray(entry, keyDifferences)
 	if !ok {
 		return nil
 	}
@@ -261,13 +304,19 @@ func applyDifferences(table *[256]string, diffs []Value) error {
 }
 
 // loadType0 reads the descendant font and returns the descriptor that holds
-// the program. Only CIDFontType2 loads, and only Identity-H has a code space.
+// the program. The /DescendantFonts entry may be an indirect array. A
+// descendant the reader cannot outline, such as a CIDFontType0, still loads
+// its /W and /DW advances; painting then reports invalidfont. Only
+// CIDFontType2 reads /CIDToGIDMap and a program.
 func (file *File) loadType0(out *Font, val Value) (Value, error) {
 	encName, _ := val.NameEntry(keyEncoding)
 	out.identity = encName == encodingIdentityH
-	kids, ok := val.ArrayEntry(keyDescendantFonts)
-	if !ok || len(kids) == 0 {
-		return NullVal(), NewError(opFont, errInvalidFont)
+	kids, err := file.descendantFonts(val)
+	if err != nil {
+		return NullVal(), err
+	}
+	if len(kids) == 0 {
+		return NullVal(), nil
 	}
 	kid, err := file.deref(kids[0])
 	if err != nil {
@@ -276,10 +325,10 @@ func (file *File) loadType0(out *Font, val Value) (Value, error) {
 	if kid.Kind != KindDict {
 		return NullVal(), NewError(opFont, errType)
 	}
+	file.loadCIDWidths(out, kid)
 	if subtype, _ := kid.NameEntry(keySubtype); subtype != subtypeCIDFontType2 {
 		return NullVal(), nil
 	}
-	out.loadCIDWidths(kid)
 	if err := file.loadCIDToGID(out, kid); err != nil {
 		return NullVal(), err
 	}
@@ -287,18 +336,37 @@ func (file *File) loadType0(out *Font, val Value) (Value, error) {
 	return file.deref(desc)
 }
 
-// loadCIDWidths reads /W and /DW. /W entries are "c [w...]" or "cFirst cLast w".
-func (f *Font) loadCIDWidths(kid Value) {
-	if width, ok := kid.IntEntry(keyDW); ok {
-		f.defaultWidth = float64(width)
+// descendantFonts returns the /DescendantFonts array of a Type0 font. The
+// entry may be a direct array or an indirect reference to one. A missing or
+// non-array entry returns no fonts, and the caller still loads the font
+// without an outline source.
+func (file *File) descendantFonts(val Value) ([]Value, error) {
+	entry, ok := val.ValueEntry(keyDescendantFonts)
+	if !ok || entry.Kind == KindNull {
+		return nil, nil
 	}
-	items, ok := kid.ArrayEntry(keyW)
+	resolved, err := file.deref(entry)
+	if err != nil {
+		return nil, err
+	}
+	if resolved.Kind != KindArray {
+		return nil, nil
+	}
+	return resolved.Array, nil
+}
+
+// loadCIDWidths reads /W and /DW. /W entries are "c [w...]" or "cFirst cLast w".
+func (file *File) loadCIDWidths(out *Font, kid Value) {
+	if width, ok := file.entryInt(kid, keyDW); ok {
+		out.defaultWidth = float64(width)
+	}
+	items, ok := file.entryArray(kid, keyW)
 	if !ok {
 		return
 	}
-	f.cidWidths = map[uint32]float64{}
+	out.cidWidths = map[uint32]float64{}
 	for idx := 0; idx < len(items); {
-		used := f.addCIDWidthEntry(items[idx:])
+		used := out.addCIDWidthEntry(items[idx:])
 		if used == 0 {
 			return
 		}
