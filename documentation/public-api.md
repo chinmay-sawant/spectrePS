@@ -92,7 +92,7 @@ type PDFFontInfo struct {
 }
 
 type PDFInfo struct {
-    Version   string
+    Version   string // higher of the PDF header and current catalog /Version
     Pages     int
     PageSizes []PDFPageSize
     Tagged    bool
@@ -190,7 +190,7 @@ A cancelled `ctx` returns `ctx.Err()` and no partial success. `nil` context is a
 
 `ImagePDF` calls `ImagePDFColor` with `ImageColorRGB`, so its bytes do not change. `ImageColorGray` writes one 8-bit sample per pixel with `/DeviceGray`. `ImageColorCMYK` writes four 8-bit samples per pixel with `/DeviceCMYK`. Both use `/Filter /FlateDecode`. The conversion formulas and the pure red example are in `documentation/devices.md`.
 
-`Document.Info` reads the document summary behind `spectreps info`. It resolves objects and writes nothing. `Version` is the `%PDF-` header version, `Pages` is the page tree leaf count, and `PageSizes` holds one resolved `/MediaBox` per page in points, inherited from the nearest `/Pages` ancestor and defaulting to 612 by 792. `Tagged` is the same flag as `Document.Tagged`. `Fonts` lists every in-use `/Type /Font` dictionary except CIDFont descendants, sorted by name, and `Embedded` is true when the descriptor carries `/FontFile`, `/FontFile2`, or `/FontFile3`, when the font is Type 3, or when every descendant of a Type0 font carries a program. `Images` counts the in-use image XObjects. A nil document returns a `JobError` with `Op` `Info` and `Msg` `rangecheck`; a malformed `/MediaBox` returns `Error: /syntaxerror in Info`. The command's lines are in `documentation/cli.md`.
+`Document.Info` reads the document summary behind `spectreps info`. It resolves objects and writes nothing. `Version` is the higher of the `%PDF-` header version and the current catalog's `/Version` name. `Pages` is the page tree leaf count, and `PageSizes` holds one resolved `/MediaBox` per page in points, inherited from the nearest `/Pages` ancestor and defaulting to 612 by 792. `Tagged` is the same flag as `Document.Tagged`. `Fonts` lists every in-use `/Type /Font` dictionary except CIDFont descendants, sorted by name, and `Embedded` is true when the descriptor carries `/FontFile`, `/FontFile2`, or `/FontFile3`, when the font is Type 3, or when every descendant of a Type0 font carries a program. `Images` counts the in-use image XObjects. A nil document returns a `JobError` with `Op` `Info` and `Msg` `rangecheck`; a malformed `/MediaBox` returns `Error: /syntaxerror in Info`. The command's lines are in `documentation/cli.md`.
 
 `DefaultRewriteOptions` turns stream compression on at level 0. The zero `RewriteOptions` leaves it off, so a test can ask for uncompressed streams on purpose. The CLI uses `DefaultRewriteOptions` when no flag is given.
 

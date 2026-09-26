@@ -8,6 +8,7 @@ Read these in order when changing behavior.
 | `copyright-and-rewrite.md` | Why Spectre is an independent implementation, and the copyright, trademark, and patent record. |
 | `covered-and-not-covered.md` | Which Ghostscript jobs Spectre takes, and which it leaves. |
 | `features.md` | The feature inventory: what works now, and what waits. |
+| `pdf-compatibility.md` | PDF version reporting, corpus refusals, and the boundary of the compliance checks. |
 | `test.md` | The tests those covered jobs need. |
 | `architecture.md` | Instance, front ends, graphics engine, device, library boundary. |
 | `folder-structure.md` | Where files go, and when a directory is allowed to appear. |
@@ -23,6 +24,8 @@ Read these in order when changing behavior.
 | `reference-proofs.md` | The Ghostscript and veraPDF cross-checks, run by hand and never in `make test`. |
 | `development.md` | Make targets and how a phase row gets checked. |
 
-The checklist that tracks the work is the newest program file under `plans/`, which is `plans/v0.0.5/00-program.md`. Its closure record is `plans/v0.0.5/v0.0.5-closure.md`, and the one list of work that still waits is `plans/v0.0.1/10-deferred.md`. The older program files stay as the record of what each tag did. `plans/v0.0.5/` is open and unlanded.
+`plans/v0.0.5/00-program.md` tracks benchmark work and the PDF compatibility
+corpus. The released tag remains v0.0.4. Deferred product work stays in
+`plans/v0.0.1/10-deferred.md`.
 
 The released tag is v0.0.4, which is the version the command reports. Documentation that says a feature "landed in v0.0.4" means it shipped with that tag.

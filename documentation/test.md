@@ -12,13 +12,14 @@ The v0.0.4 validation work adds a checked-in corpus at `sampledata/validation/` 
 
 `sampledata/validation/` holds one folder per feature area. Every file has a row in `sampledata/validation/manifest.tsv` with its source, pinned commit, license, SHA-256, byte count, feature, and expected verdict. The folders and what each one proves:
 
+- `compatibility/`: PDF header and catalog versions, plus real files the reader or painter currently refuses.
 - `postscript/`: repo-authored interpreter programs and the Apache-2.0 CUPS pages, for the interpreter and raster cases.
 - `paths/`: PDF path and paint operator files, including an image XObject page.
 - `structural/`: classic xref tables, xref streams, object streams, a page with no `/Resources`, and files that must refuse with a named xref error.
 - `images/`: Flate, DCT, CCITT G3 and G4, and JPEG2000 samples, including a filter chain and a named refusal.
 - `text/`: font-bearing PDFs for metrics, encodings, extraction, font subsetting, and the Type 1 machine, with the embedded font review in the corpus README.
 - `tagged/`: PDF/UA-2 structure samples with a `negative/` subfolder.
-- `pdfa/`: PDF/A-4 and PDF/A-4f samples with a `negative/` subfolder.
+- `pdfa/`: samples for all 11 PDF/A profiles, with a `negative/` subfolder for known failures. `make pdfa-corpus-check` reads the profile map and checks each veraPDF result.
 - `rewrite/`: the writer levels 0 to 5 over paths, containers, images, and tags.
 - `gs-argv/`: the bounded `gs` device mode over a PDF, a PostScript program, and a corpus PDF.
 - `refs/`: the repo-authored programs the phase 11 Ghostscript reference checks rasterize.
@@ -157,6 +158,8 @@ The external reference proofs in phase 11 stay outside `make test`. Their verdic
 ## PDF info
 
 - `spectreps info file.pdf` prints `PDF version`, `Pages`, one `Page N: width x height` line per page, `Tagged`, a `Fonts:` block or `Fonts: none`, and `Images`. Page sizes resolve `/MediaBox` through the page tree and default to 612 by 792 points.
+- The version test opens corpus files with every PDF header version from 1.0 through 1.7, plus 2.0. Three PDF Association files with 1.4 headers and incrementally updated catalogs report 1.6. The result is a version report, not a full version-conformance claim.
+- The compatibility corpus locks three known limits: a PDF 1.6 file with a PDF 2.0-only graphics-state entry returns `undefined in gs`, a Type 3 text page returns `invalidfont in Tj`, and an encrypted PDF returns `invalidaccess in Encrypt`.
 - The font block lists every in-use `/Type /Font` dictionary except CIDFont descendants, sorted by name, with `embedded=true` when `/FontDescriptor` carries `/FontFile`, `/FontFile2`, or `/FontFile3`. A Type 3 font counts as embedded, and a Type0 font needs every descendant to carry a program.
 - A trailer with `/Encrypt` is refused at open time with `Error: /invalidaccess in Encrypt`. A malformed `/MediaBox` fails with `Error: /syntaxerror in Info`.
 - `spectreps info` exits 0 on a clean read, 1 on a job error, 2 on a missing input or a bad flag, and 3 on an unreadable path. The command writes no file.
@@ -214,6 +217,7 @@ The external reference proofs in phase 11 stay outside `make test`. Their verdic
 - `RewritePDF` with a PDF/A mode returns bytes that open with the same page count. Two calls on the same document return equal buffers, and the output carries no `CreationDate`, `ModDate`, or `xmp:MetadataDate`.
 - `spectreps rewrite -pdfa 4|4f` writes the file and exits 0, a refusal exits 1 with `Error: /rule in PDFA`, and any other `-pdfa` value exits 2. A refusal writes no output file.
 - `make pdfa-check` runs `verapdf --flavour 4` over the PDFs under `sampledata/pdfa/`, excludes a `negative/` subfolder, prefers a local copy at `./verapdf/verapdf`, falls back to `verapdf` on PATH, and prints a skip when neither exists. The local copy is gitignored. veraPDF is a proof tool, not a dependency, and it stays out of `make test`. On 2026-09-25, veraPDF 1.30.2 reported `compliant="2" nonCompliant="0"` for `path-a4.pdf` and `compliant-a4.pdf`. The verdict is veraPDF's; the claim wording stays "profile preflight".
+- `make pdfa-corpus-check` uses `scripts/pdfa-profiles.tsv` to check one compliant sample for each of the 11 PDF/A profiles and three noncompliant controls. It reads veraPDF's JSON verdict and requires veraPDF to be installed. These samples do not expand Spectre's PDF/A writer beyond its existing PDF/A-4 modes.
 - `make pdfua2-check` runs `verapdf --flavour ua2 --format json` over the PDFs under `sampledata/pdfua2/`, uses the same local-copy preference and skip, and excludes `negative/`. On 2026-09-25, veraPDF 1.30.2 reported 1727 passed rules and 0 failed rules for `tagged-ua2.pdf` and `compliant-ua2.pdf`. The `negative/untagged.pdf` fixture fails `ua2-marked` by design.
 
 ## PDF/UA-2 tag generation

@@ -83,6 +83,7 @@ Page 1
 | [architecture.md](documentation/architecture.md) | Instance, front ends, graphics engine, library boundary. |
 | [covered-and-not-covered.md](documentation/covered-and-not-covered.md) | Which Ghostscript jobs Spectre takes. |
 | [features.md](documentation/features.md) | The feature inventory: what works now, and what waits. |
+| [pdf-compatibility.md](documentation/pdf-compatibility.md) | PDF versions, unsupported corpus files, and compliance checks. |
 | [test.md](documentation/test.md) | The tests each job needs. |
 | [fonts.md](documentation/fonts.md) | Font metrics, encodings, and the text scope. |
 | [gs-argv-grammar.md](documentation/gs-argv-grammar.md) | The `spectreps gs` allowlist. |
@@ -91,7 +92,7 @@ Page 1
 | [reference-proofs.md](documentation/reference-proofs.md) | The Ghostscript and veraPDF cross-checks, run by hand. |
 | [development.md](documentation/development.md) | Make targets and the phase checklist rule. |
 
-The work ledgers are [plans/v0.0.1/00-program.md](plans/v0.0.1/00-program.md), [plans/v0.0.2/00-program.md](plans/v0.0.2/00-program.md), [plans/v0.0.3/00-program.md](plans/v0.0.3/00-program.md), and [plans/v0.0.4/00-program.md](plans/v0.0.4/00-program.md). The release notes are [plans/v0.0.1/PR/release-v0.0.1.md](plans/v0.0.1/PR/release-v0.0.1.md), [plans/v0.0.2/PR/release-v0.0.2.md](plans/v0.0.2/PR/release-v0.0.2.md), [plans/v0.0.3/PR/release-v0.0.3.md](plans/v0.0.3/PR/release-v0.0.3.md), and [plans/v0.0.4/PR/release-v0.0.4.md](plans/v0.0.4/PR/release-v0.0.4.md), and deferred work is [plans/v0.0.1/10-deferred.md](plans/v0.0.1/10-deferred.md).
+The released work ledgers are [v0.0.1](plans/v0.0.1/00-program.md), [v0.0.2](plans/v0.0.2/00-program.md), [v0.0.3](plans/v0.0.3/00-program.md), and [v0.0.4](plans/v0.0.4/00-program.md). The open [v0.0.5 development ledger](plans/v0.0.5/00-program.md) covers benchmark work and [PDF compatibility](plans/v0.0.5/6-pdf-compatibility.md). Release notes stay under each released tag's `PR/` folder, and [deferred work](plans/v0.0.1/10-deferred.md) has its own ledger.
 
 ## License
 

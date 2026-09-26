@@ -7,7 +7,8 @@ Tests read the manifest through `internal/validation` and are named
 `TestValidation<Area>`, so
 `go test -count=1 ./... -run TestValidation` runs the group.
 
-The folders follow the feature areas: `postscript/` for interpreter programs,
+The folders follow the feature areas: `compatibility/` for version and known
+feature gaps, `postscript/` for interpreter programs,
 `paths/` for path and paint operators, `structural/` for xref and object
 streams, `images/` for Flate, DCT, CCITT, and JPEG2000 decode, `text/` for
 fonts and extraction, `tagged/` and `pdfa/` for the profile preflights,
@@ -40,6 +41,12 @@ Tests read the table with `validation.Load()`, then call
 `Row.Refused()`, and `Row.RefuseError()` classify a row. `CheckLicenses` and
 `CheckExcluded` enforce the gate below.
 
+`scripts/pdfa-profiles.tsv` maps the PDF/A files to their veraPDF profiles and
+expected compliance verdicts. Run `make pdfa-corpus-check` to check all 11
+profiles plus three noncompliant controls. A manifest `struct` verdict only
+means Spectre opened the page structure. The PDF/A verdict comes from
+veraPDF's JSON report.
+
 ## Expected text
 
 `text/expected/` holds one golden extraction per `text/` row, named after the
@@ -61,15 +68,24 @@ update.
 
 Every row, sorted by path. The source label names the repository and the
 upstream path; the commit is the full commit the URL pins.
+The PDF Association licenses the PDF files in `pdf-differences` under CC BY 4.0.
+Its Apache 2.0 license covers source code, not those PDFs.
 
 | Path | Source | Commit | License | SHA-256 | Feature | Expect |
 | --- | --- | --- | --- | --- | --- | --- |
-| `external/fax-decode-parms.pdf` | qpdf/qpdf qpdf/qtest/qpdf/fax-decode-parms.pdf | `54d6053` | Apache-2.0 | `6cf3a42a79698eb9a6649d51a78647dccb05dd88dbc0b384b843618963f8755e` | CCITT fax DecodeParms, 1.5 MiB | `paint` |
+| `compatibility/encryption/encrypted-40-bit-R3.pdf` | qpdf/qpdf qpdf/qtest/qpdf/encrypted-40-bit-R3.pdf | `54d6053` | Apache-2.0 | `221b17165d2c807500165c7890f6f8f355b6cf62ecdb430d9bae71cec17b8369` | PDF 1.4 encrypted input, reader refuses at open | `refuse:invalidaccess in Encrypt` |
+| `compatibility/fonts/Type3Test.pdf` | pdf-association/pdf-differences Type3WordSpacing/Type3Test.pdf | `907fe96` | CC-BY-4.0 | `8ac40dc49d40af8b5a50b442ced56b8db962c961a779a0284cd3a6207adc0bb7` | PDF 1.7 Type 3 font, reader opens but painter refuses | `refuse:invalidfont in Tj` |
+| `compatibility/versions/PDF-versions1.pdf` | pdf-association/pdf-differences PDF-version/PDF-versions1.pdf | `907fe96` | CC-BY-4.0 | `94b949fc0fcd6e81f19a262f5d49be684e6db135ee4bac7b67f22625edac31b7` | PDF 1.4 header upgraded to 1.6 by incremental catalog generation | `struct` |
+| `compatibility/versions/PDF-versions2.pdf` | pdf-association/pdf-differences PDF-version/PDF-versions2.pdf | `907fe96` | CC-BY-4.0 | `e03ffc599c0b47c66b98650742eec25f5f36ee37bc53ac9c08fb5e15f5d3d65e` | PDF 1.4 header upgraded to 1.6 by replacement catalog | `struct` |
+| `compatibility/versions/PDF-versions3.pdf` | pdf-association/pdf-differences PDF-version/PDF-versions3.pdf | `907fe96` | CC-BY-4.0 | `690ec13b9c407aa351eb863ffe712bf42432ecb47e0e9b27f322e65ae3d4e287` | PDF 1.6 effective version with a PDF 2.0-only graphics-state feature | `refuse:undefined in gs` |
+| `compatibility/versions/asciihexdecode.pdf` | mozilla/pdf.js test/pdfs/asciihexdecode.pdf | `d52fdf4` | Apache-2.0 | `17cc92aa58ec48f75b01c6b6e7f8c8bade0a36f7295d0f833a16bafae854dc79` | PDF 1.0 header and ASCIIHexDecode page | `struct` |
+| `compatibility/versions/poppler-67295-0.pdf` | mozilla/pdf.js test/pdfs/poppler-67295-0.pdf | `d52fdf4` | Apache-2.0 | `f513f3b4b4a1cb223622e91f03701c0f396e6eed47121fb8cba5c0e515357d3b` | PDF 1.2 header and page structure | `struct` |
+| `external/fax-decode-parms.pdf` | qpdf/qpdf qpdf/qtest/qpdf/fax-decode-parms.pdf | `54d6053` | Apache-2.0 | `6cf3a42a79698eb9a6649d51a78647dccb05dd88dbc0b384b843618963f8755e` | CCITT fax DecodeParms, 1.5 MiB | `refuse:invalidfont in Tj` |
 | `external/pdf20examples/simple-pdf-2.0.pdf` | pdf-association/pdf20examples Simple PDF 2.0 file.pdf | `c20f2c1` | CC-BY-SA-4.0 | `296d2a0b2ce19b606f29265694f194a754fbc61783982b5b8d730e8637482236` | PDF 2.0 container | `struct` |
 | `gs-argv/gs-argv-input.pdf` | repo-authored | `repo` | repo-authored | `24a87a42435a40f8852dd0693a9eba916e9f1f0306418c494330c3be2329c822` | gs argv two-page red and green input | `paint` |
 | `gs-argv/page.ps` | repo-authored | `repo` | repo-authored | `7a22578e24030868d84d0316bd8e1915a048918e142426c77e29c3600cd3e1b3` | gs argv PostScript input | `paint` |
 | `gs-argv/path.pdf` | repo-authored | `repo` | repo-authored | `9ade703482ba3755932d5bec7e0dfdb737fb37146e0abfc691281ba7491a0bfd` | gs argv PDF input | `paint` |
-| `images/UnknownFilter-xrefstm.pdf` | pdf-association/pdf-differences UnknownFilter/UnknownFilter-xrefstm.pdf | `907fe96` | Apache-2.0 | `2c153eb1a00e2583d03e939b116b623fe78b70be18e4308347cfcf5f2c4c3c81` | xref stream with an unknown filter | `refuse:undefined in Predictor` |
+| `images/UnknownFilter-xrefstm.pdf` | pdf-association/pdf-differences UnknownFilter/UnknownFilter-xrefstm.pdf | `907fe96` | CC-BY-4.0 | `2c153eb1a00e2583d03e939b116b623fe78b70be18e4308347cfcf5f2c4c3c81` | xref stream with an unknown filter | `refuse:undefined in XXXDecode` |
 | `images/bug_jpx.pdf` | mozilla/pdf.js test/pdfs/bug_jpx.pdf | `d52fdf4` | Apache-2.0 | `4010d808557a72278368c05518367735ed186cbdd04974b8506275f9ac40f999` | JPEG2000 image in an object stream | `paint` |
 | `images/ccitt_EndOfBlock_false.pdf` | mozilla/pdf.js test/pdfs/ccitt_EndOfBlock_false.pdf | `d52fdf4` | Apache-2.0 | `f2289b94e7e3f05f9e37754c399d3f525edf9444fb32c3279959cf64b575fe62` | CCITT G4 image with EndOfBlock false | `paint` |
 | `images/cmykjpeg.pdf` | mozilla/pdf.js test/pdfs/cmykjpeg.pdf | `d52fdf4` | Apache-2.0 | `659d6b19912f63db988b0b26b9bde0e6d8100667ef162051a4a84ea8e5b90272` | CMYK DCT image inside marked content | `paint` |
@@ -83,6 +99,16 @@ upstream path; the commit is the full commit the URL pins.
 | `pdfa/negative/4-6-1-8-t01-fail-a.pdf` | veraPDF/veraPDF-corpus PDF_A-4/6.1 File structure/6.1.8 Indirect objects/veraPDF test suite 6-1-8-t01-fail-a.pdf | `bb75f4f` | CC-BY-4.0 | `950c46606fa7532198ca5f208936da17f54a4c680ef11edc8152089484baa084` | PDF/A-4 indirect objects, fail a | `struct` |
 | `pdfa/negative/4-6-1-8-t01-fail-b.pdf` | veraPDF/veraPDF-corpus PDF_A-4/6.1 File structure/6.1.8 Indirect objects/veraPDF test suite 6-1-8-t01-fail-b.pdf | `bb75f4f` | CC-BY-4.0 | `5485315331a04633bb2fc0a3297610ddfb197bf2b8811507222e3d9a73f1a8f4` | PDF/A-4 indirect objects, fail b | `struct` |
 | `pdfa/negative/4f-6-7-3-t01-fail-a.pdf` | veraPDF/veraPDF-corpus PDF_A-4f/6.7 Metadata/6.7.3 Version identification/veraPDF test suite 6-7-3-t01-fail-a.pdf | `bb75f4f` | CC-BY-4.0 | `ab9e5e4244ced310c6168465c8e2725b2c03007e15b23f406be5d9cf30c614da` | PDF/A-4f version identification, fail a | `struct` |
+| `pdfa/profiles/1a.pdf` | veraPDF/veraPDF-corpus PDF_A-1a/6.8 Logical structure/6.8.2 Tagged PDF/6.8.2.2 Mark information dictionary/veraPDF test suite 6-8-2-2-t01-pass-a.pdf | `bb75f4f` | CC-BY-4.0 | `b5d194c0e6d91119f0f99354f3d1078877406b695cecf75fb0b5cb51b18c14fd` | PDF/A-1a compliant sample; veraPDF test suite 6-8-2-2-t01-pass-a.pdf | `struct` |
+| `pdfa/profiles/1b.pdf` | veraPDF/veraPDF-corpus PDF_A-1b/6.2 Graphics/6.2.3.3 Uncalibrated color space/veraPDF test suite 6-2-3-3-t03-pass-d.pdf | `bb75f4f` | CC-BY-4.0 | `2a5ba3a4c85ace9bbece0543634ba5447eb51276572424c1a9715d5b758a12a2` | PDF/A-1b compliant sample; veraPDF test suite 6-2-3-3-t03-pass-d.pdf | `struct` |
+| `pdfa/profiles/2a.pdf` | veraPDF/veraPDF-corpus PDF_A-2a/6.7 Logical structure/6.7.3 Artefacts/6.7.3.4 Structure types/veraPDF test suite 6-7-3-4-t01-pass-a.pdf | `bb75f4f` | CC-BY-4.0 | `e715e6cd3061bf660d4b15043ea045637c13f3470bf03fff693e721656b63b0f` | PDF/A-2a compliant sample; veraPDF test suite 6-7-3-4-t01-pass-a.pdf | `struct` |
+| `pdfa/profiles/2b.pdf` | veraPDF/veraPDF-corpus PDF_A-2b/6.1 File structure/6.1.13 Implementation limits/veraPDF test suite 6-1-13-t09-pass-b.pdf | `bb75f4f` | CC-BY-4.0 | `5297b152a1a0cbc348084a58c90ceb6b24d6ac20093708a0b87769758fc379ae` | PDF/A-2b compliant sample; veraPDF test suite 6-1-13-t09-pass-b.pdf | `struct` |
+| `pdfa/profiles/2u.pdf` | veraPDF/veraPDF-corpus PDF_A-2u/6.2 Graphics/6.2.11 Fonts/6.2.11.7 Unicode character maps/6.2.11.7.2 Level A and Level U conformance/veraPDF test suite 6-2-11-7-2-t01-pass-f.pdf | `bb75f4f` | CC-BY-4.0 | `c77ba0dd71e43823e1fb6a087889a1774ae8c3ea127a8e6861b7b0180eaf2c94` | PDF/A-2u compliant sample; veraPDF test suite 6-2-11-7-2-t01-pass-f.pdf | `struct` |
+| `pdfa/profiles/3a.pdf` | veraPDF/veraPDF-regression-tests PDF_A-3a/1224/test-fixed.pdf | `6eb6c68` | CC0-1.0 | `4f2f7f75e453c0dd8de0c372f151eb414317990658a378c0c0baf95231bd45c2` | PDF/A-3a compliant regression sample; embedded Latin Modern font uses GFL | `struct` |
+| `pdfa/profiles/3b.pdf` | veraPDF/veraPDF-corpus PDF_A-3b/6.8 Embedded files/veraPDF test suite 6-8-t02-pass-a.pdf | `bb75f4f` | CC-BY-4.0 | `5b8fdee7090f0a0fb7266d10dd0f6f1f8a37d286e3c06b1aa82e01d6d4f0a8a4` | PDF/A-3b compliant sample; veraPDF test suite 6-8-t02-pass-a.pdf | `struct` |
+| `pdfa/profiles/3u.pdf` | cvfile/cv integrations/tests/fixtures/unicode.cv | `539b12d` | Apache-2.0 | `fe6328e694d37c0b3005d61e40ec6edf826dbc9acda00b7467de0df6469ca1e4` | PDF/A-3u compliant sample; upstream .cv is a PDF file | `struct` |
+| `pdfa/profiles/4.pdf` | veraPDF/veraPDF-corpus PDF_A-4/6.2 Graphics/6.2.4 Colour spaces/6.2.4.3 Uncalibrated -Device colour spaces/veraPDF test suite 6-2-4-3-t01-pass-e.pdf | `bb75f4f` | CC-BY-4.0 | `b2b40e60a6a8e2a52cedd2ad520357057a7b48565ed98b566d08bf2d55d8eb46` | PDF/A-4 compliant sample; veraPDF test suite 6-2-4-3-t01-pass-e.pdf | `struct` |
+| `pdfa/profiles/4e.pdf` | veraPDF/veraPDF-corpus PDF_A-4e/6.7 Metadata/6.7.3 Version identification/veraPDF test suite 6-7-3-t01-pass-a.pdf | `bb75f4f` | CC-BY-4.0 | `6b1c9c0fc488abd2fd6a34daf846dd882c45350cf9ee165c6313dc5b7d57a08e` | PDF/A-4e compliant sample; veraPDF test suite 6-7-3-t01-pass-a.pdf | `struct` |
 | `postscript/cups-smiley.ps` | OpenPrinting/cups data/smiley.ps | `e72b702` | Apache-2.0 | `1d3bf1f1f3f6426591e696660ff1cbf2f70d1307721e0cb999926cc80c977bb9` | CUPS smiley page, arc and rectstroke | `paint` |
 | `postscript/cups-testfile.ps` | OpenPrinting/cups examples/testfile.ps | `e72b702` | Apache-2.0 | `858d4c9ac31128ae7ef634d3d8b4a870d2ba34d76ca9357e9104c85bc5f99523` | CUPS test page, graphics; standard 14 text needs an outline program | `refuse:invalidfont` |
 | `postscript/curve.ps` | repo-authored | `repo` | repo-authored | `62c8bde9c35c2f91f42743fcd916d136db4b5b9761b096ec0032108b9eb0d763` | PostScript cubic curve | `paint` |

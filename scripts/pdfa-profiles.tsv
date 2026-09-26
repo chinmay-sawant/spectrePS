@@ -1,0 +1,15 @@
+path	profile	compliant
+pdfa/profiles/1a.pdf	1a	true
+pdfa/profiles/1b.pdf	1b	true
+pdfa/profiles/2a.pdf	2a	true
+pdfa/profiles/2b.pdf	2b	true
+pdfa/profiles/2u.pdf	2u	true
+pdfa/profiles/3a.pdf	3a	true
+pdfa/profiles/3b.pdf	3b	true
+pdfa/profiles/3u.pdf	3u	true
+pdfa/profiles/4.pdf	4	true
+pdfa/profiles/4e.pdf	4e	true
+pdfa/4f-6-7-3-t01-pass-a.pdf	4f	true
+pdfa/negative/4-6-1-8-t01-fail-a.pdf	4	false
+pdfa/negative/4-6-1-8-t01-fail-b.pdf	4	false
+pdfa/negative/4f-6-7-3-t01-fail-a.pdf	4f	false

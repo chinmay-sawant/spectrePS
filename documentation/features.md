@@ -42,7 +42,7 @@ The features marked "landed in v0.0.4" below shipped with that tag. They are the
 - `spectreps inkcov` prints `Page N` and three RGB occupancy fractions with five digits after the point. It is not a CMYK report and it does not end in `CMYK OK`. These are occupancy fractions, not `ink_cov` weighted amounts.
 - `spectreps ink_cov` prints `Page N` and three weighted RGB amounts as percentages with five digits after the point. The amount is the mean channel complement over `Width * Height`, the model in `documentation/devices.md`. The channels are the pixmap channels, so the line ends in `RGB`.
 - All three commands accept `-w`, `-h`, and `-r` and share the `-pages` range. They rasterize a PDF input one selected page at a time.
-- `spectreps info file.pdf` reads the document and writes a summary to stdout: the PDF version, the page count and each page `/MediaBox` in points, the tagged flag, fonts with an embedded flag, and the image count. It writes no file. An encrypted trailer is refused with `Error: /invalidaccess in Encrypt`. The line shape is in `documentation/cli.md`.
+- `spectreps info file.pdf` reads the document and writes a summary to stdout: the effective PDF version from the header and current catalog, the page count and each page `/MediaBox` in points, the tagged flag, fonts with an embedded flag, and the image count. It writes no file. An encrypted trailer is refused with `Error: /invalidaccess in Encrypt`. The line shape is in `documentation/cli.md`.
 
 ## PDF output
 
@@ -64,7 +64,7 @@ The features marked "landed in v0.0.4" below shipped with that tag. They are the
 
 ## Validation corpus
 
-- `sampledata/validation/` is the validation corpus. One folder per feature area holds real PDF and PostScript files: `postscript/`, `paths/`, `structural/`, `images/`, `text/`, `tagged/`, `pdfa/`, `rewrite/`, `gs-argv/`, and `refs/`. Every file has a row in `sampledata/validation/manifest.tsv` with its source, pinned commit, license, SHA-256, byte count, feature, and expected verdict.
+- `sampledata/validation/` is the validation corpus. One folder per feature area holds real PDF and PostScript files: `compatibility/`, `postscript/`, `paths/`, `structural/`, `images/`, `text/`, `tagged/`, `pdfa/`, `rewrite/`, `gs-argv/`, and `refs/`. Every file has a row in `sampledata/validation/manifest.tsv` with its source, pinned commit, license, SHA-256, byte count, feature, and expected verdict.
 - The corpus has two tiers. The committed tier is checked in and holds files at or under 1 MiB. The external tier lives under the gitignored `sampledata/validation/external/`, holds larger files and whole suites, and `go run internal/validation/gen.go -fetch-external` fetches it after checking every SHA-256. Tests skip the external tier when it is absent, and no test opens a network connection.
 - Every corpus test is named `TestValidation<Area>`, so `go test -count=1 ./... -run TestValidation` runs the group under `make test`. `sampledata/validation/traceability.tsv` maps every case in `documentation/test.md` to the test that proves it.
 
