@@ -166,7 +166,8 @@ func (run *runner) takeTextSetup(opName string) (bool, error) {
 	}
 }
 
-// takeTextSpacing dispatches the text state parameters.
+// takeTextSpacing dispatches the text state parameters. Tr is handled by
+// setRenderMode because extraction and the recorder treat it differently.
 func (run *runner) takeTextSpacing(opName string) (bool, error) {
 	switch opName {
 	case "Tc":
@@ -179,6 +180,8 @@ func (run *runner) takeTextSpacing(opName string) (bool, error) {
 		return true, run.setTextLeading()
 	case "Ts":
 		return true, run.setTextRise()
+	case "Tr":
+		return true, run.setRenderMode()
 	default:
 		return false, nil
 	}
@@ -318,6 +321,21 @@ func (run *runner) setTextRise() error {
 	}
 	run.text.rise = value
 	return nil
+}
+
+// setRenderMode reads the text rendering mode. Extraction and the pixmap
+// painter keep the fill mode, so a run with no marker or with a glyph marker
+// accepts the operand. A marker without glyph support, such as the level 0
+// recorder, refuses the mode instead of dropping it, the same policy as the
+// other state effects it cannot reproduce.
+func (run *runner) setRenderMode() error {
+	const opName = "Tr"
+	if activeSink(run.marker) {
+		if _, ok := run.marker.(glyphMarker); !ok {
+			return NewError(opName, errUndefined)
+		}
+	}
+	return run.discardNum(opName)
 }
 
 func (run *runner) showString() error {
@@ -574,15 +592,16 @@ func (run *runner) advance(fnt *Font, code uint32) float64 {
 
 // paintGlyph blends one glyph into the marker. A marker without glyph support
 // refuses text with undefined. A font without an outline source is
-// invalidfont, the policy in documentation/fonts.md.
+// invalidfont, the policy in documentation/fonts.md, and a mask over the
+// glyph side or pixel cap is limitcheck.
 func (run *runner) paintGlyph(opName string, fnt *Font, code uint32) error {
 	painter, ok := run.marker.(glyphMarker)
 	if !ok {
 		return NewError(opName, errUndefined)
 	}
-	mask, origin, ok := run.glyphMask(fnt, code)
-	if !ok {
-		return NewError(opName, errInvalidFont)
+	mask, origin, err := run.glyphMask(opName, fnt, code)
+	if err != nil {
+		return err
 	}
 	if len(run.clips) > 0 {
 		if target, ok := run.marker.(graphics.ClipMarker); ok {
@@ -595,17 +614,18 @@ func (run *runner) paintGlyph(opName string, fnt *Font, code uint32) error {
 }
 
 // glyphMask rasterizes one glyph outline to device coverage. The origin is
-// the device pixel of the mask's bottom-left corner. The bool is false when
-// the font has no outline for the code.
-func (run *runner) glyphMask(fnt *Font, code uint32) (*image.Alpha, image.Point, bool) {
+// the device pixel of the mask's bottom-left corner. A font without an
+// outline for the code returns invalidfont; a mask over the 20,000 side or
+// 40,000,000 pixel cap returns limitcheck before any allocation.
+func (run *runner) glyphMask(opName string, fnt *Font, code uint32) (*image.Alpha, image.Point, error) {
 	segments, ok := fnt.outline(code)
 	if !ok {
-		return nil, image.Point{X: 0, Y: 0}, false
+		return nil, image.Point{X: 0, Y: 0}, NewError(opName, errInvalidFont)
 	}
 	mat := run.glyphMatrix()
 	minX, minY, maxX, maxY, hasBox := glyphBounds(mat, segments)
 	if !hasBox {
-		return nil, image.Point{X: 0, Y: 0}, true
+		return nil, image.Point{X: 0, Y: 0}, nil
 	}
 	left := int(math.Floor(minX)) - glyphPadding
 	bottom := int(math.Floor(minY)) - glyphPadding
@@ -614,17 +634,17 @@ func (run *runner) glyphMask(fnt *Font, code uint32) (*image.Alpha, image.Point,
 	width := right - left
 	height := top - bottom
 	if width <= 0 || height <= 0 {
-		return nil, image.Point{X: 0, Y: 0}, true
+		return nil, image.Point{X: 0, Y: 0}, nil
 	}
 	if width > maxGlyphSide || height > maxGlyphSide || width*height > maxGlyphPixels {
-		return nil, image.Point{X: 0, Y: 0}, false
+		return nil, image.Point{X: 0, Y: 0}, NewError(opName, errLimit)
 	}
 	mask := image.NewAlpha(image.Rect(0, 0, width, height))
 	raster := vector.NewRasterizer(width, height)
 	raster.DrawOp = draw.Src
 	rasterizeGlyph(raster, mat, segments, left, top)
 	raster.Draw(mask, mask.Bounds(), image.NewUniform(color.Alpha{A: maxAlpha}), image.Point{X: 0, Y: 0})
-	return mask, image.Pt(left, bottom), true
+	return mask, image.Pt(left, bottom), nil
 }
 
 // glyphMatrix maps glyph space, 1/1000 em with Y up, to device pixels.

@@ -82,6 +82,8 @@ Bare CFF is also out of this ledger: `/FontFile3` with `/Subtype /Type1C` or `/S
 
 Identity-H only. The target is a `/Type0` font with `/Encoding /Identity-H`, two-byte character codes, a CIDFontType2 descendant, and a `/CIDToGIDMap`. Advances come from the descendant `/W` array and `/DW`, or from the embedded sfnt program.
 
+A descendant the reader cannot outline still loads. A CIDFontType0 descendant, or one whose program is missing or unreadable, contributes its `/W` and `/DW` advances and its `/ToUnicode`; painting one of its glyphs returns `invalidfont`. The loader follows an indirect `/DescendantFonts` array, an indirect `/W` array, and an indirect `/Widths` or `/Differences` array, so a font is not rejected for using an indirect object where the spec allows one.
+
 Out of scope: predefined CMaps other than Identity-H, embedded CMap streams, Identity-V, vertical metrics with `/W2`, and CIDFontType0 CFF CID fonts.
 
 ## Embedding and subsetting
