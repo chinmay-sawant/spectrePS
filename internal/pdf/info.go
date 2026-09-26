@@ -264,10 +264,15 @@ func (file *File) fontEmbedded(val Value) bool {
 		return true
 	}
 	if subtype == subtypeType0 {
-		items, ok := val.ArrayEntry(keyDescendantFonts)
-		if !ok || len(items) == 0 {
+		entry, ok := val.ValueEntry(keyDescendantFonts)
+		if !ok || entry.Kind == KindNull {
 			return false
 		}
+		array, err := file.deref(entry)
+		if err != nil || array.Kind != KindArray || len(array.Array) == 0 {
+			return false
+		}
+		items := array.Array
 		for _, item := range items {
 			descendant, err := file.deref(item)
 			if err != nil || descendant.Kind != KindDict || !file.descriptorEmbedded(descendant) {

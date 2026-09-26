@@ -322,11 +322,15 @@ func (writer *subsetWriter) descriptor(node Value) (Value, bool) {
 
 // descendant resolves the first /DescendantFonts dictionary of a Type0 font.
 func (writer *subsetWriter) descendant(node Value) (Value, bool) {
-	kids, ok := node.ArrayEntry(keyDescendantFonts)
-	if !ok || len(kids) == 0 {
+	entry, ok := node.ValueEntry(keyDescendantFonts)
+	if !ok || entry.Kind == KindNull {
 		return NullVal(), false
 	}
-	kid, err := writer.file.deref(kids[0])
+	array, err := writer.file.deref(entry)
+	if err != nil || array.Kind != KindArray || len(array.Array) == 0 {
+		return NullVal(), false
+	}
+	kid, err := writer.file.deref(array.Array[0])
 	if err != nil || kid.Kind != KindDict {
 		return NullVal(), false
 	}
