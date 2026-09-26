@@ -22,6 +22,11 @@ const (
 	keyIndex    = "Index"
 	keyObjCount = "N"
 	keyFirst    = "First"
+	keyPrev     = "Prev"
+
+	// xrefChainLimit caps one trailer /Prev chain. A longer chain is a loop
+	// or a broken producer, so it is syntaxerror in xref.
+	xrefChainLimit = 64
 
 	wordXRef    = "xref"
 	wordTrailer = "trailer"
@@ -119,7 +124,58 @@ func startOffset(src []byte) (int, error) {
 	return 0, NewError(opXRef, errSyntax)
 }
 
+// readCrossRef reads the xref section at offset and follows the trailer /Prev
+// chain, newest section first. The newest section wins per object number and an
+// older section fills only the gaps. Trailer entries inherit from older
+// sections the same way, except /Prev and /Size, which describe one section.
+// A /Prev cycle, a chain past xrefChainLimit, a malformed /Prev, and a missing
+// section are syntaxerror in xref. A single section keeps the map the section
+// reader returned, so the common path adds no allocation.
 func readCrossRef(src []byte, offset int) (map[int]XEntry, Value, error) {
+	entries := map[int]XEntry(nil)
+	trailer := NullVal()
+	var seen map[int]bool
+	at := offset
+	for section := 0; ; section++ {
+		if section >= xrefChainLimit {
+			return nil, NullVal(), NewError(opXRef, errSyntax)
+		}
+		if at < 0 || at >= len(src) || seen[at] {
+			return nil, NullVal(), NewError(opXRef, errSyntax)
+		}
+		sectionEntries, sectionTrailer, err := readXRefSection(src, at)
+		if err != nil {
+			return nil, NullVal(), err
+		}
+		if entries == nil {
+			entries = sectionEntries
+			trailer = sectionTrailer
+		} else {
+			fillEntries(entries, sectionEntries)
+			trailer = mergeTrailer(trailer, sectionTrailer)
+		}
+		prev, hasPrev, err := prevOffset(sectionTrailer)
+		if err != nil {
+			return nil, NullVal(), err
+		}
+		if !hasPrev {
+			break
+		}
+		if seen == nil {
+			seen = map[int]bool{at: true}
+		} else {
+			seen[at] = true
+		}
+		at = prev
+	}
+	delete(trailer.Dict, keyPrev)
+	return entries, trailer, nil
+}
+
+// readXRefSection reads one classic table or xref stream section. The returned
+// value is the section trailer: the table's trailer dictionary or the xref
+// stream dictionary. The name matches the section that fails.
+func readXRefSection(src []byte, offset int) (map[int]XEntry, Value, error) {
 	if offset < 0 || offset >= len(src) {
 		return nil, NullVal(), NewError(opXRef, errSyntax)
 	}
@@ -131,6 +187,46 @@ func readCrossRef(src []byte, offset int) (map[int]XEntry, Value, error) {
 		return readClassic(src, pos)
 	}
 	return readStreamXRef(src, pos)
+}
+
+// fillEntries adds rows from an older section. The newest section wins per
+// object number, so a number that already has a row keeps it.
+func fillEntries(entries, older map[int]XEntry) {
+	for num, entry := range older {
+		if _, ok := entries[num]; !ok {
+			entries[num] = entry
+		}
+	}
+}
+
+// mergeTrailer folds an older section trailer under the newest one. The newest
+// section wins per key and an older section fills only the keys the merged
+// trailer lacks. /Prev and /Size describe one section, so an older one never
+// supplies them.
+func mergeTrailer(newest, older Value) Value {
+	for key, entry := range older.Dict {
+		if key == keyPrev || key == keySize {
+			continue
+		}
+		if _, ok := newest.Dict[key]; !ok {
+			newest.Dict[key] = entry
+		}
+	}
+	return newest
+}
+
+// prevOffset reads one /Prev chain link. A missing /Prev ends the chain. A
+// present /Prev that is not a non-negative integer is syntaxerror in xref.
+func prevOffset(trailer Value) (int, bool, error) {
+	entry, ok := trailer.ValueEntry(keyPrev)
+	if !ok || entry.Kind == KindNull {
+		return 0, false, nil
+	}
+	number, ok := intOf(entry)
+	if !ok || number < 0 {
+		return 0, false, NewError(opXRef, errSyntax)
+	}
+	return number, true, nil
 }
 
 func readClassic(src []byte, offset int) (map[int]XEntry, Value, error) {

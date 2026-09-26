@@ -356,6 +356,9 @@ Phase 06 reads:
 
 - A header starting with `%PDF-`.
 - Classic xref tables, then xref streams in a following row of the same phase.
+- A trailer `/Prev` chain is walked newest section first. The newest section
+  wins per object number, an older section fills the gaps, and a `/Prev` cycle
+  or a chain longer than 64 sections is `syntaxerror in xref`.
 - Content streams through the stream filters in this file: Flate, LZW, ASCII85, ASCIIHex, and RunLength, with predictors 2 and 10 through 15.
 - Page content operators `m l c h re S s f f* B B* b b* W W* n q Q cm w J j M i ri gs RG rg g G Do BT ET Tf Td TD Tm T* Tc Tw Tz TL Ts Tj TJ ' " BMC BDC EMC MP DP BX EX`.
 
