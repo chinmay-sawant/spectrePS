@@ -1,6 +1,9 @@
 # Auto-detect text files and normalize line endings where appropriate
 * text=auto
 
+# Golden extraction text carries the CRLF extraction output verbatim
+sampledata/validation/text/expected/** -text
+
 # Force LF for shell scripts and Makefiles
 *.sh text eol=lf
 Makefile text eol=lf

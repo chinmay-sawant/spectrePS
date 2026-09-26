@@ -115,6 +115,14 @@ func TestValidationFlagSurface(t *testing.T) {
 	}
 }
 
+// validationImport is one internal/cli import path and whether a test file
+// lists it. A test file may read the corpus manifest through
+// internal/validation; production files may not.
+type validationImport struct {
+	path string
+	test bool
+}
+
 // TestValidationNoProcess walks every non-ignored Go file in the module and
 // fails on an os/exec, net, or cgo import, then checks that internal/cli
 // imports only the public package, the standard library, and x/image/tiff.
@@ -122,7 +130,7 @@ func TestValidationNoProcess(t *testing.T) {
 	root := filepath.Join("..", "..")
 	cliDir := filepath.Clean(filepath.Join(root, "internal", "cli"))
 	fset := token.NewFileSet()
-	var cliImports []string
+	var cliImports []validationImport
 
 	walkErr := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -143,7 +151,10 @@ func TestValidationNoProcess(t *testing.T) {
 		}
 		validationCheckProcessImports(t, path, imports)
 		if filepath.Dir(path) == cliDir {
-			cliImports = append(cliImports, imports...)
+			testFile := strings.HasSuffix(entry.Name(), "_test.go")
+			for _, importPath := range imports {
+				cliImports = append(cliImports, validationImport{path: importPath, test: testFile})
+			}
 		}
 		return nil
 	})
@@ -197,27 +208,31 @@ func validationCheckProcessImports(t *testing.T, path string, imports []string) 
 }
 
 // validationCheckCLIImports fails on an internal/cli import outside the public
-// package, the standard library, and x/image/tiff.
-func validationCheckCLIImports(t *testing.T, cliImports []string) {
+// package, the standard library, and x/image/tiff. A test file may also read
+// the validation corpus manifest through internal/validation.
+func validationCheckCLIImports(t *testing.T, cliImports []validationImport) {
 	t.Helper()
 	const (
-		publicPkg = "github.com/chinmay-sawant/spectrePS/spectreps"
-		tiffPkg   = "golang.org/x/image/tiff"
+		publicPkg     = "github.com/chinmay-sawant/spectrePS/spectreps"
+		tiffPkg       = "golang.org/x/image/tiff"
+		validationPkg = "github.com/chinmay-sawant/spectrePS/internal/validation"
 	)
 	seen := make(map[string]bool, len(cliImports))
-	for _, importPath := range cliImports {
-		first := importPath
-		if slash := strings.IndexByte(importPath, '/'); slash >= 0 {
-			first = importPath[:slash]
+	for _, imp := range cliImports {
+		first := imp.path
+		if slash := strings.IndexByte(imp.path, '/'); slash >= 0 {
+			first = imp.path[:slash]
 		}
 		if !strings.Contains(first, ".") {
 			continue
 		}
-		if importPath != publicPkg && importPath != tiffPkg {
+		allowed := imp.path == publicPkg || imp.path == tiffPkg ||
+			(imp.test && imp.path == validationPkg)
+		if !allowed {
 			t.Errorf("internal/cli imports %q, want only %s, the standard library, or %s",
-				importPath, publicPkg, tiffPkg)
+				imp.path, publicPkg, tiffPkg)
 		}
-		seen[importPath] = true
+		seen[imp.path] = true
 	}
 	if !seen[publicPkg] {
 		t.Fatalf("internal/cli does not import %s", publicPkg)

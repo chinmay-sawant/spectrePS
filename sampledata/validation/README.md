@@ -40,6 +40,23 @@ Tests read the table with `validation.Load()`, then call
 `Row.Refused()`, and `Row.RefuseError()` classify a row. `CheckLicenses` and
 `CheckExcluded` enforce the gate below.
 
+## Expected text
+
+`text/expected/` holds one golden extraction per `text/` row, named after the
+input without its extension plus `.txt`. The text corpus run writes them with
+`UPDATE_FIXTURES=1` and compares them on every later run:
+
+```sh
+UPDATE_FIXTURES=1 go test -count=1 ./internal/cli -run TestValidationCorpusText
+```
+
+The files carry the CRLF line ends of the extraction verbatim, so
+`.gitattributes` marks the folder `-text`. They are test output, not corpus
+inputs, so they carry no manifest row. A row in the `corpusPending` table in
+`internal/cli/validation_corpus_run_test.go` is skipped until its owning fix
+lands; its golden is written when the integrator removes the row and reruns the
+update.
+
 ## Provenance
 
 Every row, sorted by path. The source label names the repository and the
@@ -221,3 +238,8 @@ measures these differences, and the phase files own the fixes:
   precedence belongs to the Phase 5 rows.
 - Every `text/` row is `struct`. `spectreps text` and `spectreps raster` on a
   tagged source need marked content reading, which the tags phase adds.
+
+`internal/cli/validation_corpus_run_test.go` carries the single `corpusPending`
+table with the measured failure per row and the fix worktree that owns it. The
+integrator enables a row by deleting it from that table and rerunning the
+corpus tests.
