@@ -17,8 +17,9 @@ type (
 	}
 
 	lexer struct {
-		src []byte
-		pos int
+		src           []byte
+		pos           int
+		resolveLength lengthResolver
 	}
 
 	hexAcc struct {

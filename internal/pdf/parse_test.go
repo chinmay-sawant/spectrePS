@@ -212,12 +212,17 @@ func mustFailIndirect(t *testing.T, src []byte) *Error {
 	return wantSyntax(t, err)
 }
 
+// parseIndirectLength locks the fallback for an indirect /Length that has no
+// resolver: the reader scans for endstream instead of refusing the stream.
 func parseIndirectLength(t *testing.T) {
 	t.Helper()
 	src := []byte("1 0 obj\n<< /Length 2 0 R >>\nstream\nhello\nendstream\nendobj")
-	job := mustFailIndirect(t, src)
-	if job.Op != wordLength {
-		t.Fatalf("Op = %q, want %s", job.Op, wordLength)
+	_, _, val, next, err := ParseIndirect(src, 0)
+	if err != nil {
+		t.Fatalf("ParseIndirect: %v", err)
+	}
+	if next != len(src) || val.Kind != KindStream || !bytes.Equal(val.Stream, []byte("hello")) {
+		t.Fatalf("stream %q next %d kind %d", val.Stream, next, val.Kind)
 	}
 }
 
