@@ -174,18 +174,26 @@ func (file *File) pageSizes() ([]PageSize, error) {
 	}
 	inherited := PageSize{Width: infoDefaultPageWidth, Height: infoDefaultPageHeight}
 	sizes := []PageSize{}
-	if err := file.walkPageSizes(pages, map[int]bool{}, inherited, &sizes); err != nil {
+	if err := file.walkPageSizes(pages, map[int]bool{}, map[int]bool{}, inherited, &sizes); err != nil {
 		return nil, err
 	}
 	return sizes, nil
 }
 
-func (file *File) walkPageSizes(val Value, seen map[int]bool, inherited PageSize, sizes *[]PageSize) error {
+// walkPageSizes walks the page tree for /MediaBox. It takes the same two
+// visited sets as walkRef: seen skips a node a second /Kids entry names, and
+// path still refuses a cycle.
+func (file *File) walkPageSizes(val Value, seen, path map[int]bool, inherited PageSize, sizes *[]PageSize) error {
 	if val.Kind == KindRef {
-		if seen[val.RefNum] {
+		if path[val.RefNum] {
 			return NewError(opInfo, errSyntax)
 		}
+		if seen[val.RefNum] {
+			return nil
+		}
 		seen[val.RefNum] = true
+		path[val.RefNum] = true
+		defer delete(path, val.RefNum)
 	}
 	node, err := file.deref(val)
 	if err != nil {
@@ -198,16 +206,23 @@ func (file *File) walkPageSizes(val Value, seen map[int]bool, inherited PageSize
 	if err != nil {
 		return err
 	}
-	if typeName, _ := node.NameEntry(keyType); typeName == keyPage {
+	typeName, _ := node.NameEntry(keyType)
+	if typeName == keyPage {
 		*sizes = append(*sizes, size)
 		return nil
 	}
-	kids, hasKids := node.ArrayEntry(keyKids)
+	kids, hasKids, err := file.kidArray(node)
+	if err != nil {
+		return err
+	}
 	if !hasKids {
-		return NewError(opInfo, errSyntax)
+		if typeName != keyPages {
+			return NewError(opInfo, errSyntax)
+		}
+		return nil
 	}
 	for _, kid := range kids {
-		if err := file.walkPageSizes(kid, seen, size, sizes); err != nil {
+		if err := file.walkPageSizes(kid, seen, path, size, sizes); err != nil {
 			return err
 		}
 	}
