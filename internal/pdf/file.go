@@ -396,6 +396,20 @@ func (file *File) resolve(num int) (Value, error) {
 	return val, nil
 }
 
+// readable returns the object at num, and false when the xref row for num names
+// an object the file does not carry. Such a row is a dead object number: the
+// offset is out of range, the bytes there are not that object, or the row never
+// existed. A survey that walks every in-use number uses this, so one dead number
+// does not veto the whole survey. A reference to the same number still fails,
+// because deref and every content path resolve strictly.
+func (file *File) readable(num int) (Value, bool) {
+	val, err := file.resolve(num)
+	if err != nil {
+		return NullVal(), false
+	}
+	return val, true
+}
+
 func (file *File) deref(val Value) (Value, error) {
 	if val.Kind != KindRef {
 		return val, nil

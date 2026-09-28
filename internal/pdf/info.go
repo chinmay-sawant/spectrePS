@@ -58,10 +58,7 @@ func (file *File) Info() (InfoReport, error) {
 	if err != nil {
 		return InfoReport{}, err
 	}
-	fonts, err := file.fontInfos()
-	if err != nil {
-		return InfoReport{}, err
-	}
+	fonts := file.fontInfos()
 	images, err := file.ImageObjectNums()
 	if err != nil {
 		return InfoReport{}, err
@@ -258,15 +255,17 @@ func numberValueOf(val Value) (float64, bool) {
 }
 
 // fontInfos lists every in-use /Type /Font dictionary except CIDFont
-// descendants, sorted by name and embedded flag.
-func (file *File) fontInfos() ([]FontInfo, error) {
+// descendants, sorted by name and embedded flag. An in-use row whose object the
+// file does not carry is a dead object number, not a font, so the survey steps
+// over it; a page that references the same number still fails to resolve.
+func (file *File) fontInfos() []FontInfo {
 	unique := map[FontInfo]bool{}
 	for _, num := range file.inUseNums() {
-		info, ok, err := file.fontInfo(num)
-		if err != nil {
-			return nil, err
+		val, ok := file.readable(num)
+		if !ok {
+			continue
 		}
-		if ok {
+		if info, isFont := file.fontInfoValue(val); isFont {
 			unique[info] = true
 		}
 	}
@@ -286,26 +285,22 @@ func (file *File) fontInfos() ([]FontInfo, error) {
 		}
 		return -1
 	})
-	return fonts, nil
+	return fonts
 }
 
-// fontInfo resolves one object into a font row. The bool is false for any
-// object that is not a top-level font dictionary.
-func (file *File) fontInfo(num int) (FontInfo, bool, error) {
-	val, ok, err := file.ObjectValue(num)
-	if err != nil {
-		return FontInfo{Name: "", Embedded: false}, false, err
-	}
-	if !ok || val.Kind != KindDict {
-		return FontInfo{Name: "", Embedded: false}, false, nil
+// fontInfoValue reads a font row from an already-resolved object. The bool is
+// false for any object that is not a top-level font dictionary.
+func (file *File) fontInfoValue(val Value) (FontInfo, bool) {
+	if val.Kind != KindDict {
+		return FontInfo{Name: "", Embedded: false}, false
 	}
 	if typeName, ok := val.NameEntry(keyType); !ok || typeName != keyFont {
-		return FontInfo{Name: "", Embedded: false}, false, nil
+		return FontInfo{Name: "", Embedded: false}, false
 	}
 	if subtype, ok := val.NameEntry(keySubtype); ok && isCIDFont(subtype) {
-		return FontInfo{Name: "", Embedded: false}, false, nil
+		return FontInfo{Name: "", Embedded: false}, false
 	}
-	return FontInfo{Name: fontName(val), Embedded: file.fontEmbedded(val)}, true, nil
+	return FontInfo{Name: fontName(val), Embedded: file.fontEmbedded(val)}, true
 }
 
 func isCIDFont(subtype string) bool {

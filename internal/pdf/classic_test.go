@@ -67,6 +67,15 @@ func (doc *pdfDoc) object(body string) int {
 	return num
 }
 
+// deadRow grows the xref to cover num and points that row at wrongAt, so the
+// row is in use but names no object the file carries. num must not exist.
+func (doc *pdfDoc) deadRow(num, wrongAt int) {
+	for len(doc.offsets) <= num {
+		doc.offsets = append(doc.offsets, -1)
+	}
+	doc.offsets[num] = doc.offsets[wrongAt]
+}
+
 func (doc *pdfDoc) put(num int, body string) {
 	for len(doc.offsets) <= num {
 		doc.offsets = append(doc.offsets, -1)
