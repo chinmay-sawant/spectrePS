@@ -6,7 +6,7 @@ NPROC := $(shell nproc 2>/dev/null || echo 1)
 # BENCH_PKGS is the packages with Benchmark functions. make test never runs them.
 BENCH_PKGS := ./spectreps ./internal/cli ./internal/engine ./internal/font ./internal/pdf ./internal/pdfa ./internal/pdfout ./internal/graphics ./internal/ps ./internal/psout ./internal/tag
 
-.PHONY: help build test lint fmt tidy clean size-check pdfa-check pdfa-corpus-check pdfua2-check refs-gs-check validation-run bench bench-profile bench-check
+.PHONY: help build test lint fmt tidy clean size-check pdfa-check pdfa-corpus-check pdfua2-check refs-gs-check validation-run validation-fetch validation-verify validation-report bench bench-profile bench-check
 
 help:
 	@printf '%s\n' \
@@ -19,6 +19,9 @@ help:
 		'pdfua2-check run veraPDF over sampledata/pdfua2 when installed' \
 		'refs-gs-check run the Ghostscript reference proofs when gs is installed' \
 		'validation-run run the acceptance harness over sampledata/validation' \
+		'validation-fetch  fetch the live tier into sampledata/validation/external' \
+		'validation-verify check the live tier cache against the manifest, no network' \
+		'validation-report write the per-area pass rate to profiles/' \
 		'bench       run the benchmarks with -count=3 into profiles/bench.txt' \
 		'bench-profile write CPU and memory profiles per package under profiles/' \
 		'bench-check run the benchmarks with -count=5 and compare with benchstat' \
@@ -99,6 +102,25 @@ refs-gs-check:
 # never runs under make test or make lint.
 validation-run:
 	bash scripts/validation-run.sh
+
+# validation-fetch populates the live tier. The corpus files under
+# sampledata/validation/external are gitignored; the manifest rows that pin
+# them are committed, so the reviewable record is in git even though the bytes
+# are not. It needs the network, which is why it is never part of make test.
+validation-fetch:
+	go run internal/validation/gen.go -fetch-external
+
+# validation-verify checks the cache against the manifest without touching the
+# network. Use it to confirm a machine is provisioned.
+validation-verify:
+	go run internal/validation/gen.go -fetch-external -verify-only
+
+# validation-report runs the corpus tests with -json and writes a per-area and
+# per-basis pass rate to profiles/. A report whose baseline share grows is a
+# report saying the corpus stopped being a specification, so the basis column
+# is the scoreboard, not the pass rate.
+validation-report:
+	bash scripts/validation-report.sh
 
 # bench runs every benchmark three times and records the output. Benchmark
 # timing is machine-specific and never gates make test.

@@ -6,11 +6,19 @@ coverage.out
 /vendor/
 # veraPDF is a local proof tool, not a dependency.
 /verapdf/
-# sampledata/validation/external/ holds fetched, non-committed corpus files.
-/sampledata/validation/external/
+# sampledata/validation/external/ is the live tier. It holds fetched,
+# non-committed corpus files. The manifest rows that pin those bytes are
+# committed, so the reviewable record lives in git even though the files do
+# not. The folder's own README is committed so the tier is documented in the
+# tree rather than only on a machine that has fetched it.
+/sampledata/validation/external/*
+!/sampledata/validation/external/README.md
 # profiles/ holds the generated benchmark, CPU, and memory output. It is not
 # source and make bench writes it.
 /profiles/
 # references/ holds the phase 11 Ghostscript proof output. It is not source.
 /references/
 .DS_Store
+
+# .notes/ holds working notes that are not deliverables.
+/.notes/

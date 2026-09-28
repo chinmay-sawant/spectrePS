@@ -278,3 +278,16 @@ test.md-file-byte-compare	compare files first byte	TestCompareFiles	live
 test.md-file-byte-compare	compare files length	TestCompareFiles	live
 test.md-file-byte-compare	compare bytes CLI	TestCompareBytes	live
 test.md-benchmarks	benchmarks do not gate make test	make test	proof
+test.md-validation-corpus	handbuilt well-formedness cases survive	TestValidationCorpusHandbuilt	live
+test.md-validation-corpus	live tier real-world archival files survive	TestValidationCorpusArchival	live
+test.md-validation-corpus	survive check accepts a recovery and rejects every fault	TestValidationCorpusSurviveVerdict	live
+test.md-validation-corpus	fault signals cannot match a refusal	TestValidationCorpusFaultSignalsKeepTheirShape	live
+test.md-manifest	manifest label axes and vocabularies	TestValidationManifestLabelAxes	live
+test.md-manifest	survive takes no error text	TestValidationManifestSurviveRequiresNoErrorText	live
+test.md-manifest	a baseline row is not a gate	TestValidationManifestGated	live
+test.md-manifest	the corpus reaches the live tier and both bases	TestValidationManifestCoverage	live
+test.md-validation-corpus	per-area pass rate	make validation-report	proof
+test.md-validation-corpus	fetch the live tier	make validation-fetch	proof
+test.md-validation-corpus	check the live cache, no network	make validation-verify	proof
+test.md-validation-corpus	the 2,691 fetched conformance rows run	TestValidationCorpusPDFA	live
+test.md-validation-corpus	the per-area report joins mangled subtest names	make validation-report	proof

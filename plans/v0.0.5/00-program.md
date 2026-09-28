@@ -29,6 +29,7 @@ Phase 1 benchmarks the graphics device paths the current suite barely touches. `
 | `5-baseline-and-budget.md` | 5 | Re-record the baseline and set the new allocation ceilings. |
 | `6-pdf-compatibility.md` | 6 | Add pinned PDF version and feature-gap samples; report the effective PDF version. |
 | `7-pdfa-profiles.md` | 7 | Check representative samples for every PDF/A profile with veraPDF. |
+| `8-real-world-corpus.md` | 8 | Real-world corpus: label axes, committed additions, the live tier, fonts and PostScript, the veraPDF gate, and fuzz seeds. |
 | `v0.0.5-closure.md` | gate | `make lint` and `make test` transcripts for the merged tree. |
 
 ## What the benchmark phases exclude
