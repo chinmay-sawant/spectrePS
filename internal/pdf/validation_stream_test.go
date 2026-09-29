@@ -92,16 +92,27 @@ func TestValidationStreamLengthWrong(t *testing.T) {
 }
 
 // TestValidationStreamEndstreamMissing locks the error contract: a stream with
-// no endstream is syntaxerror in endstream, and a missing /Length is
-// syntaxerror in Length.
+// no endstream is syntaxerror in endstream, whether or not /Length is present.
+// A missing /Length with an endstream reads to the keyword, the same scan an
+// unresolved or disagreeing length uses, because the body still has a declared
+// end. Ghostscript reads such a body to endstream and reports "stream Length
+// incorrect", and the batch2 corpus carries files with that repair.
 func TestValidationStreamEndstreamMissing(t *testing.T) {
 	job := mustFailIndirect(t, []byte("1 0 obj\n<< /Length 5 >>\nstream\nhello\nendobj"))
 	if job.Op != wordEndStream {
 		t.Fatalf("Op = %q, want %s", job.Op, wordEndStream)
 	}
-	job = mustFailIndirect(t, []byte("1 0 obj\n<< >>\nstream\nhello\nendstream\nendobj"))
-	if job.Op != wordLength {
-		t.Fatalf("Op = %q, want %s", job.Op, wordLength)
+	job = mustFailIndirect(t, []byte("1 0 obj\n<< >>\nstream\nhello\nendobj"))
+	if job.Op != wordEndStream {
+		t.Fatalf("Op = %q, want %s", job.Op, wordEndStream)
+	}
+	src := []byte("1 0 obj\n<< >>\nstream\nhello\nendstream\nendobj")
+	_, _, val, next, err := ParseIndirect(src, 0)
+	if err != nil {
+		t.Fatalf("ParseIndirect: %v", err)
+	}
+	if next != len(src) || val.Kind != KindStream || !bytes.Equal(val.Stream, []byte("hello")) {
+		t.Fatalf("stream %q next %d kind %d", val.Stream, next, val.Kind)
 	}
 }
 

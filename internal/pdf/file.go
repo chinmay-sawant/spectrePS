@@ -75,19 +75,9 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 	if !bytes.Contains(src, []byte(pdfHeader)) {
 		return nil, NewError(opPDF, errSyntax)
 	}
-	offset, err := startOffset(src)
+	entries, trailer, err := readTable(src)
 	if err != nil {
 		return nil, err
-	}
-	entries, trailer, err := readCrossRef(src, offset)
-	if err != nil {
-		// The offset named no cross-reference section. Rebuild the table from
-		// the file's own object headers before reporting the failure.
-		recovered, recoveredTrailer, ok := recoverCrossRef(src, offset)
-		if !ok {
-			return nil, err
-		}
-		entries, trailer = recovered, recoveredTrailer
 	}
 	if encrypted(trailer) {
 		return nil, NewError(opEncrypt, errAccess)
@@ -115,6 +105,39 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 		file.resources[i] = leaf.resources
 	}
 	return file, nil
+}
+
+// readTable returns the cross-reference table and trailer for src. The section
+// at startxref wins when it reads. A missing or unreadable startxref, and a
+// startxref that names no section, leave the file's own trailer and object
+// headers as the only source, so recoverCrossRef rebuilds from the beginning
+// of the file; Ghostscript reports "Cannot find a 'startxref' anywhere in the
+// file" and rebuilds the same way. The original failure is reported when the
+// rebuild produces no trailer /Root.
+func readTable(src []byte) (map[int]XEntry, Value, error) {
+	offset, startErr := startOffset(src)
+	var (
+		entries map[int]XEntry
+		trailer Value
+		readErr error
+	)
+	if startErr == nil {
+		entries, trailer, readErr = readCrossRef(src, offset)
+	}
+	if startErr == nil && readErr == nil {
+		return entries, trailer, nil
+	}
+	recoverAt := -1
+	if startErr == nil {
+		recoverAt = offset
+	}
+	if recovered, recoveredTrailer, ok := recoverCrossRef(src, recoverAt); ok {
+		return recovered, recoveredTrailer, nil
+	}
+	if startErr != nil {
+		return nil, NullVal(), startErr
+	}
+	return nil, NullVal(), readErr
 }
 
 func startOffset(src []byte) (int, error) {
@@ -396,15 +419,14 @@ func (file *File) resolve(num int) (Value, error) {
 	}
 	entry, ok := file.xref[num]
 	if !ok || !entry.InUse {
-		// An object stream carries its own index of the objects inside it, so a
-		// number with no xref row but a place in a stream is still in the file.
-		// A row that exists and is free is a deliberate deletion, and stays a
-		// failure.
-		if !ok {
-			if value, found := file.packedObject(num); found {
-				file.cache[num] = value
-				return value, nil
-			}
+		// A row the table never wrote, or wrote free, does not have to mean
+		// the object is gone: the file's own object headers are the source a
+		// rebuild uses, and a number they carry still resolves. A number the
+		// file does not carry anywhere stays a dead dependency, which
+		// TestReferencedDeadXrefRowStillFails pins.
+		if value, err := file.recoveredObject(num); err == nil {
+			file.cache[num] = value
+			return value, nil
 		}
 		return NullVal(), NewError(opXRef, errSyntax)
 	}
@@ -466,9 +488,12 @@ func (file *File) deref(val Value) (Value, error) {
 		return val, nil
 	}
 	entry, ok := file.xref[val.RefNum]
-	if !ok || !entry.InUse || !genOK(entry, val.RefGen) {
+	if ok && entry.InUse && !genOK(entry, val.RefGen) {
 		return NullVal(), NewError(opXRef, errSyntax)
 	}
+	// An absent or free row is not decided here: resolve falls back to the
+	// file's own object headers, which is where a rebuild would find the
+	// object. A generation that disagrees with an in-use row is still dead.
 	return file.resolve(val.RefNum)
 }
 
@@ -497,17 +522,6 @@ func (file *File) packedEntry(num int) (XEntry, bool) {
 	}
 	entry, ok := file.packed[num]
 	return entry, ok
-}
-
-// packedObject reads object num out of the object stream that carries it. It is
-// the fallback for a number the xref never indexed but an object stream holds.
-func (file *File) packedObject(num int) (Value, bool) {
-	row, ok := file.packedEntry(num)
-	if !ok {
-		return NullVal(), false
-	}
-	value, ok := file.objStreamValue(num, row.StreamNum, row.StreamIdx)
-	return value, ok
 }
 
 // indexObjectStreams reads every object stream the header scan found and maps

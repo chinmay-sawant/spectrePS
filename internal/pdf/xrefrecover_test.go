@@ -339,3 +339,189 @@ func TestRecoverInvalidContentRow(t *testing.T) {
 		t.Fatalf("content %q, want empty", got)
 	}
 }
+
+// TestRecoverMissingStartxref locks the rebuild for a file whose startxref is
+// absent or unreadable. Ghostscript reports "Cannot find a 'startxref' anywhere
+// in the file", repairs from the object headers, and so does the reader. The
+// original startxref error is only reported when the rebuild finds no trailer
+// /Root, which recoverNoRoot pins.
+func TestRecoverMissingStartxref(t *testing.T) {
+	t.Parallel()
+	file := mustOpen(t, missingStartxrefDoc(t))
+	if file.PageCount() != 1 {
+		t.Fatalf("pages %d", file.PageCount())
+	}
+	got, err := file.Content(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, []byte(lineMarks)) {
+		t.Fatalf("content %q", got)
+	}
+}
+
+// missingStartxrefDoc writes a complete document whose final bytes carry the
+// trailer and %%EOF with no startxref keyword at all.
+func missingStartxrefDoc(t *testing.T) []byte {
+	t.Helper()
+	var body bytes.Buffer
+	body.WriteString("%PDF-1.4\n")
+	body.WriteString("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n")
+	body.WriteString("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n")
+	body.WriteString("3 0 obj\n<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>\nendobj\n")
+	body.WriteString("4 0 obj\n" + streamBody("", []byte(lineMarks)) + "\nendobj\n")
+	body.WriteString("trailer\n<< /Size 5 /Root 1 0 R >>\n%%EOF\n")
+	return body.Bytes()
+}
+
+// TestRecoverFreeRowFromHeader locks the row-level half of the rebuild for a
+// free row: the table says the object is free, but the file carries its header,
+// and Ghostscript's rebuild would use it. The dead-row contract is unchanged:
+// a number the file does not carry anywhere still fails.
+func TestRecoverFreeRowFromHeader(t *testing.T) {
+	t.Parallel()
+	file := mustOpen(t, freeContentRow(t))
+	got, err := file.Content(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, []byte(lineMarks)) {
+		t.Fatalf("content %q", got)
+	}
+}
+
+// freeContentRow writes the content object with a normal header and the row
+// for it marked free.
+func freeContentRow(t *testing.T) []byte {
+	t.Helper()
+	doc := newDoc()
+	doc.object("<< /Type /Catalog /Pages 2 0 R >>")
+	doc.object("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+	doc.object("<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>")
+	contentNum := doc.object(streamBody("", []byte(lineMarks)))
+	xrefAt := doc.buf.Len()
+	size := len(doc.offsets)
+	fmt.Fprintf(&doc.buf, "xref\n0 %d\n", size)
+	for num := range size {
+		inUse := num != 0 && num != contentNum
+		doc.buf.WriteString(xrefLine(doc.offsets[num], 0, inUse))
+	}
+	fmt.Fprintf(&doc.buf, "trailer\n<< /Size %d /Root 1 0 R >>\n", size)
+	fmt.Fprintf(&doc.buf, "startxref\n%d\n%%%%EOF\n", xrefAt)
+	return doc.buf.Bytes()
+}
+
+// TestRecoverGridDamagedRow locks the grid reader: a classic table whose rows
+// sit on the specification's 20-byte grid is usable when only one field is
+// damaged, and the damaged row falls back to the object header. A table whose
+// rows do not line up keeps its refusal, which recoverDamagedTable pins.
+func TestRecoverGridDamagedRow(t *testing.T) {
+	t.Parallel()
+	file := mustOpen(t, gridDamagedRow(t))
+	got, err := file.Content(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, []byte(lineMarks)) {
+		t.Fatalf("content %q", got)
+	}
+}
+
+// gridDamagedRow writes a normal table, then breaks one digit of the content
+// object's offset without moving any row off its 20-byte slot.
+func gridDamagedRow(t *testing.T) []byte {
+	t.Helper()
+	doc := newDoc()
+	doc.object("<< /Type /Catalog /Pages 2 0 R >>")
+	doc.object("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+	doc.object("<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>")
+	contentNum := doc.object(streamBody("", []byte(lineMarks)))
+	xrefAt := doc.buf.Len()
+	size := len(doc.offsets)
+	fmt.Fprintf(&doc.buf, "xref\n0 %d\n", size)
+	doc.buf.WriteString(xrefLine(0, freeGen, false))
+	for num := 1; num < size; num++ {
+		doc.buf.WriteString(xrefLine(doc.offsets[num], 0, true))
+	}
+	fmt.Fprintf(&doc.buf, "trailer\n<< /Size %d /Root 1 0 R >>\n", size)
+	fmt.Fprintf(&doc.buf, "startxref\n%d\n%%%%EOF\n", xrefAt)
+	src := doc.buf.Bytes()
+	row := bytes.Index(src[xrefAt:], []byte(fmt.Sprintf("%010d", doc.offsets[contentNum])))
+	if row < 0 {
+		t.Fatal("no row for the content object")
+	}
+	src[xrefAt+row] = 'x'
+	return src
+}
+
+// TestRecoverMissingEndobj locks the missing-endobj repair: an object whose
+// value is complete and whose endobj is not there, in front of the next object
+// header, is the shape Ghostscript reports as "Encountered 'obj' while
+// expecting 'endobj'" and reads as complete.
+func TestRecoverMissingEndobj(t *testing.T) {
+	t.Parallel()
+	file := mustOpen(t, missingEndobjDoc(t))
+	if file.PageCount() != 1 {
+		t.Fatalf("pages %d", file.PageCount())
+	}
+	got, err := file.Content(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, []byte(lineMarks)) {
+		t.Fatalf("content %q", got)
+	}
+	raw, ok := file.RawObject(1)
+	if !ok || string(raw) != "<< /Type /Catalog /Pages 2 0 R >>" {
+		t.Fatalf("RawObject(1) = %q ok %v, want the catalog body without junk", raw, ok)
+	}
+}
+
+// missingEndobjDoc writes object 1 without its endobj; the next object header
+// follows immediately.
+func missingEndobjDoc(t *testing.T) []byte {
+	t.Helper()
+	var body bytes.Buffer
+	body.WriteString("%PDF-1.4\n")
+	catalogAt := body.Len()
+	body.WriteString("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\n")
+	pagesAt := body.Len()
+	body.WriteString("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n")
+	pageAt := body.Len()
+	body.WriteString("3 0 obj\n<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>\nendobj\n")
+	contentAt := body.Len()
+	body.WriteString("4 0 obj\n" + streamBody("", []byte(lineMarks)) + "\nendobj\n")
+	xrefAt := body.Len()
+	body.WriteString("xref\n0 5\n")
+	body.WriteString(xrefLine(0, freeGen, false))
+	body.WriteString(xrefLine(catalogAt, 0, true))
+	body.WriteString(xrefLine(pagesAt, 0, true))
+	body.WriteString(xrefLine(pageAt, 0, true))
+	body.WriteString(xrefLine(contentAt, 0, true))
+	fmt.Fprintf(&body, "trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", xrefAt)
+	return body.Bytes()
+}
+
+// TestRecoverPrevLoopKeepsRefusal locks the boundary of the grid recovery: the
+// section at the startxref reads, so the failure is in its /Prev chain, and a
+// chain that loops is not a damaged table. Only a section that itself fails to
+// read may fall back to the grid reader.
+func TestRecoverPrevLoopKeepsRefusal(t *testing.T) {
+	t.Parallel()
+	_, err := Open(t.Context(), prevLoopDoc(t))
+	wantJob(t, err, opXRef, errSyntax)
+}
+
+// prevLoopDoc writes three fixed-width classic sections that chain in a cycle.
+func prevLoopDoc(t *testing.T) []byte {
+	t.Helper()
+	base := len("%PDF-1.4\n")
+	width := len(validationPrevSection(0))
+	var body bytes.Buffer
+	body.WriteString("%PDF-1.4\n")
+	body.Write(validationPrevSection(base + 2*width))
+	body.Write(validationPrevSection(base))
+	body.Write(validationPrevSection(base + width))
+	fmt.Fprintf(&body, "startxref\n%d\n%%%%EOF\n", base)
+	return body.Bytes()
+}

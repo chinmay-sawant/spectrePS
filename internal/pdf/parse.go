@@ -4,6 +4,12 @@ import (
 	"math"
 )
 
+// recoverHeaderSlack bounds the search for the next object header when an
+// object's endobj keyword is missing. The corpus shape is one stray token
+// between the value and the next header, so a small window is enough and a
+// longer gap keeps the syntax error.
+const recoverHeaderSlack = 64
+
 // ParseValue reads one PDF value at offset. next is the first byte after that value.
 // A dictionary is KindDict. This function does not consume a stream body.
 func ParseValue(src []byte, offset int) (Value, int, error) {
@@ -47,8 +53,17 @@ func parseIndirect(src []byte, offset int, resolve lengthResolver) (int, int, Va
 	if err = lex.attachStream(&val); err != nil {
 		return 0, 0, NullVal(), 0, err
 	}
+	mark := lex.pos
 	if err = lex.expectWord(wordEndObj); err != nil {
-		return 0, 0, NullVal(), 0, err
+		// A missing endobj in front of the next object header is a repair
+		// Ghostscript reports as "Encountered 'obj' while expecting 'endobj'".
+		// The value is already complete, so a header close behind it ends this
+		// object. Anything further away keeps the error. The caller still sees
+		// the end of the value as next, because no endobj was consumed.
+		if objectHeaderNear(src, mark, recoverHeaderSlack) < 0 {
+			return 0, 0, NullVal(), 0, err
+		}
+		return num, gen, val, mark, nil
 	}
 	return num, gen, val, lex.pos, nil
 }
@@ -202,6 +217,20 @@ func (lex *lexer) atDictClose() bool {
 		return false
 	}
 	return lex.src[lex.pos] == '>' && lex.src[lex.pos+1] == '>'
+}
+
+// objectHeaderNear returns the offset of the first object header within slack
+// bytes at or after from, or -1. It is the repair window for a value whose
+// endobj is missing: the next object header follows within a stray token or
+// two, and a longer gap is not evidence of a missing endobj.
+func objectHeaderNear(src []byte, from, slack int) int {
+	limit := min(from+slack, len(src))
+	for pos := max(from, 0); pos < limit; pos++ {
+		if _, _, ok := objectHeaderAt(src, pos); ok {
+			return pos
+		}
+	}
+	return -1
 }
 
 func (lex *lexer) expectWord(word string) error {
