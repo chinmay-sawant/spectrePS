@@ -81,6 +81,27 @@ func defaultFilterParams() filterParams {
 	}
 }
 
+// canonicalFilter maps the abbreviated filter names ISO 32000-1 Table 6
+// defines to their full names. Producers write the abbreviations in content
+// streams as well as inline images, and Ghostscript reads both, so the
+// abbreviation resolves to the same decoder.
+func canonicalFilter(filterName string) string {
+	switch filterName {
+	case "AHx":
+		return opASCIIHex
+	case "A85":
+		return opASCII85
+	case "LZW":
+		return opLZW
+	case "Fl":
+		return opFlate
+	case "RL":
+		return opRunLength
+	default:
+		return filterName
+	}
+}
+
 // Decode applies one filter to raw.
 // An empty filterName returns raw unchanged.
 // FlateDecode and LZWDecode decompress and then apply the /DecodeParms
@@ -91,6 +112,7 @@ func defaultFilterParams() filterParams {
 // that decodes past the 32 MiB cap returns limitcheck with the filter name.
 // params is a DecodeParms dictionary, or a null value when absent.
 func Decode(filterName string, params Value, raw []byte) ([]byte, error) {
+	filterName = canonicalFilter(filterName)
 	switch filterName {
 	case "":
 		return raw, nil

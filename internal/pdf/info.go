@@ -85,11 +85,11 @@ func (file *File) version() (string, error) {
 		return "", err
 	}
 	value, ok := catalog.ValueEntry("Version")
-	if !ok {
+	if !ok || value.Kind != KindName {
+		// A /Version written as a number is a producer mistake the header
+		// still answers, so the header version stands. pdfTeX and luaTeX both
+		// write it that way and Ghostscript reads the file.
 		return headerVersion, nil
-	}
-	if value.Kind != KindName {
-		return "", NewError(opInfo, errSyntax)
 	}
 	catalogMajor, catalogMinor, catalogOK := parsePDFVersion(value.Name)
 	if !catalogOK {

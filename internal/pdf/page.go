@@ -3,6 +3,8 @@ package pdf
 import (
 	"bytes"
 	"context"
+	"errors"
+	"maps"
 
 	"github.com/chinmay-sawant/spectrePS/internal/graphics"
 )
@@ -10,6 +12,10 @@ import (
 const (
 	errRange = "rangecheck"
 	opRaster = "RasterizePage"
+
+	// contentArrayDepth caps a /Contents array nested through indirect arrays.
+	// A real producer nests one level; the cap turns a cycle into limitcheck.
+	contentArrayDepth = 8
 
 	keyPage      = "Page"
 	keyPages     = "Pages"
@@ -320,8 +326,12 @@ func (file *File) contentsArray(contents Value) ([]Value, bool) {
 }
 
 func (file *File) joinContents(items []Value) ([]byte, error) {
-	parts := make([][]byte, 0, len(items))
-	for _, item := range items {
+	flat, err := file.flattenContents(items, 0)
+	if err != nil {
+		return nil, err
+	}
+	parts := make([][]byte, 0, len(flat))
+	for _, item := range flat {
 		part, err := file.oneContent(item)
 		if err != nil {
 			return nil, err
@@ -329,6 +339,37 @@ func (file *File) joinContents(items []Value) ([]byte, error) {
 		parts = append(parts, part)
 	}
 	return bytes.Join(parts, []byte{'\n'}), nil
+}
+
+// flattenContents splices a nested /Contents array into one stream list. The
+// spec writes /Contents as one stream or one array of streams, but real
+// producers point an array entry at another array and Ghostscript walks it,
+// so the reader does too.
+func (file *File) flattenContents(items []Value, depth int) ([]Value, error) {
+	if depth > contentArrayDepth {
+		return nil, NewError(opPDF, errLimit)
+	}
+	flat := make([]Value, 0, len(items))
+	for _, item := range items {
+		if item.Kind == KindRef {
+			resolved, err := file.deref(item)
+			if err != nil || resolved.Kind != KindArray {
+				flat = append(flat, item)
+				continue
+			}
+			item = resolved
+		}
+		if item.Kind != KindArray {
+			flat = append(flat, item)
+			continue
+		}
+		nested, err := file.flattenContents(item.Array, depth+1)
+		if err != nil {
+			return nil, err
+		}
+		flat = append(flat, nested...)
+	}
+	return flat, nil
 }
 
 func (file *File) oneContent(val Value) ([]byte, error) {
@@ -345,7 +386,57 @@ func (file *File) oneContent(val Value) ([]byte, error) {
 		}
 		return nil, err
 	}
-	return decodeStream(stream)
+	decoded, err := decodeStream(file.resolvedStreamEntries(stream))
+	if err != nil && recoverableContentError(err) {
+		// A content stream this build has no decoder for, or one that expands
+		// past the decode cap, is a page-local loss. Ghostscript reports the
+		// filter and paints the rest of the page, so the document still opens.
+		// A malformed stream stays a document error.
+		return []byte{}, nil
+	}
+	return decoded, err
+}
+
+// resolvedStreamEntries returns a copy of a stream value whose /Filter and
+// /DecodeParms are resolved when they are indirect. A producer may write
+// /Filter 30 0 R and Ghostscript resolves it. The copy keeps the cached
+// stream value untouched.
+func (file *File) resolvedStreamEntries(val Value) Value {
+	filter, hasFilter := val.ValueEntry(keyFilter)
+	if !hasFilter {
+		return val
+	}
+	parms, hasParms := val.ValueEntry(keyParms)
+	wantFilter := filter.Kind == KindRef
+	wantParms := hasParms && parms.Kind == KindRef
+	if !wantFilter && !wantParms {
+		return val
+	}
+	dict := make(map[string]Value, len(val.Dict))
+	maps.Copy(dict, val.Dict)
+	if wantFilter {
+		if resolved, err := file.deref(filter); err == nil {
+			dict[keyFilter] = resolved
+		}
+	}
+	if wantParms {
+		if resolved, err := file.deref(parms); err == nil {
+			dict[keyParms] = resolved
+		}
+	}
+	val.Dict = dict
+	return val
+}
+
+// recoverableContentError reports whether a content stream decode failure is
+// one Ghostscript treats as a page-local loss: a missing decoder, or a stream
+// that hit the decoder's own resource cap. A malformed stream is not.
+func recoverableContentError(err error) bool {
+	var jobErr *Error
+	if !errors.As(err, &jobErr) {
+		return false
+	}
+	return jobErr.Name == errUndefined || jobErr.Name == errLimit
 }
 
 // invalidRowRef reports whether ref names an in-use xref row whose bytes are
