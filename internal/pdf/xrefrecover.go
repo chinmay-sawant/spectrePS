@@ -27,6 +27,9 @@ func recoverCrossRef(src []byte, offset int) (map[int]XEntry, Value, bool) {
 	if xrefSectionAt(src, offset) {
 		return nil, NullVal(), false
 	}
+	if entries, trailer, ok := recoverStreamXRef(src); ok {
+		return entries, trailer, true
+	}
 	entries := scanObjectHeaders(src)
 	if len(entries) == 0 {
 		return nil, NullVal(), false
@@ -38,10 +41,86 @@ func recoverCrossRef(src []byte, offset int) (map[int]XEntry, Value, bool) {
 	return entries, trailer, true
 }
 
-// xrefSectionAt reports whether readXRefSection would recognise a section at
-// offset. The keyword test and the indirect object test mirror the dispatch in
-// readXRefSection, so a file that presents a table or an object there never
-// reaches the scan.
+// recoverStreamXRef reads every cross-reference stream the file carries, newest
+// first, and fills the gaps from the object headers. A document whose startxref
+// names nothing often still has whole xref streams elsewhere, and those streams
+// are the file's own tables: they carry the trailer /Root and the rows for
+// compressed objects the header scan cannot see. Newest section wins per
+// object number, exactly as a /Prev chain would merge them.
+func recoverStreamXRef(src []byte) (map[int]XEntry, Value, bool) {
+	ats := xrefStreamOffsets(src)
+	if len(ats) == 0 {
+		return nil, NullVal(), false
+	}
+	var entries map[int]XEntry
+	trailer := NullVal()
+	for i := len(ats) - 1; i >= 0; i-- {
+		section, sectionTrailer, err := readStreamXRef(src, ats[i])
+		if err != nil {
+			continue
+		}
+		if entries == nil {
+			entries, trailer = section, sectionTrailer
+			continue
+		}
+		fillEntries(entries, section)
+		trailer = mergeTrailer(trailer, sectionTrailer)
+	}
+	if entries == nil {
+		return nil, NullVal(), false
+	}
+	fillEntries(entries, scanObjectHeaders(src))
+	if _, ok := trailer.ValueEntry(keyRoot); !ok {
+		return nil, NullVal(), false
+	}
+	return entries, trailer, true
+}
+
+// xrefStreamOffsets returns the offset of every indirect object whose value is
+// a cross-reference stream, in file order. The last one in the file is the
+// newest, the same order an incremental update writes. The walk skips the body
+// of every object it parses, so a byte pattern inside a stream is not a
+// candidate.
+func xrefStreamOffsets(src []byte) []int {
+	var ats []int
+	for pos := 0; pos < len(src); {
+		num, gen, ok := objectHeaderAt(src, pos)
+		if !ok {
+			pos++
+			continue
+		}
+		got, gotGen, val, next, err := ParseIndirect(src, pos)
+		if err != nil || got != num || gotGen != gen || num == 0 {
+			pos++
+			continue
+		}
+		if xrefStream(val) {
+			ats = append(ats, pos)
+		}
+		if next > pos {
+			pos = next
+			continue
+		}
+		pos++
+	}
+	return ats
+}
+
+// xrefSectionAt reports whether readXRefSection would read a cross-reference
+// section at offset. The keyword test mirrors the classic dispatch, and the
+// stream test requires the indirect object there to be a cross-reference
+// stream, which is the only shape readStreamXRef accepts. Both conditions hold
+// three pinned corpus refusals in place:
+//   - structural/bad-xref.pdf names a classic table whose rows are damaged, so
+//     the keyword is there and its parse error is reported.
+//   - images/UnknownFilter-xrefstm.pdf names a cross-reference stream this
+//     reader cannot decode, so the offset presents one and the reader reports
+//     the unknown filter.
+//   - structural/parser_rebuildxref_error_notrailer.pdf has no trailer /Root,
+//     so the scan finds objects and the reader still refuses.
+//
+// An ordinary indirect object at the offset is not a section, so recovery is
+// free to rebuild the table there.
 func xrefSectionAt(src []byte, offset int) bool {
 	if offset < 0 || offset >= len(src) {
 		return false
@@ -53,18 +132,18 @@ func xrefSectionAt(src []byte, offset int) bool {
 	if hasKeyword(src, pos, wordXRef) {
 		return true
 	}
-	return indirectParses(src, pos)
+	return xrefStreamParses(src, pos)
 }
 
-// indirectParses reports whether an indirect object parses at pos. It exists so
-// the five-value ParseIndirect result does not become a dogsled at the call
-// site, where only the error matters.
-func indirectParses(src []byte, pos int) bool {
+// xrefStreamParses reports whether an indirect cross-reference stream parses at
+// pos. It exists so the five-value ParseIndirect result does not become a
+// dogsled at the call site, where only the shape matters.
+func xrefStreamParses(src []byte, pos int) bool {
 	number, generation, body, _, err := ParseIndirect(src, pos)
 	if err != nil {
 		return false
 	}
-	return number >= 0 && generation >= 0 && body.Kind > KindNull
+	return number >= 0 && generation >= 0 && xrefStream(body)
 }
 
 // scanObjectHeaders walks src for "num gen obj" headers and records the offset
