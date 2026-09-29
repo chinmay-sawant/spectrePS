@@ -1,6 +1,9 @@
 package pdf
 
-import "testing"
+import (
+	"bytes"
+	"testing"
+)
 
 // deadRowDoc builds a document whose xref carries an in-use row for an object
 // the file does not carry. The row for deadNum is written with page 4's offset,
@@ -38,6 +41,38 @@ func TestInfoSkipsDeadXrefRows(t *testing.T) {
 	}
 	if report.Images != 0 {
 		t.Fatalf("images %d", report.Images)
+	}
+}
+
+// TestDeadKidNodeIsNull locks the page-tree half of the tolerance: a /Kids
+// entry that resolves to no object is a null node Ghostscript reports and
+// ignores, so the rest of the tree still walks. A dead /Contents reference is
+// not this case, which TestReferencedDeadXrefRowStillFails pins.
+func TestDeadKidNodeIsNull(t *testing.T) {
+	t.Parallel()
+	doc := newDoc()
+	doc.object("<< /Type /Catalog /Pages 2 0 R >>")
+	doc.object("<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>")
+	doc.object("<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>")
+	doc.object(streamBody("", []byte(lineMarks)))
+	doc.deadRow(6, idPage)
+	file := mustOpen(t, doc.classic(""))
+	if file.PageCount() != 1 {
+		t.Fatalf("pages %d", file.PageCount())
+	}
+	got, err := file.Content(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, []byte(lineMarks)) {
+		t.Fatalf("content %q", got)
+	}
+	report, err := file.Info()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Pages != 1 {
+		t.Fatalf("info pages %d", report.Pages)
 	}
 }
 

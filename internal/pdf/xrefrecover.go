@@ -5,33 +5,44 @@ import "strconv"
 // A document whose cross-reference table does not name the objects the file
 // carries cannot be read through that table. Ghostscript reports the damage
 // and rebuilds from the object headers, and this file is that rebuild, in the
-// four shapes the batch2 corpus asked for:
+// shapes the batch2 corpus asked for:
 //
 //   - The startxref is missing, unreadable, or names nothing: the trailer and
 //     the object headers are the whole document, so the rebuild runs.
-//   - The section at the startxref is damaged, but its rows sit on the
-//     specification's 20-byte grid: only individual fields are hurt, so the
-//     grid reader keeps the row numbering and the damaged rows fall back to
-//     the object headers.
+//   - The section at the startxref is damaged: when its rows sit on the
+//     specification's 20-byte grid only individual fields are hurt and the
+//     grid reader keeps the row numbering, and when they do not line up the
+//     rebuild falls through to the object headers.
+//   - A /Prev link older than the newest section names nothing, points past
+//     the end, or names a damaged section: the sections already read stand and
+//     the rows they leave out come from the object headers. A /Prev cycle is
+//     an infinite loop and keeps its refusal, which
+//     structural/bug_xrefv4_loop.pdf pins.
 //   - A row names the wrong bytes, or a referenced number has no row at all:
 //     the object header, then the object streams, decide where the object is.
 //   - A stream without a usable /Length reads to its endstream keyword.
 //
-// Every one of them needs a trailer carrying a /Root, and three pinned corpus
-// refusals stay refused:
+// Every one of them needs a trailer carrying a /Root. The two corpus refusals
+// that lack one still refuse for that reason:
 //
-//   - structural/bad-xref.pdf names a classic table whose rows do not line up
-//     with the 20-byte grid, so the mapping from row to object number is lost
-//     and the reader reports the damage.
-//   - images/UnknownFilter-xrefstm.pdf names an xref stream this reader cannot
-//     decode, so the offset presents a section and its filter error stands.
 //   - structural/parser_rebuildxref_error_notrailer.pdf has no trailer /Root
 //     anywhere, so the scan finds objects and the reader still refuses.
+//   - GHOSTSCRIPT-699115-0.pdf carries a damaged /Root name, so the same test
+//     refuses it.
 //
-// A file whose newest section reads but whose /Prev chain is broken, or whose
-// startxref names a valid section, keeps its failure even when a table
-// elsewhere in the same file would have parsed. That is the difference from a
-// backward scan for a newer table, which lets a broken newest section through.
+// Two more pinned shapes are opened by the product decision of 2026-09-29
+// (Spectre PS opens what Ghostscript opens) and the manifest now records what
+// the reader does with them:
+//
+//   - structural/bad-xref.pdf names a classic table whose rows do not line up
+//     with the 20-byte grid; the rebuild opens it and the painter refuses the
+//     non-embedded font, which is the fonts policy rather than the xref.
+//   - images/UnknownFilter-xrefstm.pdf names an xref stream this reader cannot
+//     decode; the rebuild reads the older table behind it and the page paints
+//     without the image.
+//
+// A file whose newest section reads keeps its own error only when the caller
+// cannot be repaired: readCrossRef owns the /Prev chain from there.
 
 // recoverCrossRef rebuilds the cross-reference table and trailer for src, whose
 // startxref offset is offset. It reports false when the recovery does not apply
@@ -40,18 +51,21 @@ func recoverCrossRef(src []byte, offset int) (map[int]XEntry, Value, bool) {
 	if xrefSectionAt(src, offset) {
 		// The offset presents a section. When that section itself reads, the
 		// caller's failure is in its /Prev chain: a cycle, a chain past the
-		// limit, or a damaged older section. A broken chain is not a damaged
-		// table, and it keeps its error, which structural/bug_xrefv4_loop.pdf
-		// pins.
+		// limit, or a damaged older section. A broken chain is read by
+		// readCrossRef, which keeps a cycle refused and rebuilds the rest, so
+		// the caller's error stands and no rebuild runs here.
 		if _, _, err := readXRefSection(src, offset); err == nil {
 			return nil, NullVal(), false
 		}
 		// The section at the offset is damaged. When its rows sit on the
 		// specification's 20-byte grid, only individual fields are hurt and
-		// the section is still usable; a table whose rows do not line up
-		// loses the mapping from row slot to object number, and its refusal
-		// stands.
-		return recoverClassicGrid(src, offset)
+		// the section is still usable. A table whose rows do not line up
+		// loses the mapping from row slot to object number, so the rebuild
+		// falls through to the object headers, which is what Ghostscript does
+		// after reporting the same damage.
+		if entries, trailer, ok := recoverClassicGrid(src, offset); ok {
+			return entries, trailer, true
+		}
 	}
 	if entries, trailer, ok := recoverStreamXRef(src); ok {
 		return entries, trailer, true
@@ -70,9 +84,9 @@ func recoverCrossRef(src []byte, offset int) (map[int]XEntry, Value, bool) {
 // recoverClassicGrid re-reads a classic section at offset against the strict
 // 20-byte row grid, then the trailer that follows it. It reports false unless
 // a row parsed and the trailer carries a /Root, so a table whose rows never
-// sit on the grid still refuses, and so do the two pinned classic shapes:
-// structural/bad-xref.pdf has rows that do not line up, and
-// parser_rebuildxref_error_notrailer.pdf has no trailer /Root.
+// sit on the grid falls through to the object-header rebuild and
+// parser_rebuildxref_error_notrailer.pdf keeps refusing for its missing
+// /Root.
 //
 // A row whose fields are damaged leaves its number out of use, and the
 // per-object recovery then reads that object from the file's own header,
@@ -335,15 +349,12 @@ func xrefStreamOffsets(src []byte) []int {
 // xrefSectionAt reports whether readXRefSection would read a cross-reference
 // section at offset. The keyword test mirrors the classic dispatch, and the
 // stream test requires the indirect object there to be a cross-reference
-// stream, which is the only shape readStreamXRef accepts. Both conditions hold
-// three pinned corpus refusals in place:
-//   - structural/bad-xref.pdf names a classic table whose rows are damaged, so
-//     the keyword is there and its parse error is reported.
-//   - images/UnknownFilter-xrefstm.pdf names a cross-reference stream this
-//     reader cannot decode, so the offset presents one and the reader reports
-//     the unknown filter.
-//   - structural/parser_rebuildxref_error_notrailer.pdf has no trailer /Root,
-//     so the scan finds objects and the reader still refuses.
+// stream, which is the only shape readStreamXRef accepts. A section that then
+// fails to read falls through to the object-header rebuild in the caller, so
+// a damaged classic table and a cross-reference stream this reader cannot
+// decode are both attempts rather than verdicts. Only
+// structural/parser_rebuildxref_error_notrailer.pdf's missing /Root has the
+// last word, in recoverCrossRef.
 //
 // An ordinary indirect object at the offset is not a section, so recovery is
 // free to rebuild the table there.

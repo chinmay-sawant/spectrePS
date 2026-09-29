@@ -8,13 +8,12 @@ import (
 	"testing"
 )
 
-// A startxref value that names nothing is recoverable: the reader rebuilds the
-// table from the file's own object headers. That is what the batch2 corpus needs
-// and what Ghostscript does, so the recovery is locked here rather than left to
-// the corpus alone.
+// TestRecoverCrossRef locks the rebuild shapes: a startxref that names nothing
+// or names a damaged table rebuilds from the file's own headers, a file with no
+// trailer /Root still refuses, and a table that reads is never displaced.
 func TestRecoverCrossRef(t *testing.T) {
 	t.Run("garbage startxref rebuilds", recoverGarbage)
-	t.Run("damaged table at the offset stays refused", recoverDamagedTable)
+	t.Run("damaged table at the offset rebuilds", recoverDamagedTable)
 	t.Run("no trailer root stays refused", recoverNoRoot)
 	t.Run("valid table still wins", recoverValidTable)
 }
@@ -41,13 +40,24 @@ func recoverGarbage(t *testing.T) {
 	}
 }
 
-// recoverDamagedTable is the shape of structural/bad-xref.pdf: the startxref
-// names a real table whose rows are damaged. The offset does present a section,
-// so the reader reports the damage instead of rebuilding over it.
+// recoverDamagedTable is the shape of the batch2 files whose startxref names a
+// real table whose rows carry trailing junk: the rows do not sit on the
+// 20-byte grid, so the mapping from row slot to object number is lost and the
+// reader rebuilds the table from the object headers, which is what Ghostscript
+// does after reporting the same damage. structural/bad-xref.pdf is this shape.
 func recoverDamagedTable(t *testing.T) {
 	t.Helper()
-	_, err := Open(t.Context(), damagedTable(t))
-	wantJob(t, err, opXRef, errSyntax)
+	file := mustOpen(t, damagedTable(t))
+	if file.PageCount() != 1 {
+		t.Fatalf("pages %d", file.PageCount())
+	}
+	got, err := file.Content(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, []byte("q\nQ")) {
+		t.Fatalf("content %q", got)
+	}
 }
 
 // recoverNoRoot is the shape of
@@ -157,6 +167,85 @@ func noRootTrailer(t *testing.T) []byte {
 	}
 	fmt.Fprintf(&doc.buf, "trailer\n<< /Size %d >>\n", size)
 	fmt.Fprintf(&doc.buf, "startxref\n%d\n%%%%EOF\n", 3)
+	return doc.buf.Bytes()
+}
+
+// TestRecoverGenerationFromHeader locks the generation half of the rebuild: a
+// rebuilt table numbers objects from their own headers, so a trailer /Root
+// whose generation disagrees with the header still resolves. Ghostscript reads
+// it the same way, and GHOSTSCRIPT-695040-0.zip-31.pdf is the corpus shape.
+func TestRecoverGenerationFromHeader(t *testing.T) {
+	t.Parallel()
+	src := bytes.Replace(damagedTable(t), []byte("/Root 1 0 R"), []byte("/Root 1 1 R"), 1)
+	file := mustOpen(t, src)
+	if file.PageCount() != 1 {
+		t.Fatalf("pages %d", file.PageCount())
+	}
+	got, err := file.Content(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, []byte("q\nQ")) {
+		t.Fatalf("content %q", got)
+	}
+}
+
+// TestValidTableGenerationStaysStrict locks the boundary of the tolerance: a
+// table the file wrote keeps its own generation numbers, including the row for
+// the trailer /Root, so a reference to another generation is still dead.
+func TestValidTableGenerationStaysStrict(t *testing.T) {
+	t.Parallel()
+	doc := newDoc()
+	doc.object("<< /Type /Catalog /Pages 2 0 R >>")
+	doc.object("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+	doc.object("<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>")
+	doc.object(streamBody("", []byte(lineMarks)))
+	src := bytes.Replace(doc.classic(""), []byte("/Root 1 0 R"), []byte("/Root 1 1 R"), 1)
+	_, err := Open(t.Context(), src)
+	wantJob(t, err, opXRef, errSyntax)
+}
+
+// TestRecoverContentLossFromMissingStream locks the content half of the
+// rebuild: under a rebuilt table a /Contents reference the file does not carry
+// is a page-local loss, not a document failure. Ghostscript reports the page as
+// incomplete and paints the rest, and GHOSTSCRIPT-698699-0.pdf is the shape.
+func TestRecoverContentLossFromMissingStream(t *testing.T) {
+	t.Parallel()
+	file := mustOpen(t, damagedTableMissingContent(t))
+	if file.PageCount() != 1 {
+		t.Fatalf("pages %d", file.PageCount())
+	}
+	got, err := file.Content(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("content %q, want empty", got)
+	}
+}
+
+// damagedTableMissingContent writes the same off-grid damaged table as
+// damagedTable, but the page references a content object the file does not
+// carry.
+func damagedTableMissingContent(t *testing.T) []byte {
+	t.Helper()
+	doc := newDoc()
+	doc.object("<< /Type /Catalog /Pages 2 0 R >>")
+	doc.object("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+	doc.object("<< /Type /Page /Parent 2 0 R /Contents 9 0 R >>")
+	doc.object("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+	xrefAt := doc.buf.Len()
+	size := len(doc.offsets)
+	fmt.Fprintf(&doc.buf, "xref\n0 %d\n", size)
+	for num := range size {
+		flag := "n"
+		if num == 0 {
+			flag = "f"
+		}
+		fmt.Fprintf(&doc.buf, "%010d %05d %s junk\n", doc.offsets[num], 0, flag)
+	}
+	fmt.Fprintf(&doc.buf, "trailer\n<< /Size %d /Root 1 0 R >>\n", size)
+	fmt.Fprintf(&doc.buf, "startxref\n%d\n%%%%EOF\n", xrefAt)
 	return doc.buf.Bytes()
 }
 

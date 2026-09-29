@@ -122,6 +122,9 @@ func (file *File) walkNodeNums(node Value, seen, path map[int]bool) ([][]int, er
 	}
 	pages := make([][]int, 0, len(kids))
 	for _, kid := range kids {
+		if file.nullNode(kid) {
+			continue
+		}
 		sub, err := file.walkRefNums(kid, seen, path)
 		if err != nil {
 			return nil, err
@@ -285,6 +288,13 @@ func (file *File) leaf(node Value, resources Value) ([]pageLeaf, error) {
 func (file *File) walkKids(kids []Value, seen, path map[int]bool, resources Value) ([]pageLeaf, error) {
 	pages := make([]pageLeaf, 0, len(kids))
 	for _, kid := range kids {
+		if file.nullNode(kid) {
+			// A /Kids entry that names no object is a null node: Ghostscript
+			// reports "Ignoring a null node in the Page tree" and walks the
+			// rest, which is what a rebuilt table leaves behind when an update
+			// dropped a page.
+			continue
+		}
 		sub, err := file.walkRef(kid, seen, path, resources)
 		if err != nil {
 			return nil, err
@@ -292,6 +302,17 @@ func (file *File) walkKids(kids []Value, seen, path map[int]bool, resources Valu
 		pages = append(pages, sub...)
 	}
 	return pages, nil
+}
+
+// nullNode reports whether one /Kids entry is a reference the document does
+// not carry. A non-reference kid is not this case; the walk reports its own
+// error.
+func (file *File) nullNode(kid Value) bool {
+	if kid.Kind != KindRef {
+		return false
+	}
+	_, err := file.deref(kid)
+	return err != nil
 }
 
 func (file *File) pageBytes(page Value) ([]byte, error) {
@@ -375,13 +396,16 @@ func (file *File) flattenContents(items []Value, depth int) ([]Value, error) {
 func (file *File) oneContent(val Value) ([]byte, error) {
 	stream, err := file.streamEntry(val)
 	if err != nil {
-		if file.invalidRowRef(val) {
+		if file.invalidRowRef(val) || file.recovered {
 			// The row is in use and its bytes are not the object the row claims,
 			// and the object header scan did not find the object either.
 			// Ghostscript reports this as an invalid xref entry, rebuilds the
 			// table, and paints the page without content when the rebuild does
 			// not find it. A content stream the file cannot place is not a
-			// reason to refuse a document Ghostscript renders.
+			// reason to refuse a document Ghostscript renders. The same holds
+			// for any content stream under a rebuilt table: Ghostscript reports
+			// the page as incomplete and paints the rest, which is what the
+			// corpus files with a lost older xref section need.
 			return []byte{}, nil
 		}
 		return nil, err

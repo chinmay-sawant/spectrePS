@@ -52,6 +52,7 @@ type File struct {
 	busy      map[int]bool
 	scan      map[int]XEntry
 	packed    map[int]XEntry
+	recovered bool
 }
 
 type objPos struct {
@@ -75,7 +76,7 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 	if !bytes.Contains(src, []byte(pdfHeader)) {
 		return nil, NewError(opPDF, errSyntax)
 	}
-	entries, trailer, err := readTable(src)
+	entries, trailer, recovered, err := readTable(src)
 	if err != nil {
 		return nil, err
 	}
@@ -93,6 +94,7 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 		busy:      map[int]bool{},
 		scan:      nil,
 		packed:    nil,
+		recovered: recovered,
 	}
 	leaves, err := file.walkRoot()
 	if err != nil {
@@ -107,14 +109,15 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 	return file, nil
 }
 
-// readTable returns the cross-reference table and trailer for src. The section
-// at startxref wins when it reads. A missing or unreadable startxref, and a
-// startxref that names no section, leave the file's own trailer and object
-// headers as the only source, so recoverCrossRef rebuilds from the beginning
-// of the file; Ghostscript reports "Cannot find a 'startxref' anywhere in the
+// readTable returns the cross-reference table and trailer for src, and whether
+// the table was rebuilt. The section at startxref wins when it reads. A missing
+// or unreadable startxref, a startxref that names no section, and a startxref
+// that names a damaged section all leave the file's own trailer and object
+// headers as the only source, so recoverCrossRef rebuilds from the beginning of
+// the file; Ghostscript reports "Cannot find a 'startxref' anywhere in the
 // file" and rebuilds the same way. The original failure is reported when the
 // rebuild produces no trailer /Root.
-func readTable(src []byte) (map[int]XEntry, Value, error) {
+func readTable(src []byte) (map[int]XEntry, Value, bool, error) {
 	offset, startErr := startOffset(src)
 	var (
 		entries map[int]XEntry
@@ -125,19 +128,19 @@ func readTable(src []byte) (map[int]XEntry, Value, error) {
 		entries, trailer, readErr = readCrossRef(src, offset)
 	}
 	if startErr == nil && readErr == nil {
-		return entries, trailer, nil
+		return entries, trailer, false, nil
 	}
 	recoverAt := -1
 	if startErr == nil {
 		recoverAt = offset
 	}
 	if recovered, recoveredTrailer, ok := recoverCrossRef(src, recoverAt); ok {
-		return recovered, recoveredTrailer, nil
+		return recovered, recoveredTrailer, true, nil
 	}
 	if startErr != nil {
-		return nil, NullVal(), startErr
+		return nil, NullVal(), false, startErr
 	}
-	return nil, NullVal(), readErr
+	return nil, NullVal(), false, readErr
 }
 
 func startOffset(src []byte) (int, error) {
@@ -163,9 +166,12 @@ func startOffset(src []byte) (int, error) {
 // chain, newest section first. The newest section wins per object number and an
 // older section fills only the gaps. Trailer entries inherit from older
 // sections the same way, except /Prev and /Size, which describe one section.
-// A /Prev cycle, a chain past xrefChainLimit, a malformed /Prev, and a missing
-// section are syntaxerror in xref. A single section keeps the map the section
-// reader returned, so the common path adds no allocation.
+// A /Prev cycle, a chain past xrefChainLimit, and a malformed /Prev are
+// syntaxerror in xref. A /Prev link that points past the end, names nothing, or
+// names a damaged section is a broken link the object headers repair: the
+// sections already read stand, the rows they leave out come from the scan, and
+// the walk ends. A single section keeps the map the section reader returned, so
+// the common path adds no allocation.
 //
 //nolint:cyclop // one branch per trailer /Prev section step.
 func readCrossRef(src []byte, offset int) (map[int]XEntry, Value, error) {
@@ -177,21 +183,35 @@ func readCrossRef(src []byte, offset int) (map[int]XEntry, Value, error) {
 		if section >= xrefChainLimit {
 			return nil, NullVal(), NewError(opXRef, errSyntax)
 		}
-		if current < 0 || current >= len(src) || seen[current] {
+		if current < 0 || current >= len(src) {
+			// A /Prev link that points past the end names no section at all.
+			// The sections already read stand, and the rows they leave out
+			// come from the file's own object headers, which is the rebuild
+			// Ghostscript performs when an older link is broken. Only the
+			// newest section is not a link, so its absence is still a failure.
+			if section == 0 {
+				return nil, NullVal(), NewError(opXRef, errSyntax)
+			}
+			fillEntries(entries, scanObjectHeaders(src))
+			break
+		}
+		if seen[current] {
+			// A /Prev link that points at a section already read is a cycle.
+			// That is an infinite loop, not a damaged table, and it keeps its
+			// refusal, which structural/bug_xrefv4_loop.pdf pins.
 			return nil, NullVal(), NewError(opXRef, errSyntax)
 		}
 		sectionEntries, sectionTrailer, err := readXRefSection(src, current)
 		if err != nil {
-			// A /Prev link that names no section at all is a broken chain, not
-			// a damaged section. The sections already read stand, and the rows
-			// they leave out come from the file's own object headers. A /Prev
-			// that names a section keeps its error, so a cycle, a past-end
-			// link, and a damaged older section still refuse by name.
-			if section > 0 && !xrefSectionAt(src, current) {
-				fillEntries(entries, scanObjectHeaders(src))
-				break
+			// A damaged older section is a loss the object headers repair,
+			// the same as a /Prev link that names nothing. The newest
+			// section's damage keeps its error, and recoverCrossRef is where
+			// the caller rebuilds it.
+			if section == 0 {
+				return nil, NullVal(), err
 			}
-			return nil, NullVal(), err
+			fillEntries(entries, scanObjectHeaders(src))
+			break
 		}
 		if entries == nil {
 			entries = sectionEntries
@@ -489,6 +509,17 @@ func (file *File) deref(val Value) (Value, error) {
 	}
 	entry, ok := file.xref[val.RefNum]
 	if ok && entry.InUse && !genOK(entry, val.RefGen) {
+		// The row is in use but its generation disagrees with the reference.
+		// A rebuilt table numbers objects from their headers, and Ghostscript
+		// reads the reference anyway, so the object the file carries is tried
+		// before the reference is declared dead. A table the file wrote keeps
+		// the strict check: there the row's generation is the producer's own
+		// statement, and an old generation is an obsolete reference.
+		if file.recovered {
+			if value, err := file.recoveredObject(val.RefNum); err == nil {
+				return value, nil
+			}
+		}
 		return NullVal(), NewError(opXRef, errSyntax)
 	}
 	// An absent or free row is not decided here: resolve falls back to the

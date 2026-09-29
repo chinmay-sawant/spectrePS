@@ -199,6 +199,9 @@ func (file *File) walkPageSizes(val Value, seen, path map[int]bool, inherited Pa
 		return nil
 	}
 	for _, kid := range kids {
+		if file.nullNode(kid) {
+			continue
+		}
 		if err := file.walkPageSizes(kid, seen, path, res.size, sizes); err != nil {
 			return err
 		}
