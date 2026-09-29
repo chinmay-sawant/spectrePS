@@ -3,6 +3,7 @@ package pdf
 import (
 	"bytes"
 	"context"
+	"errors"
 	"sort"
 	"strconv"
 )
@@ -53,6 +54,7 @@ type File struct {
 	scan      map[int]XEntry
 	packed    map[int]XEntry
 	recovered bool
+	crypt     *cryptState
 }
 
 type objPos struct {
@@ -63,6 +65,28 @@ type objPos struct {
 type stmItem struct {
 	value Value
 	index int
+}
+
+// installCrypt derives and installs the crypt state for an encrypted trailer.
+// The security handler is read before the state is installed, so the /O and /U
+// entries it carries are never decrypted. A handler whose empty password does
+// not authenticate keeps the refusal the reader has always reported.
+func (file *File) installCrypt(trailer Value) error {
+	if !encrypted(trailer) {
+		return nil
+	}
+	state, err := file.openCrypt(trailer)
+	if errors.Is(err, errNoEncrypt) {
+		state, err = nil, nil
+	}
+	if err != nil {
+		return err
+	}
+	if state == nil {
+		return NewError(opEncrypt, errAccess)
+	}
+	file.crypt = state
+	return nil
 }
 
 // Open reads a PDF subset. Page count is the number of page leaves walked from the page tree, not the /Count field.
@@ -80,9 +104,6 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
-	if encrypted(trailer) {
-		return nil, NewError(opEncrypt, errAccess)
-	}
 	file := &File{
 		src:       src,
 		trailer:   trailer,
@@ -95,6 +116,10 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 		scan:      nil,
 		packed:    nil,
 		recovered: recovered,
+		crypt:     nil,
+	}
+	if err := file.installCrypt(trailer); err != nil {
+		return nil, err
 	}
 	leaves, err := file.walkRoot()
 	if err != nil {
@@ -564,7 +589,7 @@ func (file *File) indexObjectStreams() map[int]XEntry {
 		file.scan = scanObjectHeaders(file.src)
 	}
 	for _, streamNum := range file.sortedScanNums() {
-		objects, ok := file.objectStreamObjects(file.scan[streamNum])
+		objects, ok := file.objectStreamObjects(streamNum, file.scan[streamNum])
 		if !ok {
 			continue
 		}
@@ -593,8 +618,9 @@ func (file *File) sortedScanNums() []int {
 // objectStreamObjects parses one object stream and returns the objects it
 // carries, keyed by object number. A non-stream, a stream of another type, a
 // missing /N or /First, a decode failure, and a malformed header each report
-// false.
-func (file *File) objectStreamObjects(entry XEntry) (map[int]stmItem, bool) {
+// false. The stream body is decrypted with the object stream's own key, which
+// is the key ISO 32000-1 clause 7.5.8.2 gives the strings it carries.
+func (file *File) objectStreamObjects(num int, entry XEntry) (map[int]stmItem, bool) {
 	//nolint:dogsled // ParseIndirect returns five values; only the value is used here.
 	_, _, val, _, err := ParseIndirect(file.src, entry.Offset)
 	if err != nil || val.Kind != KindStream {
@@ -607,7 +633,7 @@ func (file *File) objectStreamObjects(entry XEntry) (map[int]stmItem, bool) {
 	if !ok {
 		return nil, false
 	}
-	body, err := decodeStream(val)
+	body, err := decodeStream(file.decryptValue(num, entry.Gen, val))
 	if err != nil {
 		return nil, false
 	}
@@ -628,7 +654,7 @@ func (file *File) plainAt(num, offset, gen int) (Value, error) {
 	if got != num || gotGen != gen {
 		return NullVal(), NewError(opXRef, errSyntax)
 	}
-	return val, nil
+	return file.decryptValue(got, gotGen, val), nil
 }
 
 // scannedEntry returns the object-header scan row for num, building the scan on

@@ -209,6 +209,7 @@ func (file *File) resolvedStream(ref Value) (Value, bool) {
 	if err != nil || stream.Kind != KindStream {
 		return NullVal(), false
 	}
+	stream = file.decryptValue(ref.RefNum, ref.RefGen, stream)
 	file.cache[ref.RefNum] = stream
 	return stream, true
 }
