@@ -181,12 +181,82 @@ func (file *File) pageSizes() ([]PageSize, error) {
 // visited sets as walkRef: seen skips a node a second /Kids entry names, and
 // path still refuses a cycle.
 func (file *File) walkPageSizes(val Value, seen, path map[int]bool, inherited PageSize, sizes *[]PageSize) error {
-	if val.Kind == KindRef {
-		if path[val.RefNum] {
+	res, err := file.pageNode(val, seen, path, inherited, sizes)
+	if err != nil {
+		return err
+	}
+	if res.done {
+		return nil
+	}
+	kids, hasKids, err := file.kidArray(res.node)
+	if err != nil {
+		return err
+	}
+	if !hasKids {
+		if res.typeNam != keyPages {
 			return NewError(opInfo, errSyntax)
 		}
+		return nil
+	}
+	for _, kid := range kids {
+		if err := file.walkPageSizes(kid, seen, path, res.size, sizes); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// pageNodeResult is what one page-tree node resolves to. done is true when
+// there is nothing left to walk: the node was a leaf page already appended to
+// sizes, or the seen set skipped it as a repeat.
+type pageNodeResult struct {
+	node    Value
+	size    PageSize
+	typeNam string
+	done    bool
+}
+
+// emptyPageNodeResult is the result for a repeated node the seen set skipped
+// and for an error that stops the walk. The caller checks done and err before
+// it reads node or size, so those never matter. The named zero exists because
+// the linter requires every field of a struct to be written out.
+func emptyPageNodeResult() pageNodeResult {
+	return pageNodeResult{
+		node: Value{
+			Kind:   KindNull,
+			Bool:   false,
+			Int:    0,
+			Real:   0,
+			Name:   "",
+			String: "",
+			Array:  nil,
+			Dict:   nil,
+			Stream: nil,
+			RefNum: 0,
+			RefGen: 0,
+		},
+		size:    PageSize{Width: 0, Height: 0},
+		typeNam: "",
+		done:    true,
+	}
+}
+
+// pageNode resolves one page-tree node: it applies the visited sets and
+// returns the node, the size it passes to its children, and its /Type.
+func (file *File) pageNode(
+	val Value,
+	seen, path map[int]bool,
+	inherited PageSize,
+	sizes *[]PageSize,
+) (pageNodeResult, error) {
+	if val.Kind == KindRef {
+		if path[val.RefNum] {
+			empty := emptyPageNodeResult()
+			empty.done = false
+			return empty, NewError(opInfo, errSyntax)
+		}
 		if seen[val.RefNum] {
-			return nil
+			return emptyPageNodeResult(), nil
 		}
 		seen[val.RefNum] = true
 		path[val.RefNum] = true
@@ -194,36 +264,23 @@ func (file *File) walkPageSizes(val Value, seen, path map[int]bool, inherited Pa
 	}
 	node, err := file.deref(val)
 	if err != nil {
-		return err
+		return emptyPageNodeResult(), err
 	}
 	if node.Kind != KindDict {
-		return NewError(opInfo, errSyntax)
+		empty := emptyPageNodeResult()
+		empty.done = false
+		return empty, NewError(opInfo, errSyntax)
 	}
 	size, err := file.nodeSize(node, inherited)
 	if err != nil {
-		return err
+		return emptyPageNodeResult(), err
 	}
 	typeName, _ := node.NameEntry(keyType)
 	if typeName == keyPage {
 		*sizes = append(*sizes, size)
-		return nil
+		return pageNodeResult{node: node, size: size, typeNam: typeName, done: true}, nil
 	}
-	kids, hasKids, err := file.kidArray(node)
-	if err != nil {
-		return err
-	}
-	if !hasKids {
-		if typeName != keyPages {
-			return NewError(opInfo, errSyntax)
-		}
-		return nil
-	}
-	for _, kid := range kids {
-		if err := file.walkPageSizes(kid, seen, path, size, sizes); err != nil {
-			return err
-		}
-	}
-	return nil
+	return pageNodeResult{node: node, size: size, typeNam: typeName, done: false}, nil
 }
 
 // nodeSize returns the node's own /MediaBox, or the inherited one.
