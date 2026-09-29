@@ -134,20 +134,70 @@ func (p *Pixmap) Stroke(pts []Point, width, red, green, blue float64) {
 }
 
 // Fill paints the interior. evenOdd selects the even-odd rule.
+//
+// The scan is bounded by the path's own bounding box. inside walks every point
+// of every subpath, so testing pixels the path cannot reach costs the whole
+// point count each time: a 6,638-point path on a 612 by 792 page was 3.2
+// billion cross tests before this bound, which reads as a hang rather than as
+// slow arithmetic.
 func (p *Pixmap) Fill(pts []Point, red, green, blue float64, evenOdd bool) {
 	subs := subpaths(pts)
 	if len(subs) == 0 {
 		return
 	}
-	for row := range p.h {
+	minX, minY, maxX, maxY := pathBounds(subs)
+	if maxX < minX || maxY < minY {
+		return
+	}
+	firstCol := clampCol(int(math.Floor(minX)), p.w)
+	lastCol := clampCol(int(math.Ceil(maxX)), p.w)
+	firstRow := clampRow(p.h-1-int(math.Ceil(maxY)), p.h)
+	lastRow := clampRow(p.h-1-int(math.Floor(minY)), p.h)
+	for row := firstRow; row <= lastRow; row++ {
 		centerY := float64(p.h-1-row) + pixelCenter
-		for col := range p.w {
+		for col := firstCol; col <= lastCol; col++ {
 			centerX := float64(col) + pixelCenter
 			if inside(subs, centerX, centerY, evenOdd) {
 				p.paint(col, row, red, green, blue, p.fillAlpha)
 			}
 		}
 	}
+}
+
+// pathBounds returns the bounding box of every point of every subpath.
+func pathBounds(subs [][]Point) (float64, float64, float64, float64) {
+	minX, minY := math.Inf(1), math.Inf(1)
+	maxX, maxY := math.Inf(-1), math.Inf(-1)
+	for _, sub := range subs {
+		for _, point := range sub {
+			minX = math.Min(minX, point.X)
+			minY = math.Min(minY, point.Y)
+			maxX = math.Max(maxX, point.X)
+			maxY = math.Max(maxY, point.Y)
+		}
+	}
+	return minX, minY, maxX, maxY
+}
+
+// clampCol and clampRow hold a pixel index inside the buffer.
+func clampCol(col, width int) int {
+	if col < 0 {
+		return 0
+	}
+	if col >= width {
+		return width - 1
+	}
+	return col
+}
+
+func clampRow(row, height int) int {
+	if row < 0 {
+		return 0
+	}
+	if row >= height {
+		return height - 1
+	}
+	return row
 }
 
 // ShowPage keeps the current pixels as a page and clears the buffer to white.
