@@ -42,8 +42,9 @@ func rejectEncrypt(t *testing.T) {
 // the reader must refuse gets a fully populated dictionary with an /ID, because
 // that is the shape a producer writes and the shape a future change is most
 // likely to special-case on the way to accepting it. The batch2 corpus holds
-// 57 such files, all of which Ghostscript opens with no password, so the only
-// thing standing between them and the reader is this policy.
+// 118 such files across buckets b08 and b09, all of which Ghostscript accepts
+// with no password, so the only thing standing between them and the reader is
+// this policy.
 //
 // The refusal is the contract, not a gap. `documentation/features.md`,
 // `documentation/cli.md`, and `documentation/pdf-compatibility.md` all state
