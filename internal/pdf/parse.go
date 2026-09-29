@@ -128,6 +128,17 @@ func (lex *lexer) takeRef(num int64) (Value, bool, error) {
 	mark := lex.pos
 	genTok, ok := lex.peekRef()
 	if !ok {
+		// "num R" with the generation left out. The specification writes
+		// "num gen R", and a producer that dropped the middle number still
+		// meant a reference to generation zero. GHOSTSCRIPT-701876-0.pdf
+		// carries "/OCGs [+ 0 R]" and paints a full page.
+		if gen, isRef := lex.peekBareRef(); isRef {
+			objNum, fits := fitInt(num)
+			if !fits {
+				return NullVal(), false, syntaxErr(wordRef)
+			}
+			return RefVal(objNum, gen), true, nil
+		}
 		return NullVal(), false, nil
 	}
 	if num < 0 || genTok.num < 0 {
@@ -143,6 +154,30 @@ func (lex *lexer) takeRef(num int64) (Value, bool, error) {
 		return NullVal(), false, syntaxErr(wordRef)
 	}
 	return RefVal(objNum, gen), true, nil
+}
+
+// peekBareRef reads the "R" of a reference whose generation was left out, and
+// reports generation zero. It is only consulted after peekRef has already
+// failed, so the three-token form is never affected.
+//
+// The test is on the bytes rather than on a taken token. Taking a token costs
+// an allocation for every standalone integer in the document, and the level-2
+// rewrite allocation count is a gate: this shape appeared as 715 before the
+// tolerance and 723 after, and the eight allocations were all here.
+func (lex *lexer) peekBareRef() (int, bool) {
+	at := lex.pos
+	for at < len(lex.src) && isSpace(lex.src[at]) {
+		at++
+	}
+	if at >= len(lex.src) || lex.src[at] != 'R' {
+		return 0, false
+	}
+	end := at + 1
+	if end < len(lex.src) && !isDelim(lex.src[end]) {
+		return 0, false
+	}
+	lex.pos = end
+	return 0, true
 }
 
 func (lex *lexer) peekRef() (token, bool) {
@@ -178,6 +213,7 @@ func (lex *lexer) parseArray() (Value, error) {
 			lex.pos++
 			return ArrayVal(items), nil
 		}
+		lex.skipStrayPlus()
 		item, err := lex.parseValue()
 		if err != nil {
 			return NullVal(), err
@@ -237,6 +273,23 @@ func (lex *lexer) atDictClose() bool {
 		return false
 	}
 	return lex.src[lex.pos] == '>' && lex.src[lex.pos+1] == '>'
+}
+
+// skipStrayPlus steps over a lone "+" in an array element position. A producer
+// that meant "0 0 R" and wrote "+ 0 R" still wrote the element, and Ghostscript
+// drops the sign rather than refusing the array. GHOSTSCRIPT-701876-0.pdf
+// carries "/OCGs [+ 0 R]" and paints a full page. The sign is skipped only when
+// whitespace follows it, so "+5" and "+AF" are untouched.
+func (lex *lexer) skipStrayPlus() {
+	if lex.pos >= len(lex.src) || lex.src[lex.pos] != '+' {
+		return
+	}
+	next := lex.pos + 1
+	if next < len(lex.src) && !isDelim(lex.src[next]) {
+		return
+	}
+	lex.pos = next
+	lex.skipIgnored()
 }
 
 // objectHeaderNear returns the offset of the first object header within slack
