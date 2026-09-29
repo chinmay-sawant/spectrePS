@@ -77,7 +77,13 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 	}
 	entries, trailer, err := readCrossRef(src, offset)
 	if err != nil {
-		return nil, err
+		// The offset named no cross-reference section. Rebuild the table from
+		// the file's own object headers before reporting the failure.
+		recovered, recoveredTrailer, ok := recoverCrossRef(src, offset)
+		if !ok {
+			return nil, err
+		}
+		entries, trailer = recovered, recoveredTrailer
 	}
 	if encrypted(trailer) {
 		return nil, NewError(opEncrypt, errAccess)
