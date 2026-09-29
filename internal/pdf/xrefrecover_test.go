@@ -14,7 +14,8 @@ import (
 func TestRecoverCrossRef(t *testing.T) {
 	t.Run("garbage startxref rebuilds", recoverGarbage)
 	t.Run("damaged table at the offset rebuilds", recoverDamagedTable)
-	t.Run("no trailer root stays refused", recoverNoRoot)
+	t.Run("no trailer root reads the catalog", recoverNoRoot)
+	t.Run("no root and no catalog stays refused", recoverNoRootAtAll)
 	t.Run("valid table still wins", recoverValidTable)
 }
 
@@ -65,11 +66,32 @@ func recoverDamagedTable(t *testing.T) {
 // but no trailer carries a /Root. A scan alone is not enough to claim a
 // document, so the reader keeps the failure it had before the scan ran, which is
 // why the operator here is the one the offset named rather than xref.
+// recoverNoRoot is the policy case. A file with no trailer /Root but a
+// /Type /Catalog object opens on a trailer synthesised from that catalog,
+// which is what Ghostscript does with a lost trailer. The product decision of
+// 2026-09-29 makes the reader open what Ghostscript opens, so this row's old
+// refusal is superseded; structural/parser_rebuildxref_error_notrailer.pdf is
+// the corpus file with this shape and its manifest row changed with it.
 func recoverNoRoot(t *testing.T) {
 	t.Helper()
-	_, err := Open(t.Context(), noRootTrailer(t))
+	file, err := Open(t.Context(), noRootTrailer(t))
+	if err != nil {
+		t.Fatalf("a file whose only root is its catalog refused: %v", err)
+	}
+	if file.PageCount() != 1 {
+		t.Fatalf("pages %d", file.PageCount())
+	}
+}
+
+// recoverNoRootAtAll locks the boundary of the synthesised trailer: a file with
+// no /Root in a trailer AND no object whose /Type is /Catalog still refuses, so
+// the synthesis is not a blanket acceptance of any file with objects in it.
+func recoverNoRootAtAll(t *testing.T) {
+	t.Helper()
+	src := bytes.Replace(noRootTrailer(t), []byte("/Type /Catalog"), []byte("/Type /Nothing"), 1)
+	_, err := Open(t.Context(), src)
 	if err == nil {
-		t.Fatal("expected error")
+		t.Fatal("a file with no root and no catalog opened")
 	}
 	var got *Error
 	if !errors.As(err, &got) {

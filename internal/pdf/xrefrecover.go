@@ -89,9 +89,51 @@ func recoverCrossRef(src []byte, offset int) (map[int]XEntry, Value, bool) {
 		trailer, ok = lastRootDict(src)
 	}
 	if !ok {
+		// No trailer at all. The file still has a catalog, and a catalog is
+		// what a root names: synthesise a trailer that points at the object
+		// whose /Type is /Catalog. This is what Ghostscript does with a file
+		// whose trailer was lost, and 17 of the 36 corpus files in this shape
+		// are under a kilobyte of fragments that still carry their catalog.
+		trailer, ok = catalogTrailer(src, entries)
+	}
+	if !ok {
 		return nil, NullVal(), false
 	}
 	return entries, trailer, true
+}
+
+// catalogTrailer builds a trailer naming the object whose /Type is /Catalog.
+// The search runs over the numbers the header scan found, newest last, so the
+// last catalog in the file wins, which is the one an incremental update would
+// have left. A file with no catalog anywhere still refuses.
+func catalogTrailer(src []byte, entries map[int]XEntry) (Value, bool) {
+	best := NullVal()
+	chosen := 0
+	found := false
+	for num, entry := range entries {
+		if !entry.InUse || entry.Compressed {
+			continue
+		}
+		_, _, val, _, err := ParseIndirect(src, entry.Offset)
+		if err != nil || val.Kind != KindDict {
+			continue
+		}
+		typeName, ok := val.NameEntry(keyType)
+		if !ok || typeName != "Catalog" {
+			continue
+		}
+		if !found {
+			best = DictVal(map[string]Value{keyRoot: RefVal(num, 0)})
+			chosen = num
+			found = true
+			continue
+		}
+		if num > chosen {
+			best = DictVal(map[string]Value{keyRoot: RefVal(num, 0)})
+			chosen = num
+		}
+	}
+	return best, found
 }
 
 // recoverClassicGrid re-reads a classic section at offset against the strict
