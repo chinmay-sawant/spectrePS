@@ -334,9 +334,38 @@ func (file *File) joinContents(items []Value) ([]byte, error) {
 func (file *File) oneContent(val Value) ([]byte, error) {
 	stream, err := file.streamEntry(val)
 	if err != nil {
+		if file.invalidRowRef(val) {
+			// The row is in use and its bytes are not the object the row claims,
+			// and the object header scan did not find the object either.
+			// Ghostscript reports this as an invalid xref entry, rebuilds the
+			// table, and paints the page without content when the rebuild does
+			// not find it. A content stream the file cannot place is not a
+			// reason to refuse a document Ghostscript renders.
+			return []byte{}, nil
+		}
 		return nil, err
 	}
 	return decodeStream(stream)
+}
+
+// invalidRowRef reports whether ref names an in-use xref row whose bytes are
+// not the object the row claims. A row that is absent, free, or carries another
+// generation is not this case: that reference is a dead dependency and still
+// fails, because the file never carried the object at all.
+func (file *File) invalidRowRef(ref Value) bool {
+	if ref.Kind != KindRef {
+		return false
+	}
+	entry, ok := file.xref[ref.RefNum]
+	if !ok || !entry.InUse || !genOK(entry, ref.RefGen) {
+		return false
+	}
+	if entry.Compressed {
+		_, ok := file.objStreamValue(ref.RefNum, entry.StreamNum, entry.StreamIdx)
+		return !ok
+	}
+	_, err := file.plainAt(ref.RefNum, entry.Offset, entry.Gen)
+	return err != nil
 }
 
 // streamEntry resolves one stream entry. A parsed stream whose /Length is a

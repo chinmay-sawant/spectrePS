@@ -3,6 +3,7 @@ package pdf
 import (
 	"bytes"
 	"context"
+	"sort"
 	"strconv"
 )
 
@@ -23,6 +24,7 @@ const (
 	keyObjCount = "N"
 	keyFirst    = "First"
 	keyPrev     = "Prev"
+	keyObjStm   = "ObjStm"
 
 	// xrefChainLimit caps one trailer /Prev chain. A longer chain is a loop
 	// or a broken producer, so it is syntaxerror in xref.
@@ -48,6 +50,8 @@ type File struct {
 	pages     [][]byte
 	resources []Value
 	busy      map[int]bool
+	scan      map[int]XEntry
+	packed    map[int]XEntry
 }
 
 type objPos struct {
@@ -97,6 +101,8 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 		pages:     nil,
 		resources: nil,
 		busy:      map[int]bool{},
+		scan:      nil,
+		packed:    nil,
 	}
 	leaves, err := file.walkRoot()
 	if err != nil {
@@ -153,6 +159,15 @@ func readCrossRef(src []byte, offset int) (map[int]XEntry, Value, error) {
 		}
 		sectionEntries, sectionTrailer, err := readXRefSection(src, current)
 		if err != nil {
+			// A /Prev link that names no section at all is a broken chain, not
+			// a damaged section. The sections already read stand, and the rows
+			// they leave out come from the file's own object headers. A /Prev
+			// that names a section keeps its error, so a cycle, a past-end
+			// link, and a damaged older section still refuse by name.
+			if section > 0 && !xrefSectionAt(src, current) {
+				fillEntries(entries, scanObjectHeaders(src))
+				break
+			}
 			return nil, NullVal(), err
 		}
 		if entries == nil {
@@ -381,25 +396,55 @@ func (file *File) resolve(num int) (Value, error) {
 	}
 	entry, ok := file.xref[num]
 	if !ok || !entry.InUse {
+		// An object stream carries its own index of the objects inside it, so a
+		// number with no xref row but a place in a stream is still in the file.
+		// A row that exists and is free is a deliberate deletion, and stays a
+		// failure.
+		if !ok {
+			if value, found := file.packedObject(num); found {
+				file.cache[num] = value
+				return value, nil
+			}
+		}
 		return NullVal(), NewError(opXRef, errSyntax)
 	}
 	file.busy[num] = true
 	defer delete(file.busy, num)
 
-	var (
-		val Value
-		err error
-	)
-	if entry.Compressed {
-		val, err = file.compressed(num, entry)
-	} else {
-		val, err = file.plain(num, entry)
-	}
+	val, err := file.objectAt(num, entry)
 	if err != nil {
-		return NullVal(), err
+		fixed, fixedErr := file.recoveredObject(num)
+		if fixedErr != nil {
+			return NullVal(), err
+		}
+		val = fixed
 	}
 	file.cache[num] = val
 	return val, nil
+}
+
+// objectAt reads object num through one xref row.
+func (file *File) objectAt(num int, entry XEntry) (Value, error) {
+	if entry.Compressed {
+		if value, ok := file.objStreamValue(num, entry.StreamNum, entry.StreamIdx); ok {
+			return value, nil
+		}
+		return NullVal(), NewError(opXRef, errSyntax)
+	}
+	return file.plainAt(num, entry.Offset, entry.Gen)
+}
+
+// recoveredObject reads object num from where the file itself says it is,
+// ignoring the row: the object header scan first, then the objects an object
+// stream carries. It is the reader's answer to a row whose bytes are not the
+// object, the damage Ghostscript reports as an invalid xref entry and repairs
+// by rebuilding the table.
+func (file *File) recoveredObject(num int) (Value, error) {
+	row, ok := file.recoveredRow(num)
+	if !ok {
+		return NullVal(), NewError(opXRef, errSyntax)
+	}
+	return file.objectAt(num, row)
 }
 
 // readable returns the object at num, and false when the xref row for num names
@@ -434,30 +479,136 @@ func genOK(entry XEntry, gen int) bool {
 	return entry.Gen == gen
 }
 
-func (file *File) plain(num int, entry XEntry) (Value, error) {
-	if entry.Offset < 0 || entry.Offset >= len(file.src) {
+// recoveredRow returns a row for num rebuilt from the file itself: the object
+// header scan first, then the objects an object stream carries. A compressed
+// row is the answer when the object has no header of its own.
+func (file *File) recoveredRow(num int) (XEntry, bool) {
+	if row, ok := file.scannedEntry(num); ok {
+		return row, true
+	}
+	return file.packedEntry(num)
+}
+
+// packedEntry returns the object stream row that carries num, or false. The
+// object stream index is built once, on the first row that needs it.
+func (file *File) packedEntry(num int) (XEntry, bool) {
+	if file.packed == nil {
+		file.packed = file.indexObjectStreams()
+	}
+	entry, ok := file.packed[num]
+	return entry, ok
+}
+
+// packedObject reads object num out of the object stream that carries it. It is
+// the fallback for a number the xref never indexed but an object stream holds.
+func (file *File) packedObject(num int) (Value, bool) {
+	row, ok := file.packedEntry(num)
+	if !ok {
+		return NullVal(), false
+	}
+	value, ok := file.objStreamValue(num, row.StreamNum, row.StreamIdx)
+	return value, ok
+}
+
+// indexObjectStreams reads every object stream the header scan found and maps
+// each object it carries to a compressed row. It is the recovery the reader
+// uses when a row names no object and no plain header carries the number.
+func (file *File) indexObjectStreams() map[int]XEntry {
+	rows := map[int]XEntry{}
+	if file.scan == nil {
+		file.scan = scanObjectHeaders(file.src)
+	}
+	for _, streamNum := range file.sortedScanNums() {
+		objects, ok := file.objectStreamObjects(file.scan[streamNum])
+		if !ok {
+			continue
+		}
+		for num, item := range objects {
+			if _, seen := rows[num]; !seen {
+				rows[num] = packedEntry(streamNum, item.index)
+			}
+		}
+	}
+	return rows
+}
+
+// sortedScanNums returns the scanned object numbers that are not themselves
+// compressed, sorted so the object stream index is built the same way twice.
+func (file *File) sortedScanNums() []int {
+	streams := make([]int, 0, len(file.scan))
+	for streamNum, entry := range file.scan {
+		if !entry.Compressed {
+			streams = append(streams, streamNum)
+		}
+	}
+	sort.Ints(streams)
+	return streams
+}
+
+// objectStreamObjects parses one object stream and returns the objects it
+// carries, keyed by object number. A non-stream, a stream of another type, a
+// missing /N or /First, a decode failure, and a malformed header each report
+// false.
+func (file *File) objectStreamObjects(entry XEntry) (map[int]stmItem, bool) {
+	//nolint:dogsled // ParseIndirect returns five values; only the value is used here.
+	_, _, val, _, err := ParseIndirect(file.src, entry.Offset)
+	if err != nil || val.Kind != KindStream {
+		return nil, false
+	}
+	if typeName, _ := val.NameEntry(keyType); typeName != keyObjStm {
+		return nil, false
+	}
+	count, first, ok := streamBounds(val)
+	if !ok {
+		return nil, false
+	}
+	body, err := decodeStream(val)
+	if err != nil {
+		return nil, false
+	}
+	objects, err := splitObjStream(body, count, first)
+	return objects, err == nil
+}
+
+// plainAt reads object num at offset and requires the header there to carry
+// that number and generation.
+func (file *File) plainAt(num, offset, gen int) (Value, error) {
+	if offset < 0 || offset >= len(file.src) {
 		return NullVal(), NewError(opXRef, errSyntax)
 	}
-	got, gen, val, _, err := ParseIndirect(file.src, entry.Offset)
+	got, gotGen, val, _, err := ParseIndirect(file.src, offset)
 	if err != nil {
 		return NullVal(), err
 	}
-	if got != num || gen != entry.Gen {
+	if got != num || gotGen != gen {
 		return NullVal(), NewError(opXRef, errSyntax)
 	}
 	return val, nil
 }
 
-func (file *File) compressed(num int, entry XEntry) (Value, error) {
-	objects, err := file.loadObjStream(entry.StreamNum)
+// scannedEntry returns the object-header scan row for num, building the scan on
+// first use. It is the fallback for a row whose own offset is wrong.
+func (file *File) scannedEntry(num int) (XEntry, bool) {
+	if file.scan == nil {
+		file.scan = scanObjectHeaders(file.src)
+	}
+	entry, ok := file.scan[num]
+	return entry, ok
+}
+
+// objStreamValue reads object num from the object stream numbered streamNum and
+// requires it at index. A missing stream, a bad header, a decode failure, and a
+// different index all report false.
+func (file *File) objStreamValue(num, streamNum, index int) (Value, bool) {
+	objects, err := file.loadObjStream(streamNum)
 	if err != nil {
-		return NullVal(), err
+		return NullVal(), false
 	}
 	item, ok := objects[num]
-	if !ok || item.index != entry.StreamIdx {
-		return NullVal(), NewError(opXRef, errSyntax)
+	if !ok || item.index != index {
+		return NullVal(), false
 	}
-	return item.value, nil
+	return item.value, true
 }
 
 func (file *File) loadObjStream(streamNum int) (map[int]stmItem, error) {
