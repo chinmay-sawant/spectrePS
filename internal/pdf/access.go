@@ -56,7 +56,7 @@ func (file *File) RawObject(num int) ([]byte, bool) {
 	if !ok {
 		return nil, false
 	}
-	end := trimSpaceEnd(file.src, start, next-len(wordEndObj))
+	end := trimWordEnd(file.src, start, next, wordEndObj)
 	if end < start {
 		return nil, false
 	}
@@ -67,6 +67,17 @@ func (file *File) RawObject(num int) ([]byte, bool) {
 func trimSpaceEnd(src []byte, start, end int) int {
 	for end > start && isSpaceByte(src[end-1]) {
 		end--
+	}
+	return end
+}
+
+// trimWordEnd moves end back over one trailing keyword, then the whitespace
+// before it, when the keyword is there. It makes the end of a body that has no
+// endobj the end of its value, the same as one that has it.
+func trimWordEnd(src []byte, start, end int, word string) int {
+	end = trimSpaceEnd(src, start, end)
+	if end-start >= len(word) && bytes.Equal(src[end-len(word):end], []byte(word)) {
+		end = trimSpaceEnd(src, start, end-len(word))
 	}
 	return end
 }

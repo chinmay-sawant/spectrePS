@@ -42,17 +42,16 @@ const (
 // File is one open PDF subset.
 // Page count is the number of leaves walked from the page tree.
 type File struct {
-	src            []byte
-	trailer        Value
-	xref           map[int]XEntry
-	cache          map[int]Value
-	streams        map[int]map[int]stmItem
-	pages          [][]byte
-	resources      []Value
-	busy           map[int]bool
-	scan           map[int]XEntry
-	packed         map[int]XEntry
-	headersScanned bool
+	src       []byte
+	trailer   Value
+	xref      map[int]XEntry
+	cache     map[int]Value
+	streams   map[int]map[int]stmItem
+	pages     [][]byte
+	resources []Value
+	busy      map[int]bool
+	scan      map[int]XEntry
+	packed    map[int]XEntry
 }
 
 type objPos struct {
@@ -76,7 +75,7 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 	if !bytes.Contains(src, []byte(pdfHeader)) {
 		return nil, NewError(opPDF, errSyntax)
 	}
-	entries, trailer, err := openCrossRef(src)
+	entries, trailer, err := readTable(src)
 	if err != nil {
 		return nil, err
 	}
@@ -84,17 +83,16 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 		return nil, NewError(opEncrypt, errAccess)
 	}
 	file := &File{
-		src:            src,
-		trailer:        trailer,
-		xref:           entries,
-		cache:          map[int]Value{},
-		streams:        map[int]map[int]stmItem{},
-		pages:          nil,
-		resources:      nil,
-		busy:           map[int]bool{},
-		scan:           nil,
-		packed:         nil,
-		headersScanned: false,
+		src:       src,
+		trailer:   trailer,
+		xref:      entries,
+		cache:     map[int]Value{},
+		streams:   map[int]map[int]stmItem{},
+		pages:     nil,
+		resources: nil,
+		busy:      map[int]bool{},
+		scan:      nil,
+		packed:    nil,
 	}
 	leaves, err := file.walkRoot()
 	if err != nil {
@@ -109,36 +107,35 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 	return file, nil
 }
 
-// openCrossRef returns the merged cross-reference table and trailer for src.
-// The normal path is one startxref offset and one section. Three failed shapes
-// fall back to the object-header scan:
-//
-//   - no usable startxref at all;
-//   - an offset that names no table and no xref stream, such as a PDF header;
-//   - a section that parses to zero rows, which carries no table at all.
-//
-// A section that presents a table keyword or an xref stream keeps its own
-// failure, so a damaged newest section is still a refusal.
-func openCrossRef(src []byte) (map[int]XEntry, Value, error) {
+// readTable returns the cross-reference table and trailer for src. The section
+// at startxref wins when it reads. A missing or unreadable startxref, and a
+// startxref that names no section, leave the file's own trailer and object
+// headers as the only source, so recoverCrossRef rebuilds from the beginning
+// of the file; Ghostscript reports "Cannot find a 'startxref' anywhere in the
+// file" and rebuilds the same way. The original failure is reported when the
+// rebuild produces no trailer /Root.
+func readTable(src []byte) (map[int]XEntry, Value, error) {
 	offset, startErr := startOffset(src)
-	if startErr != nil {
-		if recovered, recoveredTrailer, ok := scanRecover(src); ok {
-			return recovered, recoveredTrailer, nil
-		}
-		return nil, NullVal(), startErr
+	var (
+		entries map[int]XEntry
+		trailer Value
+		readErr error
+	)
+	if startErr == nil {
+		entries, trailer, readErr = readCrossRef(src, offset)
 	}
-	entries, trailer, readErr := readCrossRef(src, offset)
-	if readErr == nil && len(entries) > 0 {
+	if startErr == nil && readErr == nil {
 		return entries, trailer, nil
 	}
-	if readErr == nil {
-		if recovered, recoveredTrailer, ok := scanRecover(src); ok {
-			return recovered, recoveredTrailer, nil
-		}
-		return entries, trailer, nil
+	recoverAt := -1
+	if startErr == nil {
+		recoverAt = offset
 	}
-	if recovered, recoveredTrailer, ok := recoverCrossRef(src, offset); ok {
+	if recovered, recoveredTrailer, ok := recoverCrossRef(src, recoverAt); ok {
 		return recovered, recoveredTrailer, nil
+	}
+	if startErr != nil {
+		return nil, NullVal(), startErr
 	}
 	return nil, NullVal(), readErr
 }
@@ -420,17 +417,16 @@ func (file *File) resolve(num int) (Value, error) {
 	if file.busy[num] {
 		return NullVal(), NewError(opXRef, errSyntax)
 	}
-	entry, ok := file.entryFor(num)
+	entry, ok := file.xref[num]
 	if !ok || !entry.InUse {
-		// An object stream carries its own index of the objects inside it, so a
-		// number with no xref row but a place in a stream is still in the file.
-		// A row that exists and is free is a deliberate deletion, and stays a
-		// failure.
-		if !ok {
-			if value, found := file.packedObject(num); found {
-				file.cache[num] = value
-				return value, nil
-			}
+		// A row the table never wrote, or wrote free, does not have to mean
+		// the object is gone: the file's own object headers are the source a
+		// rebuild uses, and a number they carry still resolves. A number the
+		// file does not carry anywhere stays a dead dependency, which
+		// TestReferencedDeadXrefRowStillFails pins.
+		if value, err := file.recoveredObject(num); err == nil {
+			file.cache[num] = value
+			return value, nil
 		}
 		return NullVal(), NewError(opXRef, errSyntax)
 	}
@@ -491,22 +487,19 @@ func (file *File) deref(val Value) (Value, error) {
 	if val.Kind != KindRef {
 		return val, nil
 	}
-	entry, ok := file.entryFor(val.RefNum)
-	if !ok || !entry.InUse || !genOK(entry, val.RefGen) {
+	entry, ok := file.xref[val.RefNum]
+	if ok && entry.InUse && !genOK(entry, val.RefGen) {
 		return NullVal(), NewError(opXRef, errSyntax)
 	}
+	// An absent or free row is not decided here: resolve falls back to the
+	// file's own object headers, which is where a rebuild would find the
+	// object. A generation that disagrees with an in-use row is still dead.
 	return file.resolve(val.RefNum)
 }
 
-// genOK reports whether a reference generation matches one xref row. A
-// generation outside 0..65535 comes from a broken producer; Ghostscript assumes
-// zero for it, and the row it names is the row the file wrote.
 func genOK(entry XEntry, gen int) bool {
 	if entry.Compressed {
 		return gen == 0
-	}
-	if gen < 0 || gen > maxGeneration {
-		gen = 0
 	}
 	return entry.Gen == gen
 }
@@ -529,17 +522,6 @@ func (file *File) packedEntry(num int) (XEntry, bool) {
 	}
 	entry, ok := file.packed[num]
 	return entry, ok
-}
-
-// packedObject reads object num out of the object stream that carries it. It is
-// the fallback for a number the xref never indexed but an object stream holds.
-func (file *File) packedObject(num int) (Value, bool) {
-	row, ok := file.packedEntry(num)
-	if !ok {
-		return NullVal(), false
-	}
-	value, ok := file.objStreamValue(num, row.StreamNum, row.StreamIdx)
-	return value, ok
 }
 
 // indexObjectStreams reads every object stream the header scan found and maps
