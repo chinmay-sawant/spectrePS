@@ -40,14 +40,15 @@ const (
 // File is one open PDF subset.
 // Page count is the number of leaves walked from the page tree.
 type File struct {
-	src       []byte
-	trailer   Value
-	xref      map[int]XEntry
-	cache     map[int]Value
-	streams   map[int]map[int]stmItem
-	pages     [][]byte
-	resources []Value
-	busy      map[int]bool
+	src            []byte
+	trailer        Value
+	xref           map[int]XEntry
+	cache          map[int]Value
+	streams        map[int]map[int]stmItem
+	pages          [][]byte
+	resources      []Value
+	busy           map[int]bool
+	headersScanned bool
 }
 
 type objPos struct {
@@ -71,32 +72,23 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 	if !bytes.Contains(src, []byte(pdfHeader)) {
 		return nil, NewError(opPDF, errSyntax)
 	}
-	offset, err := startOffset(src)
+	entries, trailer, err := openCrossRef(src)
 	if err != nil {
 		return nil, err
-	}
-	entries, trailer, err := readCrossRef(src, offset)
-	if err != nil {
-		// The offset named no cross-reference section. Rebuild the table from
-		// the file's own object headers before reporting the failure.
-		recovered, recoveredTrailer, ok := recoverCrossRef(src, offset)
-		if !ok {
-			return nil, err
-		}
-		entries, trailer = recovered, recoveredTrailer
 	}
 	if encrypted(trailer) {
 		return nil, NewError(opEncrypt, errAccess)
 	}
 	file := &File{
-		src:       src,
-		trailer:   trailer,
-		xref:      entries,
-		cache:     map[int]Value{},
-		streams:   map[int]map[int]stmItem{},
-		pages:     nil,
-		resources: nil,
-		busy:      map[int]bool{},
+		src:            src,
+		trailer:        trailer,
+		xref:           entries,
+		cache:          map[int]Value{},
+		streams:        map[int]map[int]stmItem{},
+		pages:          nil,
+		resources:      nil,
+		busy:           map[int]bool{},
+		headersScanned: false,
 	}
 	leaves, err := file.walkRoot()
 	if err != nil {
@@ -109,6 +101,40 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 		file.resources[i] = leaf.resources
 	}
 	return file, nil
+}
+
+// openCrossRef returns the merged cross-reference table and trailer for src.
+// The normal path is one startxref offset and one section. Three failed shapes
+// fall back to the object-header scan:
+//
+//   - no usable startxref at all;
+//   - an offset that names no table and no xref stream, such as a PDF header;
+//   - a section that parses to zero rows, which carries no table at all.
+//
+// A section that presents a table keyword or an xref stream keeps its own
+// failure, so a damaged newest section is still a refusal.
+func openCrossRef(src []byte) (map[int]XEntry, Value, error) {
+	offset, startErr := startOffset(src)
+	if startErr != nil {
+		if recovered, recoveredTrailer, ok := scanRecover(src); ok {
+			return recovered, recoveredTrailer, nil
+		}
+		return nil, NullVal(), startErr
+	}
+	entries, trailer, readErr := readCrossRef(src, offset)
+	if readErr == nil && len(entries) > 0 {
+		return entries, trailer, nil
+	}
+	if readErr == nil {
+		if recovered, recoveredTrailer, ok := scanRecover(src); ok {
+			return recovered, recoveredTrailer, nil
+		}
+		return entries, trailer, nil
+	}
+	if recovered, recoveredTrailer, ok := recoverCrossRef(src, offset); ok {
+		return recovered, recoveredTrailer, nil
+	}
+	return nil, NullVal(), readErr
 }
 
 func startOffset(src []byte) (int, error) {
@@ -379,7 +405,7 @@ func (file *File) resolve(num int) (Value, error) {
 	if file.busy[num] {
 		return NullVal(), NewError(opXRef, errSyntax)
 	}
-	entry, ok := file.xref[num]
+	entry, ok := file.entryFor(num)
 	if !ok || !entry.InUse {
 		return NullVal(), NewError(opXRef, errSyntax)
 	}
@@ -420,16 +446,22 @@ func (file *File) deref(val Value) (Value, error) {
 	if val.Kind != KindRef {
 		return val, nil
 	}
-	entry, ok := file.xref[val.RefNum]
+	entry, ok := file.entryFor(val.RefNum)
 	if !ok || !entry.InUse || !genOK(entry, val.RefGen) {
 		return NullVal(), NewError(opXRef, errSyntax)
 	}
 	return file.resolve(val.RefNum)
 }
 
+// genOK reports whether a reference generation matches one xref row. A
+// generation outside 0..65535 comes from a broken producer; Ghostscript assumes
+// zero for it, and the row it names is the row the file wrote.
 func genOK(entry XEntry, gen int) bool {
 	if entry.Compressed {
 		return gen == 0
+	}
+	if gen < 0 || gen > maxGeneration {
+		gen = 0
 	}
 	return entry.Gen == gen
 }

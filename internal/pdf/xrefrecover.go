@@ -4,21 +4,28 @@ package pdf
 // read from that offset. Ghostscript recovers by scanning the file for object
 // headers and building a fresh table. This is that recovery.
 //
-// The scan runs only when the offset names no section at all, and it needs a
-// trailer carrying a /Root on top of that. Both conditions exist to hold three
-// pinned corpus refusals in place:
+// The scan runs when the file names no section at all: no usable startxref, an
+// offset that lands on something that is not a table and not an xref stream, or
+// a parsed section that held zero rows. It always needs a trailer carrying a
+// /Root on top of that. The gates exist to hold three pinned corpus refusals in
+// place:
 //
 //   - structural/bad-xref.pdf names a real table whose rows are damaged, so the
 //     offset presents a section and the reader reports the damage.
 //   - images/UnknownFilter-xrefstm.pdf names an xref stream this reader cannot
-//     decode, so the offset presents an indirect object and the reader reports
-//     the unknown filter.
+//     decode, so the offset presents a stream and the reader reports the
+//     unknown filter.
 //   - structural/parser_rebuildxref_error_notrailer.pdf has no trailer /Root, so
 //     the scan finds objects and the reader still refuses.
 //
 // A file that presents a broken section keeps its failure even when a table
 // elsewhere in the same file would have parsed. That is the difference from a
 // backward scan for a newer table, which lets a broken newest section through.
+//
+// A fourth repair sits next to this one: a table that never mentions an object
+// number the file does carry can still resolve that number from its header, in
+// entryFor below. The row it invents is the one the file wrote, not a row from
+// an older table.
 
 // recoverCrossRef rebuilds the cross-reference table and trailer for src, whose
 // startxref offset is offset. It reports false when the recovery does not apply
@@ -27,6 +34,14 @@ func recoverCrossRef(src []byte, offset int) (map[int]XEntry, Value, bool) {
 	if xrefSectionAt(src, offset) {
 		return nil, NullVal(), false
 	}
+	return scanRecover(src)
+}
+
+// scanRecover rebuilds the table from the file's own object headers. It is the
+// body of recoverCrossRef, split out for the callers that already know no
+// section stands at the offset: a missing startxref and a section that parsed
+// to zero rows. A document still needs a trailer carrying a /Root.
+func scanRecover(src []byte) (map[int]XEntry, Value, bool) {
 	entries := scanObjectHeaders(src)
 	if len(entries) == 0 {
 		return nil, NullVal(), false
@@ -38,10 +53,12 @@ func recoverCrossRef(src []byte, offset int) (map[int]XEntry, Value, bool) {
 	return entries, trailer, true
 }
 
-// xrefSectionAt reports whether readXRefSection would recognise a section at
-// offset. The keyword test and the indirect object test mirror the dispatch in
-// readXRefSection, so a file that presents a table or an object there never
-// reaches the scan.
+// xrefSectionAt reports whether readXRefSection would find a cross-reference
+// section at offset. A classic table keyword counts. An indirect object counts
+// only when it is an xref stream, so a startxref that names an ordinary object
+// or lands in the header does not pin the reader to the wrong bytes. The
+// keyword test and the stream test mirror the dispatch in readXRefSection, so a
+// file that presents a table or an xref stream there never reaches the scan.
 func xrefSectionAt(src []byte, offset int) bool {
 	if offset < 0 || offset >= len(src) {
 		return false
@@ -53,18 +70,11 @@ func xrefSectionAt(src []byte, offset int) bool {
 	if hasKeyword(src, pos, wordXRef) {
 		return true
 	}
-	return indirectParses(src, pos)
-}
-
-// indirectParses reports whether an indirect object parses at pos. It exists so
-// the five-value ParseIndirect result does not become a dogsled at the call
-// site, where only the error matters.
-func indirectParses(src []byte, pos int) bool {
-	number, generation, body, _, err := ParseIndirect(src, pos)
-	if err != nil {
+	number, generation, val, _, err := ParseIndirect(src, pos)
+	if err != nil || number < 0 || generation < 0 {
 		return false
 	}
-	return number >= 0 && generation >= 0 && body.Kind > KindNull
+	return xrefStream(val)
 }
 
 // scanObjectHeaders walks src for "num gen obj" headers and records the offset
@@ -96,6 +106,27 @@ func scanObjectHeaders(src []byte) map[int]XEntry {
 		pos++
 	}
 	return entries
+}
+
+// entryFor returns the xref row for num. A number the table never mentions is
+// repaired once from the file's own object headers: a producer that stopped
+// writing rows still wrote the object, and Ghostscript reads it. A number whose
+// row is present keeps that row whatever it says, so a genuinely referenced
+// dead row is still a hard failure. The scan runs at most once per file.
+func (file *File) entryFor(num int) (XEntry, bool) {
+	if entry, ok := file.xref[num]; ok {
+		return entry, true
+	}
+	if !file.headersScanned {
+		file.headersScanned = true
+		for n, entry := range scanObjectHeaders(file.src) {
+			if _, exists := file.xref[n]; !exists {
+				file.xref[n] = entry
+			}
+		}
+	}
+	entry, ok := file.xref[num]
+	return entry, ok
 }
 
 // objectHeaderAt reports the object number, the generation, and whether src[pos:]
