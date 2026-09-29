@@ -9,6 +9,9 @@ const (
 	offsetDigits   = 10
 	xrefWidthCount = 3
 	byteShift      = 8
+	decimalBase    = 10
+
+	maxGeneration = 65535
 
 	rowFree   = 0
 	rowPlain  = 1
@@ -122,7 +125,85 @@ func (cur *xrefCursor) readSubsection(entries map[int]XEntry) error {
 		entries[start] = entry
 		start++
 	}
+	// A subsection whose declared count is short still lists whole rows after
+	// it. Read them into the same span rather than ending the table at the
+	// first one, because the trailer follows them. A row here has to be
+	// complete: ten offset digits, a non-negative generation, and an n or f
+	// flag, so the next subsection header is never mistaken for a row.
+	for {
+		entry, next, ok := nextRowAt(cur.src, cur.pos)
+		if !ok {
+			break
+		}
+		entries[start] = entry
+		start++
+		cur.pos = next
+	}
 	return nil
+}
+
+// nextRowAt scans one whole classic row at pos. It is stricter than readEntry:
+// the generation must be non-negative and the flag must be present, which tells
+// an extra row apart from a following subsection header. It reads bytes and
+// builds no error, so a lookahead that finds no row allocates nothing.
+func nextRowAt(src []byte, pos int) (XEntry, int, bool) {
+	pos = skipSpace(src, pos)
+	offset, ok := digitsAt(src, pos, offsetDigits)
+	if !ok {
+		return blankEntry(), 0, false
+	}
+	pos = skipSpace(src, pos+offsetDigits)
+	gen, next, ok := unsignedAt(src, pos)
+	if !ok || gen > maxGeneration {
+		return blankEntry(), 0, false
+	}
+	pos = skipSpace(src, next)
+	if pos >= len(src) {
+		return blankEntry(), 0, false
+	}
+	switch src[pos] {
+	case 'n':
+		return plainEntry(offset, gen), pos + 1, true
+	case 'f':
+		return freeEntry(offset, gen), pos + 1, true
+	default:
+		return blankEntry(), 0, false
+	}
+}
+
+// digitsAt reads exactly width digits at pos as a non-negative int.
+func digitsAt(src []byte, pos, width int) (int, bool) {
+	if pos < 0 || width < 1 || pos+width < pos || pos+width > len(src) {
+		return 0, false
+	}
+	number := int64(0)
+	for _, digit := range src[pos : pos+width] {
+		if !isDigit(digit) {
+			return 0, false
+		}
+		number = number*decimalBase + int64(digit-'0')
+	}
+	if number > int64(math.MaxInt) {
+		return 0, false
+	}
+	return int(number), true
+}
+
+// unsignedAt reads one run of digits at pos as a non-negative int.
+func unsignedAt(src []byte, pos int) (int, int, bool) {
+	start := pos
+	number := int64(0)
+	for pos < len(src) && isDigit(src[pos]) {
+		number = number*decimalBase + int64(src[pos]-'0')
+		if number > int64(math.MaxInt) {
+			return 0, start, false
+		}
+		pos++
+	}
+	if pos == start || pos-start > offsetDigits {
+		return 0, start, false
+	}
+	return int(number), pos, true
 }
 
 func (cur *xrefCursor) readEntry() (XEntry, error) {
@@ -131,13 +212,26 @@ func (cur *xrefCursor) readEntry() (XEntry, error) {
 	if err != nil {
 		return blankEntry(), err
 	}
-	gen, err := cur.readInt()
+	gen, err := cur.readSignedInt()
 	if err != nil {
 		return blankEntry(), err
 	}
-	inUse, err := cur.readUseFlag()
+	// A generation outside 0..65535 is written by a broken producer. Ghostscript
+	// assumes zero and keeps reading, and the row then has no flag byte left
+	// because the generation text ate it. Such a row is in use.
+	broken := gen < 0 || gen > maxGeneration
+	if broken {
+		gen = 0
+	}
+	inUse, present, err := cur.readUseFlag()
 	if err != nil {
 		return blankEntry(), err
+	}
+	if !present {
+		if !broken {
+			return blankEntry(), xrefSyntax()
+		}
+		return plainEntry(offset, gen), nil
 	}
 	if inUse {
 		return plainEntry(offset, gen), nil
@@ -145,20 +239,23 @@ func (cur *xrefCursor) readEntry() (XEntry, error) {
 	return freeEntry(offset, gen), nil
 }
 
-func (cur *xrefCursor) readUseFlag() (bool, error) {
+// readUseFlag reads the n or f flag. present is false and the cursor stays put
+// when the next byte is neither, so readEntry can treat a row whose generation
+// is out of range as a row whose generation text ate the flag byte.
+func (cur *xrefCursor) readUseFlag() (bool, bool, error) {
 	cur.skipSpace()
 	if cur.pos >= len(cur.src) {
-		return false, xrefSyntax()
+		return false, false, xrefSyntax()
 	}
-	flag := cur.src[cur.pos]
-	cur.pos++
-	switch flag {
+	switch cur.src[cur.pos] {
 	case 'n':
-		return true, nil
+		cur.pos++
+		return true, true, nil
 	case 'f':
-		return false, nil
+		cur.pos++
+		return false, true, nil
 	default:
-		return false, xrefSyntax()
+		return false, false, nil
 	}
 }
 
@@ -195,6 +292,33 @@ func (cur *xrefCursor) readInt() (int, error) {
 	}
 	number, err := strconv.Atoi(string(cur.src[start:cur.pos]))
 	if err != nil {
+		return 0, xrefSyntax()
+	}
+	return number, nil
+}
+
+// readSignedInt reads one integer that may carry a leading sign. It exists for
+// the classic entry generation field, which a broken producer writes negative.
+func (cur *xrefCursor) readSignedInt() (int, error) {
+	cur.skipSpace()
+	if cur.pos >= len(cur.src) {
+		return 0, xrefSyntax()
+	}
+	start := cur.pos
+	if cur.src[cur.pos] == '+' || cur.src[cur.pos] == '-' {
+		cur.pos++
+	}
+	digits := cur.pos
+	for cur.pos < len(cur.src) && isDigit(cur.src[cur.pos]) {
+		cur.pos++
+	}
+	if cur.pos == digits || cur.pos-digits > offsetDigits {
+		cur.pos = start
+		return 0, xrefSyntax()
+	}
+	number, err := strconv.Atoi(string(cur.src[start:cur.pos]))
+	if err != nil {
+		cur.pos = start
 		return 0, xrefSyntax()
 	}
 	return number, nil

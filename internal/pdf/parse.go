@@ -47,10 +47,22 @@ func parseIndirect(src []byte, offset int, resolve lengthResolver) (int, int, Va
 	if err = lex.attachStream(&val); err != nil {
 		return 0, 0, NullVal(), 0, err
 	}
-	if err = lex.expectWord(wordEndObj); err != nil {
-		return 0, 0, NullVal(), 0, err
-	}
+	// A producer that omits endobj still wrote the object, and the next object
+	// header delimits it, so the keyword is optional. Ghostscript reads such an
+	// object, and so does this reader; the position is left after the value
+	// when the keyword is absent.
+	lex.skipEndobj()
 	return num, gen, val, lex.pos, nil
+}
+
+// skipEndobj consumes one endobj keyword when it follows the object. A missing
+// keyword is not an error: the object is complete without it. The position is
+// restored when the next token is not endobj.
+func (lex *lexer) skipEndobj() {
+	mark := lex.pos
+	if err := lex.expectWord(wordEndObj); err != nil {
+		lex.pos = mark
+	}
 }
 
 func (lex *lexer) parseValue() (Value, error) {
