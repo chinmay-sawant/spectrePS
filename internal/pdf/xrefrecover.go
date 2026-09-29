@@ -1,6 +1,9 @@
 package pdf
 
-import "strconv"
+import (
+	"bytes"
+	"strconv"
+)
 
 // A document whose cross-reference table does not name the objects the file
 // carries cannot be read through that table. Ghostscript reports the damage
@@ -67,6 +70,9 @@ func recoverCrossRef(src []byte, offset int) (map[int]XEntry, Value, bool) {
 			return entries, trailer, true
 		}
 	}
+	if entries, trailer, ok := recoverNearTable(src, offset); ok {
+		return entries, trailer, true
+	}
 	if entries, trailer, ok := recoverStreamXRef(src); ok {
 		return entries, trailer, true
 	}
@@ -75,6 +81,13 @@ func recoverCrossRef(src []byte, offset int) (map[int]XEntry, Value, bool) {
 		return nil, NullVal(), false
 	}
 	trailer, ok := lastRootTrailer(src)
+	if !ok {
+		// The keyword is absent or damaged. The dictionary that carries the
+		// root is still in the file, and a document is defined by its root
+		// rather than by the punctuation in front of it, so look for the
+		// dictionary itself.
+		trailer, ok = lastRootDict(src)
+	}
 	if !ok {
 		return nil, NullVal(), false
 	}
@@ -470,4 +483,63 @@ func trailerValueAt(src []byte, from int) (Value, bool) {
 		return NullVal(), false
 	}
 	return val, true
+}
+
+// lastRootDict returns the last dictionary in src that carries a /Root, with or
+// without a `trailer` keyword in front of it. A producer that damaged the
+// keyword still wrote the dictionary, and Ghostscript reads the file by finding
+// that dictionary, so the rebuild does too: a document's root is what makes it
+// readable, and the keyword is punctuation.
+func lastRootDict(src []byte) (Value, bool) {
+	best := NullVal()
+	found := false
+	for pos := 0; pos+1 < len(src); pos++ {
+		if src[pos] != '<' || src[pos+1] != '<' {
+			continue
+		}
+		val, _, err := ParseValue(src, pos)
+		if err != nil || val.Kind != KindDict {
+			continue
+		}
+		if _, ok := val.ValueEntry(keyRoot); !ok {
+			continue
+		}
+		best = val
+		found = true
+	}
+	return best, found
+}
+
+// nearTableWindow is how far before a startxref offset the reader looks for the
+// table keyword it should have named. Measured on the batch2 corpus, two files
+// name an offset that lands inside their own table, 23 and 55 bytes past the
+// keyword, which is a producer counting from a different base rather than a
+// damaged file. The window is small on purpose: this finds the table the offset
+// almost named, not a different table elsewhere in the file.
+const nearTableWindow = 256
+
+// recoverNearTable reads the classic table whose keyword sits just before
+// offset. It is the case where startxref points a few bytes into the table
+// rather than at its keyword.
+func recoverNearTable(src []byte, offset int) (map[int]XEntry, Value, bool) {
+	if offset <= 0 || offset > len(src) {
+		return nil, NullVal(), false
+	}
+	low := offset - nearTableWindow
+	if low < 0 {
+		low = 0
+	}
+	at := bytes.LastIndex(src[low:offset], []byte(wordXRef))
+	if at < 0 {
+		return nil, NullVal(), false
+	}
+	at += low
+	if !keywordHere(src, at, wordXRef) {
+		return nil, NullVal(), false
+	}
+	entries, trailer, err := readCrossRef(src, at)
+	if err != nil || len(entries) == 0 {
+		return nil, NullVal(), false
+	}
+	return entries, trailer, true
 }
