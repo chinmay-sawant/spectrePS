@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"bytes"
 	"slices"
 	"testing"
 )
@@ -11,6 +12,30 @@ func TestPageContentNums(t *testing.T) {
 	checkSingleContentNum(t)
 	checkNoContentNums(t)
 	checkContentNumRange(t)
+	checkIndirectContentsArray(t)
+}
+
+// checkIndirectContentsArray covers a page that names the array of content
+// streams by an indirect reference. The array is not a stream, so reading the
+// kind off the unresolved reference was a typecheck, and reporting the array's
+// own number would point a rewrite at the array.
+func checkIndirectContentsArray(t *testing.T) {
+	t.Helper()
+	file := mustOpen(t, indirectContents(t))
+	got, err := file.Content(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, []byte("q\nQ")) {
+		t.Fatalf("content %q", got)
+	}
+	nums, err := file.PageContentNums(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(nums, []int{4, 5}) {
+		t.Fatalf("nums %v want [4 5]", nums)
+	}
 }
 
 func checkJoinedContentNums(t *testing.T) {

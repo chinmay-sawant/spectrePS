@@ -102,7 +102,7 @@ func (file *File) walkRefNums(val Value, seen, path map[int]bool) ([][]int, erro
 func (file *File) walkNodeNums(node Value, seen, path map[int]bool) ([][]int, error) {
 	typeName, _ := node.NameEntry(keyType)
 	if typeName == keyPage {
-		return [][]int{contentNumRefs(node)}, nil
+		return [][]int{file.contentNumRefs(node)}, nil
 	}
 	kids, hasKids, err := file.kidArray(node)
 	if err != nil {
@@ -126,13 +126,15 @@ func (file *File) walkNodeNums(node Value, seen, path map[int]bool) ([][]int, er
 }
 
 // contentNumRefs lists the indirect content references on one page dictionary.
-func contentNumRefs(node Value) []int {
+// A page whose /Contents names the array by an indirect reference reports the
+// array's own numbers, so a consumer never takes the array for a stream.
+func (file *File) contentNumRefs(node Value) []int {
 	contents, ok := node.ValueEntry(keyContents)
 	if !ok || contents.Kind == KindNull {
 		return nil
 	}
-	if contents.Kind == KindArray {
-		return arrayRefNums(contents.Array)
+	if items, isArray := file.contentsArray(contents); isArray {
+		return arrayRefNums(items)
 	}
 	if contents.Kind == KindRef {
 		return []int{contents.RefNum}
@@ -291,10 +293,30 @@ func (file *File) pageBytes(page Value) ([]byte, error) {
 	if !ok || contents.Kind == KindNull {
 		return []byte{}, nil
 	}
-	if contents.Kind == KindArray {
-		return file.joinContents(contents.Array)
+	// The reference itself goes to oneContent, which needs it to reparse a
+	// stream with an indirect /Length.
+	if items, isArray := file.contentsArray(contents); isArray {
+		return file.joinContents(items)
 	}
 	return file.oneContent(contents)
+}
+
+// contentsArray returns the content stream array of one page. /Contents holds
+// the array directly or names it by an indirect reference, so a reference is
+// resolved to read the kind. A reference that does not resolve, or resolves to
+// anything but an array, is not the array.
+func (file *File) contentsArray(contents Value) ([]Value, bool) {
+	if contents.Kind == KindArray {
+		return contents.Array, true
+	}
+	if contents.Kind != KindRef {
+		return nil, false
+	}
+	resolved, err := file.deref(contents)
+	if err != nil || resolved.Kind != KindArray {
+		return nil, false
+	}
+	return resolved.Array, true
 }
 
 func (file *File) joinContents(items []Value) ([]byte, error) {
