@@ -19,6 +19,7 @@ type (
 	lexer struct {
 		src           []byte
 		pos           int
+		keyMark       int
 		resolveLength lengthResolver
 	}
 

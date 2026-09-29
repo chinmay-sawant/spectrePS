@@ -190,6 +190,7 @@ func (lex *lexer) parseDict() (Value, error) {
 	entries := map[string]Value{}
 	for {
 		lex.skipIgnored()
+		lex.keyMark = lex.pos
 		if lex.pos >= len(lex.src) {
 			return NullVal(), syntaxErr(">>")
 		}
@@ -197,12 +198,9 @@ func (lex *lexer) parseDict() (Value, error) {
 			lex.pos += 2
 			return DictVal(entries), nil
 		}
-		key, err := lex.parseValue()
+		key, err := lex.parseDictKey()
 		if err != nil {
 			return NullVal(), err
-		}
-		if key.Kind != KindName {
-			return NullVal(), syntaxErr("<<")
 		}
 		item, err := lex.parseValue()
 		if err != nil {
@@ -210,6 +208,28 @@ func (lex *lexer) parseDict() (Value, error) {
 		}
 		entries[key.Name] = item
 	}
+}
+
+// parseDictKey reads a dictionary key. The specification writes it as a name,
+// and a producer that dropped the leading slash still wrote a key: Ghostscript
+// reads +AF as the key AF rather than refusing the dictionary.
+// GHOSTSCRIPT-701801-0.pdf carries "+AF [2 0 R]" where "/AF" was meant.
+func (lex *lexer) parseDictKey() (Value, error) {
+	key, err := lex.parseValue()
+	if err == nil {
+		if key.Kind != KindName {
+			return NullVal(), syntaxErr("<<")
+		}
+		return key, nil
+	}
+	// The value failed. A bare word in this position is the key itself.
+	lex.pos = lex.keyMark
+	lex.skipIgnored()
+	tok, err := lex.take()
+	if err != nil || tok.kind != tokWord {
+		return NullVal(), err
+	}
+	return NameVal(tok.text), nil
 }
 
 func (lex *lexer) atDictClose() bool {
