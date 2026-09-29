@@ -614,3 +614,68 @@ func prevLoopDoc(t *testing.T) []byte {
 	fmt.Fprintf(&body, "startxref\n%d\n%%%%EOF\n", base)
 	return body.Bytes()
 }
+
+// TestRecoverDamagedTrailerKeyword locks lastRootDict. A producer that damages
+// the `trailer` keyword still wrote the dictionary, and a document is defined
+// by its root rather than by the punctuation in front of it, so the header
+// rebuild reads the dictionary it finds. GHOSTSCRIPT-687796-0.pdf is this
+// shape in the corpus.
+func TestRecoverDamagedTrailerKeyword(t *testing.T) {
+	t.Parallel()
+	src := bytes.Replace(classicLine(t), []byte("trailer"), []byte("trailes"), 1)
+	file := mustOpen(t, src)
+	if file.PageCount() != 1 {
+		t.Fatalf("pages %d", file.PageCount())
+	}
+	got, err := file.Content(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, []byte(lineMarks)) {
+		t.Fatalf("content %q", got)
+	}
+}
+
+// TestRecoverNoRootDictionaryStaysRefused locks the boundary of lastRootDict: a
+// file with no dictionary carrying /Root anywhere is still refused, so the
+// fallback is not a blanket acceptance of any file with objects in it.
+func TestRecoverNoRootDictionaryStaysRefused(t *testing.T) {
+	t.Parallel()
+	src := bytes.Replace(classicLine(t), []byte("/Root 1 0 R"), []byte("/NotRoot 1 0 R"), 1)
+	if _, err := Open(t.Context(), src); err == nil {
+		t.Fatal("a file with no /Root anywhere opened")
+	}
+}
+
+// TestRecoverNearTable locks recoverNearTable. Two corpus files name a
+// startxref offset that lands inside their own table rather than at its
+// keyword, 23 and 55 bytes past it, which is a producer counting from a
+// different base rather than a damaged file.
+func TestRecoverNearTable(t *testing.T) {
+	t.Parallel()
+	full := classicLine(t)
+	keyword := bytes.LastIndex(full, []byte(wordXRef))
+	if keyword < 0 {
+		t.Fatal("fixture has no xref keyword")
+	}
+	for _, delta := range []int{1, 23, 55, nearTableWindow - 1} {
+		src := replaceStartxref(full, keyword+delta)
+		file := mustOpen(t, src)
+		if file.PageCount() != 1 {
+			t.Fatalf("delta %d: pages %d", delta, file.PageCount())
+		}
+	}
+}
+
+// TestRecoverNearTableWindowIsBounded locks the other side of the window: an
+// offset further back than nearTableWindow does not reach a table that sits
+// outside it, so the search cannot wander to an unrelated table.
+func TestRecoverNearTableWindowIsBounded(t *testing.T) {
+	t.Parallel()
+	full := classicLine(t)
+	keyword := bytes.LastIndex(full, []byte(wordXRef))
+	src := replaceStartxref(full, keyword-nearTableWindow-1)
+	if _, _, ok := recoverNearTable(src, keyword-nearTableWindow-1); ok {
+		t.Fatal("recoverNearTable reached a keyword outside its window")
+	}
+}

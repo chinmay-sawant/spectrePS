@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"testing"
+	"time"
 )
 
 // TestValidationPixmapStrokeFill locks stroke and fill edges: a negative
@@ -99,3 +100,68 @@ func validationWhitePage(t *testing.T, img Image) {
 		}
 	}
 }
+
+// TestValidationFillBoundingBox locks that bounding the fill scan by the path's
+// own box does not change the result. The bound is an optimisation, so the test
+// asserts the invariant it must preserve: every painted pixel lies inside the
+// path's bounding box, and the path's own interior is painted. Comparing two
+// pixmaps of different heights is not valid, because the row index is flipped
+// against the height.
+func TestValidationFillBoundingBox(t *testing.T) {
+	path := []Point{
+		{X: 2, Y: 2, Move: true}, {X: 6, Y: 2}, {X: 6, Y: 5}, {X: 2, Y: 5},
+	}
+	pixmap := NewPixmap(600, 700)
+	pixmap.Fill(path, 0, 0, 0, false)
+	img := shownPixmap(t, pixmap)
+
+	painted := 0
+	for y := range img.Height {
+		for x := range img.Width {
+			at := y*img.Stride + x*bytesPerPixel
+			if img.Pixels[at] == whiteByte && img.Pixels[at+1] == whiteByte && img.Pixels[at+2] == whiteByte {
+				continue
+			}
+			painted++
+			// The pixel centre has to be inside the path's box, with one
+			// pixel of slack for the boundary itself.
+			centerX := float64(x) + pixelCenter
+			centerY := float64(img.Height-1-y) + pixelCenter
+			if centerX < 1 || centerX > 7 || centerY < 1 || centerY > 6 {
+				t.Fatalf("pixel (%d,%d) is painted and lies outside the path box", x, y)
+			}
+		}
+	}
+	if painted == 0 {
+		t.Fatal("nothing was painted, so the bound skipped the path itself")
+	}
+}
+
+// TestValidationFillLargePathTerminates locks that a path with many points is
+// bounded rather than walking every point for every pixel of the page. Before
+// the bound, a 6,638-point path on a 612 by 792 page was 3.2 billion cross
+// tests and read as a hang.
+func TestValidationFillLargePathTerminates(t *testing.T) {
+	path := make([]Point, 0, 7000)
+	path = append(path, Point{X: 1, Y: 1, Move: true})
+	for i := range 6998 {
+		path = append(path, Point{X: 1 + float64(i%20)*0.1, Y: 1 + float64(i%30)*0.1})
+	}
+	pixmap := NewPixmap(612, 792)
+	start := time.Now()
+	pixmap.Fill(path, 0, 0, 0, false)
+	elapsed := time.Since(start)
+	img := shownPixmap(t, pixmap)
+	if img.Width != 612 || img.Height != 792 {
+		t.Fatalf("image %d by %d", img.Width, img.Height)
+	}
+	// Measured: 0.009s bounded, 17.3s unbounded, so this threshold is not
+	// close to either result and does not depend on the machine being fast.
+	if elapsed > fillBudget {
+		t.Fatalf("fill took %s, want under %s: the scan is not bounded by the path box", elapsed, fillBudget)
+	}
+}
+
+// fillBudget is the wall-clock ceiling for the large-path test. It exists to
+// catch a fill scan that is unbounded again, not to measure performance.
+const fillBudget = 5 * time.Second
