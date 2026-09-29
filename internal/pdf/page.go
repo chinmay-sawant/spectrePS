@@ -7,6 +7,7 @@ import (
 	"maps"
 
 	"github.com/chinmay-sawant/spectrePS/internal/graphics"
+	"sort"
 )
 
 const (
@@ -191,13 +192,67 @@ func (file *File) walkRoot() ([]pageLeaf, error) {
 	}
 	catalog, err := file.deref(root)
 	if err != nil {
+		// The trailer names a root the file does not carry. When the table
+		// was rebuilt from the file's own headers the root reference is part
+		// of the same damage, so scan for pages; a table the file wrote keeps
+		// its own generation numbers and a dead reference in it is still a
+		// hard failure, which TestValidTableGenerationStaysStrict pins.
+		if file.recovered {
+			return file.scanPages()
+		}
 		return nil, err
 	}
 	pages, ok := catalog.ValueEntry(keyPages)
 	if !ok || pages.Kind == KindNull {
+		return file.scanPages()
+	}
+	leaves, err := file.walkRef(pages, map[int]bool{}, map[int]bool{}, NullVal())
+	if err != nil {
+		// The catalog's page tree is not walkable. The pages are still in the
+		// file, each carrying /Type /Page and a /Parent that may point at an
+		// object nobody wrote; Ghostscript finds them by scanning rather than
+		// by descending, and paints a full page from a file whose /Pages is
+		// dangling. GHOSTSCRIPT-701877-0.pdf is that shape.
+		if file.recovered {
+			if scanned, serr := file.scanPages(); serr == nil && len(scanned) > 0 {
+				return scanned, nil
+			}
+		}
+		return nil, err
+	}
+	return leaves, nil
+}
+
+// scanPages collects every object whose /Type is /Page, in object-number order.
+// It is the recovery for a page tree whose /Pages or /Kids names an object the
+// file does not carry. A page whose own body will not parse is skipped rather
+// than failing the document, because the scan is already the fallback.
+func (file *File) scanPages() ([]pageLeaf, error) {
+	nums := make([]int, 0, len(file.xref))
+	for num := range file.xref {
+		nums = append(nums, num)
+	}
+	sort.Ints(nums)
+	leaves := []pageLeaf{}
+	for _, num := range nums {
+		node, err := file.resolve(num)
+		if err != nil || node.Kind != KindDict {
+			continue
+		}
+		typeName, _ := node.NameEntry(keyType)
+		if typeName != keyPage {
+			continue
+		}
+		content, err := file.pageBytes(node)
+		if err != nil {
+			continue
+		}
+		leaves = append(leaves, pageLeaf{content: content, resources: nearestResources(node, NullVal())})
+	}
+	if len(leaves) == 0 {
 		return nil, NewError(opPDF, errUndefined)
 	}
-	return file.walkRef(pages, map[int]bool{}, map[int]bool{}, NullVal())
+	return leaves, nil
 }
 
 // walkRef walks one page-tree node. seen holds every object number already
