@@ -75,38 +75,48 @@ func (file *File) contentNumPages() ([][]int, error) {
 	if !ok || pages.Kind == KindNull {
 		return nil, NewError(opPDF, errUndefined)
 	}
-	return file.walkRefNums(pages, map[int]bool{})
+	return file.walkRefNums(pages, map[int]bool{}, map[int]bool{})
 }
 
-func (file *File) walkRefNums(val Value, seen map[int]bool) ([][]int, error) {
+// walkRefNums mirrors walkRef for the content-number walk: seen skips a node a
+// second /Kids entry names, and path still refuses a cycle.
+func (file *File) walkRefNums(val Value, seen, path map[int]bool) ([][]int, error) {
 	if val.Kind == KindRef {
-		if seen[val.RefNum] {
+		if path[val.RefNum] {
 			return nil, NewError(opPDF, errLimit)
 		}
+		if seen[val.RefNum] {
+			return nil, nil
+		}
 		seen[val.RefNum] = true
+		path[val.RefNum] = true
+		defer delete(path, val.RefNum)
 	}
 	node, err := file.deref(val)
 	if err != nil {
 		return nil, err
 	}
-	return file.walkNodeNums(node, seen)
+	return file.walkNodeNums(node, seen, path)
 }
 
-func (file *File) walkNodeNums(node Value, seen map[int]bool) ([][]int, error) {
+func (file *File) walkNodeNums(node Value, seen, path map[int]bool) ([][]int, error) {
 	typeName, _ := node.NameEntry(keyType)
 	if typeName == keyPage {
 		return [][]int{contentNumRefs(node)}, nil
 	}
-	kids, hasKids := node.ArrayEntry(keyKids)
-	if typeName != keyPages && !hasKids {
-		return nil, NewError(opPDF, errSyntax)
+	kids, hasKids, err := file.kidArray(node)
+	if err != nil {
+		return nil, err
 	}
 	if !hasKids {
-		return nil, NewError(opPDF, errSyntax)
+		if typeName != keyPages {
+			return nil, NewError(opPDF, errSyntax)
+		}
+		return nil, nil
 	}
 	pages := make([][]int, 0, len(kids))
 	for _, kid := range kids {
-		sub, err := file.walkRefNums(kid, seen)
+		sub, err := file.walkRefNums(kid, seen, path)
 		if err != nil {
 			return nil, err
 		}
@@ -176,37 +186,74 @@ func (file *File) walkRoot() ([]pageLeaf, error) {
 	if !ok || pages.Kind == KindNull {
 		return nil, NewError(opPDF, errUndefined)
 	}
-	return file.walkRef(pages, map[int]bool{}, NullVal())
+	return file.walkRef(pages, map[int]bool{}, map[int]bool{}, NullVal())
 }
 
-func (file *File) walkRef(val Value, seen map[int]bool, resources Value) ([]pageLeaf, error) {
+// walkRef walks one page-tree node. seen holds every object number already
+// walked, so a node that appears twice under /Kids contributes its pages once
+// and the walk stays bounded by the object count. path holds the object numbers
+// on the current branch, so a node that is its own ancestor is the cycle that is
+// still a limitcheck.
+func (file *File) walkRef(val Value, seen, path map[int]bool, resources Value) ([]pageLeaf, error) {
 	if val.Kind == KindRef {
-		if seen[val.RefNum] {
+		if path[val.RefNum] {
 			return nil, NewError(opPDF, errLimit)
 		}
+		if seen[val.RefNum] {
+			return nil, nil
+		}
 		seen[val.RefNum] = true
+		path[val.RefNum] = true
+		defer delete(path, val.RefNum)
 	}
 	node, err := file.deref(val)
 	if err != nil {
 		return nil, err
 	}
-	return file.walkNode(node, seen, resources)
+	return file.walkNode(node, seen, path, resources)
 }
 
-func (file *File) walkNode(node Value, seen map[int]bool, inherited Value) ([]pageLeaf, error) {
+func (file *File) walkNode(node Value, seen, path map[int]bool, inherited Value) ([]pageLeaf, error) {
 	resources := nearestResources(node, inherited)
 	typeName, _ := node.NameEntry(keyType)
 	if typeName == keyPage {
 		return file.leaf(node, resources)
 	}
-	kids, hasKids := node.ArrayEntry(keyKids)
-	if typeName != keyPages && !hasKids {
-		return nil, NewError(opPDF, errSyntax)
+	kids, hasKids, err := file.kidArray(node)
+	if err != nil {
+		return nil, err
 	}
 	if !hasKids {
-		return nil, NewError(opPDF, errSyntax)
+		if typeName != keyPages {
+			return nil, NewError(opPDF, errSyntax)
+		}
+		// A /Pages node with no /Kids is an empty subtree. Ghostscript counts
+		// the pages below it as none, so the walk ends here instead of
+		// refusing the file.
+		return nil, nil
 	}
-	return file.walkKids(kids, seen, resources)
+	return file.walkKids(kids, seen, path, resources)
+}
+
+// kidArray returns the /Kids array of one page-tree node. A /Kids written as
+// an indirect reference to an array is resolved, because that is what real
+// producers emit and Ghostscript resolves it.
+func (file *File) kidArray(node Value) ([]Value, bool, error) {
+	entry, ok := node.ValueEntry(keyKids)
+	if !ok || entry.Kind == KindNull {
+		return nil, false, nil
+	}
+	if entry.Kind == KindRef {
+		resolved, err := file.deref(entry)
+		if err != nil {
+			return nil, false, err
+		}
+		entry = resolved
+	}
+	if entry.Kind != KindArray {
+		return nil, false, nil
+	}
+	return entry.Array, true, nil
 }
 
 // nearestResources returns the node's own /Resources, or the nearest ancestor's
@@ -227,10 +274,10 @@ func (file *File) leaf(node Value, resources Value) ([]pageLeaf, error) {
 	return []pageLeaf{{content: content, resources: resources}}, nil
 }
 
-func (file *File) walkKids(kids []Value, seen map[int]bool, resources Value) ([]pageLeaf, error) {
+func (file *File) walkKids(kids []Value, seen, path map[int]bool, resources Value) ([]pageLeaf, error) {
 	pages := make([]pageLeaf, 0, len(kids))
 	for _, kid := range kids {
-		sub, err := file.walkRef(kid, seen, resources)
+		sub, err := file.walkRef(kid, seen, path, resources)
 		if err != nil {
 			return nil, err
 		}
