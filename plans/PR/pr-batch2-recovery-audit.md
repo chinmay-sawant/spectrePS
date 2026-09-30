@@ -90,6 +90,12 @@ Info passed: 612; info passed and GS emitted pages: 564
 ## Diff stat by extension
 
 | Extension | Files | Insertions | Deletions |
-|-----------|-------|------------|-----------|
-| pending generator output | | | |
-| **Total** | | | |
+| --- | ---: | ---: | ---: |
+| `.go` | 29 | 5586 | 207 |
+| `.md` | 8 | 941 | 140 |
+| `.ps` | 1 | 279 | 0 |
+| `.py` | 1 | 176 | 0 |
+| `.sh` | 1 | 139 | 0 |
+| `.tsv` | 2 | 3137 | 84 |
+| No extension | 2 | 33 | 3 |
+| **Total** | **44** | **10291** | **434** |
