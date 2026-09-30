@@ -16,6 +16,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -108,23 +109,114 @@ func corpusSubtest(t *testing.T, row validation.Row) {
 	})
 }
 
-// corpusRunRow dispatches one manifest row to its command class.
+// corpusRunRow dispatches one manifest row to its command class. The class
+// comes from the probe column, which replaced the path-prefix inference the
+// runner used to do, so a new folder or source does not need a new branch
+// here.
 func corpusRunRow(t *testing.T, row validation.Row) {
 	t.Helper()
 	path := corpusRowPath(t, row)
 	work := t.TempDir()
 	switch {
+	case row.Survived():
+		corpusRunSurvive(t, row, path, work)
 	case row.Refused():
 		corpusRunRefusal(t, row, path, work)
-	case strings.HasPrefix(row.Path, "text/"):
+	case row.Probe == validation.ProbeText:
 		corpusRunText(t, row, path)
-	case strings.HasPrefix(row.Path, "rewrite/"):
+	case row.Probe == validation.ProbeRewrite:
 		corpusRunRewrite(t, row, path, work)
 	case row.Expect == validation.ExpectPaint:
 		corpusRunPaint(t, row, path, work)
 	default:
 		corpusRunInfo(t, row, path)
 	}
+}
+
+// corpusRunSurvive runs a defective row and asserts the robustness contract
+// rather than an outcome: the job terminates, and any failure is a named
+// spectreps JobError. A recovered page and exit 0 both pass. A Go panic, a
+// runtime fault, or a hang fails, because those are the three ways a
+// hand-written parser loses on real-world input.
+func corpusRunSurvive(t *testing.T, row validation.Row, path, work string) {
+	t.Helper()
+	args := corpusProbeArgs(t, row, path, work)
+	code, _, stderr := callRun(t, args...)
+	if err := surviveVerdict(code, stderr); err != nil {
+		t.Fatalf("%s: %q: %v", row.Path, args, err)
+	}
+}
+
+// The three ways a survive row can fail. They are static so a caller can match
+// them with errors.Is, and so the classifier does not build a new error value
+// per input.
+var (
+	// errSurviveSignal means the process was killed rather than refused.
+	errSurviveSignal = errors.New("killed by a signal, want a clean exit or a named error")
+	// errSurviveFault means the process died inside Go rather than refusing.
+	errSurviveFault = errors.New("failed with a fault, not a named error")
+	// errSurviveSilent means a non-zero exit with no spectreps error on it.
+	errSurviveSilent = errors.New("exited non-zero without a named spectreps error")
+)
+
+// surviveVerdict classifies one run of a survive row. It is pure so a test can
+// prove the classification rejects a fault, which is the only way to know the
+// corpus check is not passing everything.
+func surviveVerdict(code int, stderr string) error {
+	if code == exitOK {
+		return nil
+	}
+	if code < 0 {
+		return fmt.Errorf("%w: signal %d", errSurviveSignal, -code)
+	}
+	for _, fault := range corpusFaultSignals() {
+		if strings.Contains(stderr, fault) {
+			return fmt.Errorf("%w:\n%s", errSurviveFault, stderr)
+		}
+	}
+	if !strings.Contains(stderr, "Error: /") {
+		return fmt.Errorf("%w: exit %d\n%s", errSurviveSilent, code, stderr)
+	}
+	return nil
+}
+
+// corpusFaultSignals returns the stderr fragments that mean the process died
+// rather than refused. A named refusal is "Error: /name in op", so none of
+// these may overlap that shape.
+func corpusFaultSignals() []string {
+	return []string{
+		"panic:",
+		"goroutine ",
+		"runtime error",
+		"fatal error:",
+		"unexpected signal",
+		"stack overflow",
+	}
+}
+
+// corpusProbeArgs builds the argv for a row's probe. The probes mirror the
+// corpusPaintArgs classes, so a survive row exercises the same code path a
+// paint or struct row would.
+func corpusProbeArgs(t *testing.T, row validation.Row, path, work string) []string {
+	t.Helper()
+	switch row.Probe {
+	case validation.ProbeRaster:
+		return corpusPaintArgs(row, path, work)
+	case validation.ProbeInfo:
+		return []string{"info", path}
+	case validation.ProbeRewrite:
+		return []string{"rewrite", "-level", "2", "-o",
+			filepath.Join(work, corpusRewriteName), path}
+	case validation.ProbePS:
+		return []string{"run", path}
+	case validation.ProbeText:
+		return []string{"text", path}
+	case validation.ProbeGS:
+		return []string{"gs", "-q", "-dNOPAUSE", "-dBATCH", "-sDEVICE=ppmraw",
+			"-sOutputFile=" + filepath.Join(work, corpusRewriteName), path}
+	}
+	t.Fatalf("%s: probe %q has no argv", row.Path, row.Probe)
+	return nil
 }
 
 // corpusRowPath resolves one row and skips an absent external file.
@@ -347,10 +439,94 @@ func corpusCheckPPM(t *testing.T, rowPath, path string) {
 	}
 }
 
-// TestValidationCorpusPostScript runs postscript/ and refs/.
+// corpusRowsByArea returns the manifest rows whose area column is one of the
+// named areas, including the fetched external tier. This is the selector the
+// newer areas use, so adding a corpus folder needs a manifest row and nothing
+// in Go. An external row whose file is absent still comes back here and skips
+// inside the subtest, which is how the fetched tier stays optional.
+func corpusRowsByArea(t *testing.T, manifest []validation.Row, areas ...string) []validation.Row {
+	t.Helper()
+	wanted := make(map[string]bool, len(areas))
+	for _, area := range areas {
+		wanted[area] = true
+	}
+	selected := make([]validation.Row, 0, len(manifest))
+	for _, row := range manifest {
+		if wanted[row.Area] {
+			selected = append(selected, row)
+		}
+	}
+	if len(selected) == 0 {
+		t.Fatalf("no manifest rows with area %v", areas)
+	}
+	return selected
+}
+
+// TestValidationCorpusHandbuilt runs the ISO 32000-1 well-formedness cases. Each
+// one is defective on purpose, so the assertion is the survive contract: the
+// job terminates and any failure is a named spectreps error.
+//
+// The set is CC BY-SA 4.0, so it lives in the fetched tier rather than the
+// committed one. A fresh clone skips it and says so.
+func TestValidationCorpusHandbuilt(t *testing.T) {
+	manifest := corpusManifest(t)
+	rows := corpusRowsByArea(t, manifest, "handbuilt")
+	if !corpusAnyPresent(t, rows) {
+		t.Skipf("fetched hand-built tier absent: run make validation-fetch")
+	}
+	for _, row := range rows {
+		corpusSubtest(t, row)
+	}
+}
+
+// TestValidationCorpusRobustness runs the fetched defective files: the
+// PDF Association safedocs subset and the Ghostscript bug-tracker material, plus
+// the PDF/X prepress suites, which are real documents that a print workflow
+// rejects for colour reasons rather than structural ones.
+func TestValidationCorpusRobustness(t *testing.T) {
+	manifest := corpusManifest(t)
+	rows := corpusRowsByArea(t, manifest, "malformed", "prepress")
+	if !corpusAnyPresent(t, rows) {
+		t.Skipf("fetched robustness tier absent: run make validation-fetch")
+	}
+	for _, row := range rows {
+		corpusSubtest(t, row)
+	}
+}
+
+// TestValidationCorpusArchival runs the real-world files that carry a feature
+// an archival tool rejects. They live in the fetched tier, so every row skips
+// until go run internal/validation/gen.go -fetch-external has run.
+func TestValidationCorpusArchival(t *testing.T) {
+	manifest := corpusManifest(t)
+	rows := corpusRowsByArea(t, manifest, "archival")
+	if !corpusAnyPresent(t, rows) {
+		t.Skipf("fetched archival tier absent: run go run internal/validation/gen.go -fetch-external")
+	}
+	for _, row := range rows {
+		corpusSubtest(t, row)
+	}
+}
+
+// corpusAnyPresent reports whether at least one row's file is on disk.
+func corpusAnyPresent(t *testing.T, rows []validation.Row) bool {
+	t.Helper()
+	for _, row := range rows {
+		_, err := os.Stat(filepath.Join(validation.CorpusDir(), filepath.FromSlash(row.Path)))
+		if err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// TestValidationCorpusPostScript runs every area=postscript row, which is
+// postscript/ plus the fetched Scribus output, and refs/ on top.
 func TestValidationCorpusPostScript(t *testing.T) {
 	manifest := corpusManifest(t)
-	for _, row := range corpusRows(t, manifest, "postscript", "refs") {
+	rows := corpusRows(t, manifest, "refs")
+	rows = append(rows, corpusRowsByArea(t, manifest, "postscript")...)
+	for _, row := range rows {
 		corpusSubtest(t, row)
 	}
 }
@@ -359,7 +535,8 @@ func TestValidationCorpusPostScript(t *testing.T) {
 // 2.0 container when the fetched tier is present.
 func TestValidationCorpusPDF(t *testing.T) {
 	manifest := corpusManifest(t)
-	rows := corpusRows(t, manifest, "structural", "paths", "compatibility")
+	rows := corpusRows(t, manifest, "paths", "compatibility")
+	rows = append(rows, corpusRowsByArea(t, manifest, "structural")...)
 	rows = append(rows, corpusExternalRows(t, manifest, "external/pdf20examples/simple-pdf-2.0.pdf")...)
 	for _, row := range rows {
 		corpusSubtest(t, row)
@@ -370,7 +547,7 @@ func TestValidationCorpusPDF(t *testing.T) {
 // the fetched tier is present.
 func TestValidationCorpusImages(t *testing.T) {
 	manifest := corpusManifest(t)
-	rows := corpusRows(t, manifest, "images")
+	rows := corpusRowsByArea(t, manifest, "images")
 	rows = append(rows, corpusExternalRows(t, manifest, "external/fax-decode-parms.pdf")...)
 	for _, row := range rows {
 		corpusSubtest(t, row)
@@ -397,7 +574,13 @@ func TestValidationCorpusRewrite(t *testing.T) {
 // TestValidationCorpusPDFA runs pdfa/ and tagged/.
 func TestValidationCorpusPDFA(t *testing.T) {
 	manifest := corpusManifest(t)
-	for _, row := range corpusRows(t, manifest, "pdfa", "tagged") {
+	rows := corpusRowsByArea(t, manifest, "pdfa", "tagged")
+	// The fetched conformance tier is 2,691 rows. Say so when it is absent, so
+	// a skipped run is not mistaken for a passing one.
+	if !corpusAnyPresent(t, rows) {
+		t.Logf("fetched conformance tier absent: run make validation-fetch")
+	}
+	for _, row := range rows {
 		corpusSubtest(t, row)
 	}
 }

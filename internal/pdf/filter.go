@@ -81,6 +81,27 @@ func defaultFilterParams() filterParams {
 	}
 }
 
+// canonicalFilter maps the abbreviated filter names ISO 32000-1 Table 6
+// defines to their full names. Producers write the abbreviations in content
+// streams as well as inline images, and Ghostscript reads both, so the
+// abbreviation resolves to the same decoder.
+func canonicalFilter(filterName string) string {
+	switch filterName {
+	case "AHx":
+		return opASCIIHex
+	case "A85":
+		return opASCII85
+	case "LZW":
+		return opLZW
+	case "Fl":
+		return opFlate
+	case "RL":
+		return opRunLength
+	default:
+		return filterName
+	}
+}
+
 // Decode applies one filter to raw.
 // An empty filterName returns raw unchanged.
 // FlateDecode and LZWDecode decompress and then apply the /DecodeParms
@@ -91,6 +112,7 @@ func defaultFilterParams() filterParams {
 // that decodes past the 32 MiB cap returns limitcheck with the filter name.
 // params is a DecodeParms dictionary, or a null value when absent.
 func Decode(filterName string, params Value, raw []byte) ([]byte, error) {
+	filterName = canonicalFilter(filterName)
 	switch filterName {
 	case "":
 		return raw, nil
@@ -221,12 +243,25 @@ func inflate(raw []byte, params Value) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A producer that declared /FlateDecode and then wrote no bytes wrote an
+	// empty stream. There is nothing to inflate, and refusing it would refuse
+	// a file Ghostscript opens.
+	if len(raw) == 0 {
+		return nil, nil
+	}
 	reader, err := zlib.NewReader(bytes.NewReader(raw))
 	if err != nil {
 		return nil, NewError(opFlate, errSyntax)
 	}
 	decoded, readErr := readLimited(reader, maxInflated, opFlate)
 	closeErr := reader.Close()
+	if errors.Is(readErr, errDamaged) {
+		// A deflate stream that is truncated, ends on a corrupt block, or
+		// fails its Adler-32 is common in real files. Ghostscript inflates
+		// as far as the data goes and renders the rest of the page, so the
+		// reader keeps what decoded rather than refusing the whole file.
+		return applyPredictor(decoded, parsed)
+	}
 	if readErr != nil {
 		return nil, readErr
 	}
@@ -646,6 +681,15 @@ func decodeRunLength(raw []byte) ([]byte, error) {
 	return out, nil
 }
 
+// errDamaged marks a read that stopped on corrupt or truncated input.
+// Whatever decoded before the stop is still usable, so the filter keeps it
+// instead of reporting the stop as a syntaxerror in the filter name.
+var errDamaged = errors.New("pdf: damaged stream")
+
+// readLimited reads a decompressed stream, stopping at the cap.
+// A clean end returns the bytes. A read error returns the bytes read so far
+// and errDamaged, because a damaged tail does not invalidate the head. A
+// stream that never produced a byte is a syntaxerror in opName.
 func readLimited(reader io.Reader, limit int, opName string) ([]byte, error) {
 	buf := make([]byte, 0, readChunk)
 	tmp := make([]byte, readChunk)
@@ -660,7 +704,10 @@ func readLimited(reader io.Reader, limit int, opName string) ([]byte, error) {
 		if errors.Is(err, io.EOF) {
 			return buf, nil
 		}
-		if err != nil || count == 0 {
+		if err != nil {
+			return buf, errDamaged
+		}
+		if count == 0 {
 			return nil, NewError(opName, errSyntax)
 		}
 	}

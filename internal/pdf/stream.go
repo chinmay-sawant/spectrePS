@@ -37,7 +37,7 @@ func (lex *lexer) attachStream(val *Value) error {
 // The declared /Length wins when its span ends at the keyword, with PDF
 // whitespace allowed in between. When the length is missing, is indirect and
 // unresolved, or does not reach endstream, the reader scans forward for the
-// keyword. A missing length or a stream with no endstream is syntaxerror.
+// keyword. A stream with no endstream is syntaxerror.
 func (lex *lexer) streamBytes(dict map[string]Value) ([]byte, error) {
 	if !lex.skipOneEOL() {
 		return nil, syntaxErr(wordStream)
@@ -62,12 +62,17 @@ func (lex *lexer) streamBytes(dict map[string]Value) ([]byte, error) {
 }
 
 // declaredLength returns the /Length byte count. ok is false when the entry is
-// an indirect reference this lexer cannot resolve, so the caller scans for
-// endstream instead. A missing length or a non-integer one is syntaxerror.
+// missing or an indirect reference this lexer cannot resolve, so the caller
+// scans for endstream instead. A non-integer length is syntaxerror.
+//
+// An absent /Length is the same problem as an unresolved one: the body has no
+// declared end, so the reader scans for endstream, the recovery Ghostscript
+// documents as "stream Length incorrect". A stream with no endstream keyword
+// still fails.
 func (lex *lexer) declaredLength(dict map[string]Value) (int, bool, error) {
 	entry, ok := dict[wordLength]
 	if !ok {
-		return 0, false, syntaxErr(wordLength)
+		return 0, false, nil
 	}
 	//nolint:exhaustive // a non-integer, non-reference length is syntaxerror.
 	switch entry.Kind {
@@ -204,6 +209,7 @@ func (file *File) resolvedStream(ref Value) (Value, bool) {
 	if err != nil || stream.Kind != KindStream {
 		return NullVal(), false
 	}
+	stream = file.decryptValue(ref.RefNum, ref.RefGen, stream)
 	file.cache[ref.RefNum] = stream
 	return stream, true
 }

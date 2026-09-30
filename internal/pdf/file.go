@@ -3,6 +3,8 @@ package pdf
 import (
 	"bytes"
 	"context"
+	"errors"
+	"sort"
 	"strconv"
 )
 
@@ -23,6 +25,7 @@ const (
 	keyObjCount = "N"
 	keyFirst    = "First"
 	keyPrev     = "Prev"
+	keyObjStm   = "ObjStm"
 
 	// xrefChainLimit caps one trailer /Prev chain. A longer chain is a loop
 	// or a broken producer, so it is syntaxerror in xref.
@@ -48,6 +51,10 @@ type File struct {
 	pages     [][]byte
 	resources []Value
 	busy      map[int]bool
+	scan      map[int]XEntry
+	packed    map[int]XEntry
+	recovered bool
+	crypt     *cryptState
 }
 
 type objPos struct {
@@ -58,6 +65,28 @@ type objPos struct {
 type stmItem struct {
 	value Value
 	index int
+}
+
+// installCrypt derives and installs the crypt state for an encrypted trailer.
+// The security handler is read before the state is installed, so the /O and /U
+// entries it carries are never decrypted. A handler whose empty password does
+// not authenticate keeps the refusal the reader has always reported.
+func (file *File) installCrypt(trailer Value) error {
+	if !encrypted(trailer) {
+		return nil
+	}
+	state, err := file.openCrypt(trailer)
+	if errors.Is(err, errNoEncrypt) {
+		state, err = nil, nil
+	}
+	if err != nil {
+		return err
+	}
+	if state == nil {
+		return NewError(opEncrypt, errAccess)
+	}
+	file.crypt = state
+	return nil
 }
 
 // Open reads a PDF subset. Page count is the number of page leaves walked from the page tree, not the /Count field.
@@ -71,16 +100,9 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 	if !bytes.Contains(src, []byte(pdfHeader)) {
 		return nil, NewError(opPDF, errSyntax)
 	}
-	offset, err := startOffset(src)
+	entries, trailer, recovered, err := readTable(src)
 	if err != nil {
 		return nil, err
-	}
-	entries, trailer, err := readCrossRef(src, offset)
-	if err != nil {
-		return nil, err
-	}
-	if encrypted(trailer) {
-		return nil, NewError(opEncrypt, errAccess)
 	}
 	file := &File{
 		src:       src,
@@ -91,6 +113,13 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 		pages:     nil,
 		resources: nil,
 		busy:      map[int]bool{},
+		scan:      nil,
+		packed:    nil,
+		recovered: recovered,
+		crypt:     nil,
+	}
+	if err := file.installCrypt(trailer); err != nil {
+		return nil, err
 	}
 	leaves, err := file.walkRoot()
 	if err != nil {
@@ -103,6 +132,40 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 		file.resources[i] = leaf.resources
 	}
 	return file, nil
+}
+
+// readTable returns the cross-reference table and trailer for src, and whether
+// the table was rebuilt. The section at startxref wins when it reads. A missing
+// or unreadable startxref, a startxref that names no section, and a startxref
+// that names a damaged section all leave the file's own trailer and object
+// headers as the only source, so recoverCrossRef rebuilds from the beginning of
+// the file; Ghostscript reports "Cannot find a 'startxref' anywhere in the
+// file" and rebuilds the same way. The original failure is reported when the
+// rebuild produces no trailer /Root.
+func readTable(src []byte) (map[int]XEntry, Value, bool, error) {
+	offset, startErr := startOffset(src)
+	var (
+		entries map[int]XEntry
+		trailer Value
+		readErr error
+	)
+	if startErr == nil {
+		entries, trailer, readErr = readCrossRef(src, offset)
+	}
+	if startErr == nil && readErr == nil {
+		return entries, trailer, false, nil
+	}
+	recoverAt := -1
+	if startErr == nil {
+		recoverAt = offset
+	}
+	if recovered, recoveredTrailer, ok := recoverCrossRef(src, recoverAt); ok {
+		return recovered, recoveredTrailer, true, nil
+	}
+	if startErr != nil {
+		return nil, NullVal(), false, startErr
+	}
+	return nil, NullVal(), false, readErr
 }
 
 func startOffset(src []byte) (int, error) {
@@ -128,9 +191,12 @@ func startOffset(src []byte) (int, error) {
 // chain, newest section first. The newest section wins per object number and an
 // older section fills only the gaps. Trailer entries inherit from older
 // sections the same way, except /Prev and /Size, which describe one section.
-// A /Prev cycle, a chain past xrefChainLimit, a malformed /Prev, and a missing
-// section are syntaxerror in xref. A single section keeps the map the section
-// reader returned, so the common path adds no allocation.
+// A /Prev cycle, a chain past xrefChainLimit, and a malformed /Prev are
+// syntaxerror in xref. A /Prev link that points past the end, names nothing, or
+// names a damaged section is a broken link the object headers repair: the
+// sections already read stand, the rows they leave out come from the scan, and
+// the walk ends. A single section keeps the map the section reader returned, so
+// the common path adds no allocation.
 //
 //nolint:cyclop // one branch per trailer /Prev section step.
 func readCrossRef(src []byte, offset int) (map[int]XEntry, Value, error) {
@@ -142,12 +208,35 @@ func readCrossRef(src []byte, offset int) (map[int]XEntry, Value, error) {
 		if section >= xrefChainLimit {
 			return nil, NullVal(), NewError(opXRef, errSyntax)
 		}
-		if current < 0 || current >= len(src) || seen[current] {
+		if current < 0 || current >= len(src) {
+			// A /Prev link that points past the end names no section at all.
+			// The sections already read stand, and the rows they leave out
+			// come from the file's own object headers, which is the rebuild
+			// Ghostscript performs when an older link is broken. Only the
+			// newest section is not a link, so its absence is still a failure.
+			if section == 0 {
+				return nil, NullVal(), NewError(opXRef, errSyntax)
+			}
+			fillEntries(entries, scanObjectHeaders(src))
+			break
+		}
+		if seen[current] {
+			// A /Prev link that points at a section already read is a cycle.
+			// That is an infinite loop, not a damaged table, and it keeps its
+			// refusal, which structural/bug_xrefv4_loop.pdf pins.
 			return nil, NullVal(), NewError(opXRef, errSyntax)
 		}
 		sectionEntries, sectionTrailer, err := readXRefSection(src, current)
 		if err != nil {
-			return nil, NullVal(), err
+			// A damaged older section is a loss the object headers repair,
+			// the same as a /Prev link that names nothing. The newest
+			// section's damage keeps its error, and recoverCrossRef is where
+			// the caller rebuilds it.
+			if section == 0 {
+				return nil, NullVal(), err
+			}
+			fillEntries(entries, scanObjectHeaders(src))
+			break
 		}
 		if entries == nil {
 			entries = sectionEntries
@@ -375,25 +464,68 @@ func (file *File) resolve(num int) (Value, error) {
 	}
 	entry, ok := file.xref[num]
 	if !ok || !entry.InUse {
+		// A row the table never wrote, or wrote free, does not have to mean
+		// the object is gone: the file's own object headers are the source a
+		// rebuild uses, and a number they carry still resolves. A number the
+		// file does not carry anywhere stays a dead dependency, which
+		// TestReferencedDeadXrefRowStillFails pins.
+		if value, err := file.recoveredObject(num); err == nil {
+			file.cache[num] = value
+			return value, nil
+		}
 		return NullVal(), NewError(opXRef, errSyntax)
 	}
 	file.busy[num] = true
 	defer delete(file.busy, num)
 
-	var (
-		val Value
-		err error
-	)
-	if entry.Compressed {
-		val, err = file.compressed(num, entry)
-	} else {
-		val, err = file.plain(num, entry)
-	}
+	val, err := file.objectAt(num, entry)
 	if err != nil {
-		return NullVal(), err
+		fixed, fixedErr := file.recoveredObject(num)
+		if fixedErr != nil {
+			return NullVal(), err
+		}
+		val = fixed
 	}
 	file.cache[num] = val
 	return val, nil
+}
+
+// objectAt reads object num through one xref row.
+func (file *File) objectAt(num int, entry XEntry) (Value, error) {
+	if entry.Compressed {
+		if value, ok := file.objStreamValue(num, entry.StreamNum, entry.StreamIdx); ok {
+			return value, nil
+		}
+		return NullVal(), NewError(opXRef, errSyntax)
+	}
+	return file.plainAt(num, entry.Offset, entry.Gen)
+}
+
+// recoveredObject reads object num from where the file itself says it is,
+// ignoring the row: the object header scan first, then the objects an object
+// stream carries. It is the reader's answer to a row whose bytes are not the
+// object, the damage Ghostscript reports as an invalid xref entry and repairs
+// by rebuilding the table.
+func (file *File) recoveredObject(num int) (Value, error) {
+	row, ok := file.recoveredRow(num)
+	if !ok {
+		return NullVal(), NewError(opXRef, errSyntax)
+	}
+	return file.objectAt(num, row)
+}
+
+// readable returns the object at num, and false when the xref row for num names
+// an object the file does not carry. Such a row is a dead object number: the
+// offset is out of range, the bytes there are not that object, or the row never
+// existed. A survey that walks every in-use number uses this, so one dead number
+// does not veto the whole survey. A reference to the same number still fails,
+// because deref and every content path resolve strictly.
+func (file *File) readable(num int) (Value, bool) {
+	val, err := file.resolve(num)
+	if err != nil {
+		return NullVal(), false
+	}
+	return val, true
 }
 
 func (file *File) deref(val Value) (Value, error) {
@@ -401,9 +533,23 @@ func (file *File) deref(val Value) (Value, error) {
 		return val, nil
 	}
 	entry, ok := file.xref[val.RefNum]
-	if !ok || !entry.InUse || !genOK(entry, val.RefGen) {
+	if ok && entry.InUse && !genOK(entry, val.RefGen) {
+		// The row is in use but its generation disagrees with the reference.
+		// A rebuilt table numbers objects from their headers, and Ghostscript
+		// reads the reference anyway, so the object the file carries is tried
+		// before the reference is declared dead. A table the file wrote keeps
+		// the strict check: there the row's generation is the producer's own
+		// statement, and an old generation is an obsolete reference.
+		if file.recovered {
+			if value, err := file.recoveredObject(val.RefNum); err == nil {
+				return value, nil
+			}
+		}
 		return NullVal(), NewError(opXRef, errSyntax)
 	}
+	// An absent or free row is not decided here: resolve falls back to the
+	// file's own object headers, which is where a rebuild would find the
+	// object. A generation that disagrees with an in-use row is still dead.
 	return file.resolve(val.RefNum)
 }
 
@@ -414,30 +560,126 @@ func genOK(entry XEntry, gen int) bool {
 	return entry.Gen == gen
 }
 
-func (file *File) plain(num int, entry XEntry) (Value, error) {
-	if entry.Offset < 0 || entry.Offset >= len(file.src) {
-		return NullVal(), NewError(opXRef, errSyntax)
+// recoveredRow returns a row for num rebuilt from the file itself: the object
+// header scan first, then the objects an object stream carries. A compressed
+// row is the answer when the object has no header of its own.
+func (file *File) recoveredRow(num int) (XEntry, bool) {
+	if row, ok := file.scannedEntry(num); ok {
+		return row, true
 	}
-	got, gen, val, _, err := ParseIndirect(file.src, entry.Offset)
-	if err != nil {
-		return NullVal(), err
-	}
-	if got != num || gen != entry.Gen {
-		return NullVal(), NewError(opXRef, errSyntax)
-	}
-	return val, nil
+	return file.packedEntry(num)
 }
 
-func (file *File) compressed(num int, entry XEntry) (Value, error) {
-	objects, err := file.loadObjStream(entry.StreamNum)
+// packedEntry returns the object stream row that carries num, or false. The
+// object stream index is built once, on the first row that needs it.
+func (file *File) packedEntry(num int) (XEntry, bool) {
+	if file.packed == nil {
+		file.packed = file.indexObjectStreams()
+	}
+	entry, ok := file.packed[num]
+	return entry, ok
+}
+
+// indexObjectStreams reads every object stream the header scan found and maps
+// each object it carries to a compressed row. It is the recovery the reader
+// uses when a row names no object and no plain header carries the number.
+func (file *File) indexObjectStreams() map[int]XEntry {
+	rows := map[int]XEntry{}
+	if file.scan == nil {
+		file.scan = scanObjectHeaders(file.src)
+	}
+	for _, streamNum := range file.sortedScanNums() {
+		objects, ok := file.objectStreamObjects(streamNum, file.scan[streamNum])
+		if !ok {
+			continue
+		}
+		for num, item := range objects {
+			if _, seen := rows[num]; !seen {
+				rows[num] = packedEntry(streamNum, item.index)
+			}
+		}
+	}
+	return rows
+}
+
+// sortedScanNums returns the scanned object numbers that are not themselves
+// compressed, sorted so the object stream index is built the same way twice.
+func (file *File) sortedScanNums() []int {
+	streams := make([]int, 0, len(file.scan))
+	for streamNum, entry := range file.scan {
+		if !entry.Compressed {
+			streams = append(streams, streamNum)
+		}
+	}
+	sort.Ints(streams)
+	return streams
+}
+
+// objectStreamObjects parses one object stream and returns the objects it
+// carries, keyed by object number. A non-stream, a stream of another type, a
+// missing /N or /First, a decode failure, and a malformed header each report
+// false. The stream body is decrypted with the object stream's own key, which
+// is the key ISO 32000-1 clause 7.5.8.2 gives the strings it carries.
+func (file *File) objectStreamObjects(num int, entry XEntry) (map[int]stmItem, bool) {
+	//nolint:dogsled // ParseIndirect returns five values; only the value is used here.
+	_, _, val, _, err := ParseIndirect(file.src, entry.Offset)
+	if err != nil || val.Kind != KindStream {
+		return nil, false
+	}
+	if typeName, _ := val.NameEntry(keyType); typeName != keyObjStm {
+		return nil, false
+	}
+	count, first, ok := streamBounds(val)
+	if !ok {
+		return nil, false
+	}
+	body, err := decodeStream(file.decryptValue(num, entry.Gen, val))
+	if err != nil {
+		return nil, false
+	}
+	objects, err := splitObjStream(body, count, first)
+	return objects, err == nil
+}
+
+// plainAt reads object num at offset and requires the header there to carry
+// that number and generation.
+func (file *File) plainAt(num, offset, gen int) (Value, error) {
+	if offset < 0 || offset >= len(file.src) {
+		return NullVal(), NewError(opXRef, errSyntax)
+	}
+	got, gotGen, val, _, err := ParseIndirect(file.src, offset)
 	if err != nil {
 		return NullVal(), err
 	}
-	item, ok := objects[num]
-	if !ok || item.index != entry.StreamIdx {
+	if got != num || gotGen != gen {
 		return NullVal(), NewError(opXRef, errSyntax)
 	}
-	return item.value, nil
+	return file.decryptValue(got, gotGen, val), nil
+}
+
+// scannedEntry returns the object-header scan row for num, building the scan on
+// first use. It is the fallback for a row whose own offset is wrong.
+func (file *File) scannedEntry(num int) (XEntry, bool) {
+	if file.scan == nil {
+		file.scan = scanObjectHeaders(file.src)
+	}
+	entry, ok := file.scan[num]
+	return entry, ok
+}
+
+// objStreamValue reads object num from the object stream numbered streamNum and
+// requires it at index. A missing stream, a bad header, a decode failure, and a
+// different index all report false.
+func (file *File) objStreamValue(num, streamNum, index int) (Value, bool) {
+	objects, err := file.loadObjStream(streamNum)
+	if err != nil {
+		return NullVal(), false
+	}
+	item, ok := objects[num]
+	if !ok || item.index != index {
+		return NullVal(), false
+	}
+	return item.value, true
 }
 
 func (file *File) loadObjStream(streamNum int) (map[int]stmItem, error) {

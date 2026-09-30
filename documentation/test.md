@@ -10,10 +10,11 @@ External tests use `package spectreps_test`, so they only see the exported API.
 
 The v0.0.4 validation work adds a checked-in corpus at `sampledata/validation/` and a traceability table that maps every case in this file to the test that proves it.
 
-`sampledata/validation/` holds one folder per feature area. Every file has a row in `sampledata/validation/manifest.tsv` with its source, pinned commit, license, SHA-256, byte count, feature, and expected verdict. The folders and what each one proves:
+`sampledata/validation/` holds one folder per feature area. Every file has a row in `sampledata/validation/manifest.tsv` with its source, pinned commit, license, SHA-256, byte count, feature, expected verdict, and the four label columns `area`, `probe`, `basis`, and `pages`. The folders and what each one proves:
 
 - `compatibility/`: PDF header and catalog versions, plus real files the reader or painter currently refuses.
-- `postscript/`: repo-authored interpreter programs and the Apache-2.0 CUPS pages, for the interpreter and raster cases.
+- `postscript/`: repo-authored interpreter programs, the Apache-2.0 CUPS pages, and a generated `groff -Tps` sweep naming 13 standard 14 faces.
+- The fetched tier's `handbuilt/`: 89 ISO 32000-1:2008 well-formedness cases from the Open Preservation Foundation, each breaking exactly one structural requirement. These cover the hand-written xref, xref stream, object stream, and trailer parsers. The set is CC BY-SA 4.0, so it is fetched rather than committed, and a fresh clone skips it.
 - `paths/`: PDF path and paint operator files, including an image XObject page.
 - `structural/`: classic xref tables, xref streams, object streams, a page with no `/Resources`, and files that must refuse with a named xref error.
 - `images/`: Flate, DCT, CCITT G3 and G4, and JPEG2000 samples, including a filter chain and a named refusal.
@@ -24,16 +25,24 @@ The v0.0.4 validation work adds a checked-in corpus at `sampledata/validation/` 
 - `gs-argv/`: the bounded `gs` device mode over a PDF, a PostScript program, and a corpus PDF.
 - `refs/`: the repo-authored programs the phase 11 Ghostscript reference checks rasterize.
 
+Four expectations are possible. `paint` asserts a rasterized page, `struct` asserts that the file opens, and `refuse:<error>` asserts a named refusal. `survive` is the fourth and is the robustness claim for a deliberately defective file: the job must terminate inside the language caps, and any failure must be a named `JobError` rather than a Go panic, a runtime fault, or a hang. Recovering the page and exiting 0 is also a pass. A conforming reader may legitimately refuse, repair, or give up on a broken file, so pinning one of those would pin an implementation choice instead of a requirement. `TestValidationCorpusSurviveVerdict` locks that boundary, so the check is provable rather than vacuous.
+
 The corpus has two tiers:
 
 - The committed tier is checked in. Every file is at or under 1 MiB.
-- The external tier lives under the gitignored `sampledata/validation/external/`. It holds larger files and whole suites, and `go run internal/validation/gen.go -fetch-external` fetches it after checking every SHA-256. Tests skip the external tier when it is absent, and no test opens a network connection.
+- The live tier lives under `sampledata/validation/external/`, which is gitignored apart from its own README. It holds larger files, whole suites, and files whose license does not permit committing. `make validation-fetch` populates it after checking every SHA-256, through a content-addressed cache, so a second run costs no network. `make validation-verify` checks the cache without touching the network. Tests skip the live tier when it is absent, and no test opens a network connection.
+
+The fetched tier's `verapdf/` is 2,691 conformance files whose expected outcomes are measured
+Ghostscript runs rather than recordings of our own reader, so a pass rate over them is a
+claim about conformance and not a change detector.
+
+A row's `basis` records where its verdict came from, and it is the scoreboard. `spec` and `gs` rows gate. A `baseline` row records what this build did rather than what a specification requires, so it is reported and never asserted, and every one has to be promoted to `spec` or `gs` with a written reason, or deleted. `make validation-report` prints the split per area and per basis; 26 of 2,890 rows are `baseline` today, and 2,689 are `gs`.
 
 `sampledata/validation/traceability.tsv` is the index. It carries one row per case below and one row per validation plan row, with the section, the case, the test function, and a status. A `live` row names a function that `go test -list` must report. `scripts/check-traceability.sh` checks the table against the live list and exits 1 on a `live` row whose function is missing. A row whose test has not landed yet is `pending:<scope>`, and the script reports it instead of failing. No row is pending on the merged tree.
 
 Every corpus test is named `TestValidation<Area>`, so `go test -count=1 ./... -run TestValidation` runs the validation group, and `make test` runs it with everything else. The group names every `TestValidation` function in the suite:
 
-- `internal/cli`: `TestValidationExitCodes`, `TestValidationFlagSurface`, `TestValidationNoProcess`, `TestValidationRasterGeometry`, `TestValidationCompareCLIText`, `TestValidationCorpusMeasure`, `TestValidationCorpusPostScript`, `TestValidationCorpusPDF`, `TestValidationCorpusImages`, `TestValidationCorpusText`, `TestValidationCorpusRewrite`, `TestValidationCorpusPDFA`, `TestValidationCorpusGS`, `TestValidationCorpusSubset`, `TestValidationCorpusTagGeneration`, `TestValidationCorpusType1`, `TestValidationPDFACLI`, `TestValidationGSEdges`, `TestValidationGSOutputRules`, `TestValidationGSParamCorners`, `TestValidationGSRejectedDevices`.
+- `internal/cli`: `TestValidationExitCodes`, `TestValidationFlagSurface`, `TestValidationNoProcess`, `TestValidationRasterGeometry`, `TestValidationCompareCLIText`, `TestValidationCorpusMeasure`, `TestValidationCorpusPostScript`, `TestValidationCorpusHandbuilt`, `TestValidationCorpusArchival`, `TestValidationCorpusSurviveVerdict`, `TestValidationCorpusFaultSignalsKeepTheirShape`, `TestValidationCorpusPDF`, `TestValidationCorpusImages`, `TestValidationCorpusText`, `TestValidationCorpusRewrite`, `TestValidationCorpusPDFA`, `TestValidationCorpusGS`, `TestValidationCorpusSubset`, `TestValidationCorpusTagGeneration`, `TestValidationCorpusType1`, `TestValidationPDFACLI`, `TestValidationGSEdges`, `TestValidationGSOutputRules`, `TestValidationGSParamCorners`, `TestValidationGSRejectedDevices`.
 - `internal/graphics`: `TestValidationPixmapStrokeFill`, `TestValidationDrawImageEdges`.
 - `internal/pdf`: `TestValidationPageTree`, `TestValidationUnsupportedOps`, `TestValidationImageErrorShapes`, `TestValidationFilterChain`, `TestValidationCCITTParams`, `TestValidationFontFile3`, `TestValidationNoOutlinePolicy`, `TestValidationTextOpErrors`.
 - `internal/pdfa`: `TestValidationUA2Edges`.

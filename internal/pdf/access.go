@@ -39,34 +39,65 @@ func (file *File) RootNum() int {
 // RawObject returns the stored body bytes of one uncompressed object, without
 // the "num gen obj" header and the trailing endobj.
 // An object that lives in an object stream, a free or missing number, and a
-// number the reader cannot parse all return false.
+// number the reader cannot parse all return false. An encrypted file returns
+// false for every number: the stored bytes are ciphertext, and a copy writer
+// must take the decrypted value instead.
 func (file *File) RawObject(num int) ([]byte, bool) {
-	if file == nil {
+	if file == nil || file.crypt != nil {
 		return nil, false
 	}
-	entry, ok := file.xref[num]
-	if !ok || !entry.InUse || entry.Compressed {
-		return nil, false
-	}
-	got, gen, _, next, err := parseIndirect(file.src, entry.Offset, file)
-	if err != nil || got != num || gen != entry.Gen {
+	entry, next, ok := file.plainRow(num)
+	if !ok {
 		return nil, false
 	}
 	start, ok := valueStart(file.src, entry.Offset)
 	if !ok {
 		return nil, false
 	}
-	end := trimSpaceEnd(file.src, start, next-len(wordEndObj))
+	end := trimWordEnd(file.src, start, next, wordEndObj)
 	if end < start {
 		return nil, false
 	}
 	return bytes.Clone(file.src[start:end]), true
 }
 
+// emptyXEntry is the zero row, named because the linter requires every field of
+// a struct at a composite literal. Only the ok result of the pair matters when
+// this is returned.
+func emptyXEntry() XEntry {
+	return XEntry{Offset: 0, Gen: 0, InUse: false, Compressed: false, StreamNum: 0, StreamIdx: 0}
+}
+
+// plainRow returns the offset and the end of object num when the table names it
+// as an in-use uncompressed row whose body really is that object. A free row, a
+// compressed row, and a row naming the wrong bytes all report false.
+func (file *File) plainRow(num int) (XEntry, int, bool) {
+	entry, ok := file.xref[num]
+	if !ok || !entry.InUse || entry.Compressed {
+		return emptyXEntry(), 0, false
+	}
+	got, gen, _, next, err := parseIndirect(file.src, entry.Offset, file)
+	if err != nil || got != num || gen != entry.Gen {
+		return emptyXEntry(), 0, false
+	}
+	return entry, next, true
+}
+
 // trimSpaceEnd moves end back over PDF whitespace, but not past start.
 func trimSpaceEnd(src []byte, start, end int) int {
 	for end > start && isSpaceByte(src[end-1]) {
 		end--
+	}
+	return end
+}
+
+// trimWordEnd moves end back over one trailing keyword, then the whitespace
+// before it, when the keyword is there. It makes the end of a body that has no
+// endobj the end of its value, the same as one that has it.
+func trimWordEnd(src []byte, start, end int, word string) int {
+	end = trimSpaceEnd(src, start, end)
+	if end-start >= len(word) && bytes.Equal(src[end-len(word):end], []byte(word)) {
+		end = trimSpaceEnd(src, start, end-len(word))
 	}
 	return end
 }

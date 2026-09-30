@@ -19,6 +19,7 @@ type (
 	lexer struct {
 		src           []byte
 		pos           int
+		keyMark       int
 		resolveLength lengthResolver
 	}
 
@@ -71,7 +72,7 @@ func newLexer(src []byte, offset int) (*lexer, error) {
 	if offset < 0 || offset > len(src) {
 		return nil, syntaxErr(opScan)
 	}
-	return &lexer{src: src, pos: offset, resolveLength: nil}, nil
+	return &lexer{src: src, pos: offset, keyMark: 0, resolveLength: nil}, nil
 }
 
 func (lex *lexer) skipIgnored() {

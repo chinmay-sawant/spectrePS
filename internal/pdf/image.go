@@ -51,7 +51,9 @@ type ImageNameMarker interface {
 
 // ImageObjectNums returns the in-use object numbers whose resolved object is an
 // image XObject: a stream or dictionary with /Subtype /Image.
-// The numbers come in ascending order.
+// The numbers come in ascending order. An in-use row whose object the file does
+// not carry is a dead number rather than an image, so it is left out instead of
+// failing the call; a page or form that references it still fails to resolve.
 func (file *File) ImageObjectNums() ([]int, error) {
 	if file == nil {
 		return nil, NewError(opImage, errType)
@@ -65,9 +67,9 @@ func (file *File) ImageObjectNums() ([]int, error) {
 	slices.Sort(nums)
 	images := make([]int, 0, len(nums))
 	for _, num := range nums {
-		val, err := file.resolve(num)
-		if err != nil {
-			return nil, err
+		val, ok := file.readable(num)
+		if !ok {
+			continue
 		}
 		if hasImageSubtype(val) {
 			images = append(images, num)

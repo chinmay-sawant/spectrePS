@@ -8,8 +8,8 @@ import (
 
 // TestValidationXRefPrev locks trailer /Prev chain walking: the newest section
 // wins per object number, an older section fills the gaps, trailer keys inherit
-// from older sections except /Prev and /Size, and a cycle, a malformed /Prev,
-// a chain past the cap, and a broken older section each fail by name.
+// from older sections except /Prev and /Size, a cycle and a chain past the cap
+// fail by name, and a broken older link is rebuilt from the object headers.
 func TestValidationXRefPrev(t *testing.T) {
 	t.Parallel()
 	t.Run("newest wins and older fills", func(t *testing.T) { t.Parallel(); validationPrevMerge(t) })
@@ -98,7 +98,6 @@ func validationPrevMalformed(t *testing.T) {
 		"string":   "/Root 1 0 R /Prev (older)",
 		"name":     "/Root 1 0 R /Prev /Older",
 		"negative": "/Root 1 0 R /Prev -1",
-		"past eof": "/Root 1 0 R /Prev 999999",
 	} {
 		t.Run(name, func(t *testing.T) {
 			var body bytes.Buffer
@@ -109,6 +108,25 @@ func validationPrevMalformed(t *testing.T) {
 			wantJob(t, err, opXRef, errSyntax)
 		})
 	}
+	t.Run("past eof", func(t *testing.T) {
+		var body bytes.Buffer
+		body.WriteString("%PDF-1.4\n")
+		catalogAt := body.Len()
+		body.WriteString("1 0 obj\n<< /Type /Catalog >>\nendobj\n")
+		at := body.Len()
+		body.Write(validationClassicSection(
+			[]objPos{{num: 0}}, "/Root 1 0 R /Prev 999999"))
+		entries, trailer, err := readCrossRef(body.Bytes(), at)
+		if err != nil {
+			t.Fatalf("a /Prev past the end names no section and is rebuilt: %v", err)
+		}
+		if root, ok := trailer.ValueEntry(keyRoot); !ok || root.RefNum != 1 {
+			t.Fatalf("trailer /Root %+v, want 1 0 R", root)
+		}
+		if got, ok := entries[1]; !ok || got.Offset != catalogAt {
+			t.Fatalf("object 1 row %+v, want the header scan offset %d", got, catalogAt)
+		}
+	})
 }
 
 // validationPrevSection writes a fixed-width chained section. The ten-digit
@@ -161,6 +179,7 @@ func validationPrevBrokenOlder(t *testing.T) {
 	t.Helper()
 	var body bytes.Buffer
 	body.WriteString("%PDF-1.4\n")
+	catalogAt := body.Len()
 	body.WriteString("1 0 obj\n<< /Type /Catalog >>\nendobj\n")
 	brokenAt := body.Len()
 	body.WriteString("6 0 obj\n<< /Type /XRef /W [1 2 1] /Length 3 /Filter /FooDecode >>\n" +
@@ -168,6 +187,14 @@ func validationPrevBrokenOlder(t *testing.T) {
 	newestAt := body.Len()
 	body.Write(validationClassicSection(
 		[]objPos{{num: 0}}, fmt.Sprintf("/Root 1 0 R /Prev %d", brokenAt)))
-	_, _, err := readCrossRef(body.Bytes(), newestAt)
-	wantJob(t, err, "FooDecode", errUndefined)
+	entries, trailer, err := readCrossRef(body.Bytes(), newestAt)
+	if err != nil {
+		t.Fatalf("a damaged older section is rebuilt from the object headers: %v", err)
+	}
+	if root, ok := trailer.ValueEntry(keyRoot); !ok || root.RefNum != 1 {
+		t.Fatalf("trailer /Root %+v, want 1 0 R", root)
+	}
+	if got, ok := entries[1]; !ok || got.Offset != catalogAt {
+		t.Fatalf("object 1 row %+v, want the header scan offset %d", got, catalogAt)
+	}
 }

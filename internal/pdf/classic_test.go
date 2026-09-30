@@ -67,6 +67,15 @@ func (doc *pdfDoc) object(body string) int {
 	return num
 }
 
+// deadRow grows the xref to cover num and points that row at wrongAt, so the
+// row is in use but names no object the file carries. num must not exist.
+func (doc *pdfDoc) deadRow(num, wrongAt int) {
+	for len(doc.offsets) <= num {
+		doc.offsets = append(doc.offsets, -1)
+	}
+	doc.offsets[num] = doc.offsets[wrongAt]
+}
+
 func (doc *pdfDoc) put(num int, body string) {
 	for len(doc.offsets) <= num {
 		doc.offsets = append(doc.offsets, -1)
@@ -144,6 +153,20 @@ func joinedPage(t *testing.T) []byte {
 	doc.object("<< /Type /Page /Parent 2 0 R /Contents [4 0 R 5 0 R] >>")
 	doc.object(streamBody("", []byte("q")))
 	doc.object(streamBody("", []byte("Q")))
+	return doc.classic("")
+}
+
+// indirectContents stores the array of content streams as its own object and
+// names it from the page by an indirect reference, which the spec allows.
+func indirectContents(t *testing.T) []byte {
+	t.Helper()
+	doc := newDoc()
+	doc.object("<< /Type /Catalog /Pages 2 0 R >>")
+	doc.object("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+	doc.object("<< /Type /Page /Parent 2 0 R /Contents 6 0 R >>")
+	doc.object(streamBody("", []byte("q")))
+	doc.object(streamBody("", []byte("Q")))
+	doc.object("[ 4 0 R 5 0 R ]")
 	return doc.classic("")
 }
 

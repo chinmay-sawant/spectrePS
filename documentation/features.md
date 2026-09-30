@@ -64,8 +64,17 @@ The features marked "landed in v0.0.4" below shipped with that tag. They are the
 
 ## Validation corpus
 
-- `sampledata/validation/` is the validation corpus. One folder per feature area holds real PDF and PostScript files: `compatibility/`, `postscript/`, `paths/`, `structural/`, `images/`, `text/`, `tagged/`, `pdfa/`, `rewrite/`, `gs-argv/`, and `refs/`. Every file has a row in `sampledata/validation/manifest.tsv` with its source, pinned commit, license, SHA-256, byte count, feature, and expected verdict.
-- The corpus has two tiers. The committed tier is checked in and holds files at or under 1 MiB. The external tier lives under the gitignored `sampledata/validation/external/`, holds larger files and whole suites, and `go run internal/validation/gen.go -fetch-external` fetches it after checking every SHA-256. Tests skip the external tier when it is absent, and no test opens a network connection.
+- `sampledata/validation/` is the validation corpus. One folder per feature area holds real PDF and PostScript files: `compatibility/`, `postscript/`, `handbuilt/`, `paths/`, `structural/`, `images/`, `text/`, `tagged/`, `pdfa/`, `rewrite/`, `gs-argv/`, and `refs/`. Every file has a row in `sampledata/validation/manifest.tsv` with its source, pinned commit, license, SHA-256, byte count, feature, and expected verdict, plus four label columns: `area`, `probe`, `basis`, and `pages`.
+- The fetched tier holds `handbuilt/`, 89 ISO 32000-1 well-formedness cases from the Open Preservation Foundation, each breaking exactly one structural requirement. They are the coverage for the hand-written xref, xref stream, object stream, and trailer parsers, which is the riskiest code in the project. They are fetched rather than committed because the dataset's rights record is CC BY-SA 4.0, not the CC0 the repository README claims.
+- A row's `expect` is `paint`, `struct`, `survive`, or `refuse:<error>`. `survive` is the robustness claim for a defective file: the job must terminate inside the language caps and any failure must be a named `JobError` rather than a Go panic, a runtime fault, or a hang. Recovering the page and exiting 0 is also a pass.
+- The fetched tier holds the veraPDF conformance corpus, 2,691 of 2,906 files at commit
+  `bb75f4f`, three levels deep by ISO 32000 clause. `Isartor test files/` is excluded by the
+  token list and `Undefined/` is excluded because veraPDF 1.30.2 fails 3 of its 10 files, so
+  a filename-derived expectation would report three spurious failures.
+- A row's `basis` records where the verdict came from. `spec` means a clause of ISO 32000 or the PostScript Language Reference fixes it. `gs` means a measured Ghostscript run fixes it. `baseline` means it was recorded from this build, which is reported and never gated. The baseline count is the debt: 26 of 2,890 rows today. The other 2,689 expectations are
+measured Ghostscript runs on the same file, which is what makes the rate mean something.
+- The corpus has two tiers. The committed tier is checked in and holds files at or under 1 MiB. The live tier lives under the gitignored `sampledata/validation/external/`, apart from its own README, and holds larger files, whole suites, and files whose license does not permit committing. `make validation-fetch` populates it after checking every SHA-256, through a content-addressed cache, so a second run costs no network. Tests skip the live tier when it is absent, and no test opens a network connection.
+- `make validation-report` writes a pass rate per area and per basis to `profiles/`. A report whose baseline share grows is a report saying the corpus has stopped being a specification.
 - Every corpus test is named `TestValidation<Area>`, so `go test -count=1 ./... -run TestValidation` runs the group under `make test`. `sampledata/validation/traceability.tsv` maps every case in `documentation/test.md` to the test that proves it.
 
 ## Library and CLI

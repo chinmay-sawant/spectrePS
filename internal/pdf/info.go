@@ -58,10 +58,7 @@ func (file *File) Info() (InfoReport, error) {
 	if err != nil {
 		return InfoReport{}, err
 	}
-	fonts, err := file.fontInfos()
-	if err != nil {
-		return InfoReport{}, err
-	}
+	fonts := file.fontInfos()
 	images, err := file.ImageObjectNums()
 	if err != nil {
 		return InfoReport{}, err
@@ -88,11 +85,11 @@ func (file *File) version() (string, error) {
 		return "", err
 	}
 	value, ok := catalog.ValueEntry("Version")
-	if !ok {
+	if !ok || value.Kind != KindName {
+		// A /Version written as a number is a producer mistake the header
+		// still answers, so the header version stands. pdfTeX and luaTeX both
+		// write it that way and Ghostscript reads the file.
 		return headerVersion, nil
-	}
-	if value.Kind != KindName {
-		return "", NewError(opInfo, errSyntax)
 	}
 	catalogMajor, catalogMinor, catalogOK := parsePDFVersion(value.Name)
 	if !catalogOK {
@@ -174,44 +171,218 @@ func (file *File) pageSizes() ([]PageSize, error) {
 	}
 	inherited := PageSize{Width: infoDefaultPageWidth, Height: infoDefaultPageHeight}
 	sizes := []PageSize{}
-	if err := file.walkPageSizes(pages, map[int]bool{}, inherited, &sizes); err != nil {
-		return nil, err
+	walkErr := file.walkPageSizes(pages, map[int]bool{}, map[int]bool{}, inherited, &sizes)
+	if walkErr == nil {
+		return sizes, nil
+	}
+	return file.recoverPageSizes(pages, inherited, walkErr)
+}
+
+func (file *File) recoverPageSizes(pages Value, inherited PageSize, walkErr error) ([]PageSize, error) {
+	if file.recovered {
+		return file.scannedPageSizesOrError(walkErr)
+	}
+	if !file.pageTreeHasStream(pages) {
+		return nil, walkErr
+	}
+	recovered := []PageSize{}
+	file.walkDamagedPageSizes(pages, map[int]bool{}, map[int]bool{}, inherited, &recovered)
+	if len(recovered) > 0 {
+		return recovered, nil
+	}
+	return file.scannedPageSizesOrError(walkErr)
+}
+
+func (file *File) scannedPageSizesOrError(err error) ([]PageSize, error) {
+	if scanned, scanErr := file.scanPageSizes(); scanErr == nil {
+		return scanned, nil
+	}
+	return nil, err
+}
+
+// scanPageSizes uses page objects directly when a damaged page tree cannot be
+// walked. This follows scanPages order and uses the normal default page box.
+func (file *File) scanPageSizes() ([]PageSize, error) {
+	nums := make([]int, 0, len(file.xref))
+	for num := range file.xref {
+		nums = append(nums, num)
+	}
+	slices.Sort(nums)
+	sizes := []PageSize{}
+	defaultSize := PageSize{Width: infoDefaultPageWidth, Height: infoDefaultPageHeight}
+	for _, num := range nums {
+		node, err := file.resolve(num)
+		if err != nil || node.Kind != KindDict {
+			continue
+		}
+		typeName, _ := node.NameEntry(keyType)
+		if typeName != keyPage {
+			continue
+		}
+		size, err := file.nodeSize(node, defaultSize)
+		if err != nil {
+			return nil, err
+		}
+		sizes = append(sizes, size)
+	}
+	if len(sizes) == 0 {
+		return nil, NewError(opInfo, errSyntax)
 	}
 	return sizes, nil
 }
 
-func (file *File) walkPageSizes(val Value, seen map[int]bool, inherited PageSize, sizes *[]PageSize) error {
+func (file *File) walkDamagedPageSizes(val Value, seen, path map[int]bool, inherited PageSize, sizes *[]PageSize) {
 	if val.Kind == KindRef {
-		if seen[val.RefNum] {
-			return NewError(opInfo, errSyntax)
+		if seen[val.RefNum] || path[val.RefNum] {
+			return
 		}
 		seen[val.RefNum] = true
+		path[val.RefNum] = true
+		defer delete(path, val.RefNum)
 	}
 	node, err := file.deref(val)
-	if err != nil {
-		return err
+	if err != nil || node.Kind != KindDict {
+		return
 	}
-	if node.Kind != KindDict {
-		return NewError(opInfo, errSyntax)
+	inherited = file.inheritedPageSize(node, inherited)
+	typeName, _ := node.NameEntry(keyType)
+	if typeName == keyPage {
+		*sizes = append(*sizes, inherited)
+		return
 	}
+	kids, hasKids, err := file.kidArray(node)
+	if err != nil || !hasKids {
+		return
+	}
+	file.walkDamagedPageSizeKids(kids, seen, path, inherited, sizes)
+}
+
+func (file *File) walkDamagedPageSizeKids(
+	kids []Value,
+	seen, path map[int]bool,
+	inherited PageSize,
+	sizes *[]PageSize,
+) {
+	for _, kid := range kids {
+		file.walkDamagedPageSizes(kid, seen, path, inherited, sizes)
+	}
+}
+
+func (file *File) inheritedPageSize(node Value, inherited PageSize) PageSize {
 	size, err := file.nodeSize(node, inherited)
 	if err != nil {
+		return inherited
+	}
+	return size
+}
+
+// walkPageSizes walks the page tree for /MediaBox. It takes the same two
+// visited sets as walkRef: seen skips a node a second /Kids entry names, and
+// path still refuses a cycle.
+func (file *File) walkPageSizes(val Value, seen, path map[int]bool, inherited PageSize, sizes *[]PageSize) error {
+	res, err := file.pageNode(val, seen, path, inherited, sizes)
+	if err != nil {
 		return err
 	}
-	if typeName, _ := node.NameEntry(keyType); typeName == keyPage {
-		*sizes = append(*sizes, size)
+	if res.done {
 		return nil
 	}
-	kids, hasKids := node.ArrayEntry(keyKids)
+	kids, hasKids, err := file.kidArray(res.node)
+	if err != nil {
+		return err
+	}
 	if !hasKids {
-		return NewError(opInfo, errSyntax)
+		if res.typeNam != keyPages {
+			return NewError(opInfo, errSyntax)
+		}
+		return nil
 	}
 	for _, kid := range kids {
-		if err := file.walkPageSizes(kid, seen, size, sizes); err != nil {
+		if file.nullNode(kid) {
+			continue
+		}
+		if err := file.walkPageSizes(kid, seen, path, res.size, sizes); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// pageNodeResult is what one page-tree node resolves to. done is true when
+// there is nothing left to walk: the node was a leaf page already appended to
+// sizes, or the seen set skipped it as a repeat.
+type pageNodeResult struct {
+	node    Value
+	size    PageSize
+	typeNam string
+	done    bool
+}
+
+// emptyPageNodeResult is the result for a repeated node the seen set skipped
+// and for an error that stops the walk. The caller checks done and err before
+// it reads node or size, so those never matter. The named zero exists because
+// the linter requires every field of a struct to be written out.
+func emptyPageNodeResult() pageNodeResult {
+	return pageNodeResult{
+		node: Value{
+			Kind:   KindNull,
+			Bool:   false,
+			Int:    0,
+			Real:   0,
+			Name:   "",
+			String: "",
+			Array:  nil,
+			Dict:   nil,
+			Stream: nil,
+			RefNum: 0,
+			RefGen: 0,
+		},
+		size:    PageSize{Width: 0, Height: 0},
+		typeNam: "",
+		done:    true,
+	}
+}
+
+// pageNode resolves one page-tree node: it applies the visited sets and
+// returns the node, the size it passes to its children, and its /Type.
+func (file *File) pageNode(
+	val Value,
+	seen, path map[int]bool,
+	inherited PageSize,
+	sizes *[]PageSize,
+) (pageNodeResult, error) {
+	if val.Kind == KindRef {
+		if path[val.RefNum] {
+			empty := emptyPageNodeResult()
+			empty.done = false
+			return empty, NewError(opInfo, errSyntax)
+		}
+		if seen[val.RefNum] {
+			return emptyPageNodeResult(), nil
+		}
+		seen[val.RefNum] = true
+		path[val.RefNum] = true
+		defer delete(path, val.RefNum)
+	}
+	node, err := file.deref(val)
+	if err != nil {
+		return emptyPageNodeResult(), err
+	}
+	if node.Kind != KindDict {
+		empty := emptyPageNodeResult()
+		empty.done = false
+		return empty, NewError(opInfo, errSyntax)
+	}
+	size, err := file.nodeSize(node, inherited)
+	if err != nil {
+		return emptyPageNodeResult(), err
+	}
+	typeName, _ := node.NameEntry(keyType)
+	if typeName == keyPage {
+		*sizes = append(*sizes, size)
+		return pageNodeResult{node: node, size: size, typeNam: typeName, done: true}, nil
+	}
+	return pageNodeResult{node: node, size: size, typeNam: typeName, done: false}, nil
 }
 
 // nodeSize returns the node's own /MediaBox, or the inherited one.
@@ -258,15 +429,17 @@ func numberValueOf(val Value) (float64, bool) {
 }
 
 // fontInfos lists every in-use /Type /Font dictionary except CIDFont
-// descendants, sorted by name and embedded flag.
-func (file *File) fontInfos() ([]FontInfo, error) {
+// descendants, sorted by name and embedded flag. An in-use row whose object the
+// file does not carry is a dead object number, not a font, so the survey steps
+// over it; a page that references the same number still fails to resolve.
+func (file *File) fontInfos() []FontInfo {
 	unique := map[FontInfo]bool{}
 	for _, num := range file.inUseNums() {
-		info, ok, err := file.fontInfo(num)
-		if err != nil {
-			return nil, err
+		val, ok := file.readable(num)
+		if !ok {
+			continue
 		}
-		if ok {
+		if info, isFont := file.fontInfoValue(val); isFont {
 			unique[info] = true
 		}
 	}
@@ -286,26 +459,22 @@ func (file *File) fontInfos() ([]FontInfo, error) {
 		}
 		return -1
 	})
-	return fonts, nil
+	return fonts
 }
 
-// fontInfo resolves one object into a font row. The bool is false for any
-// object that is not a top-level font dictionary.
-func (file *File) fontInfo(num int) (FontInfo, bool, error) {
-	val, ok, err := file.ObjectValue(num)
-	if err != nil {
-		return FontInfo{Name: "", Embedded: false}, false, err
-	}
-	if !ok || val.Kind != KindDict {
-		return FontInfo{Name: "", Embedded: false}, false, nil
+// fontInfoValue reads a font row from an already-resolved object. The bool is
+// false for any object that is not a top-level font dictionary.
+func (file *File) fontInfoValue(val Value) (FontInfo, bool) {
+	if val.Kind != KindDict {
+		return FontInfo{Name: "", Embedded: false}, false
 	}
 	if typeName, ok := val.NameEntry(keyType); !ok || typeName != keyFont {
-		return FontInfo{Name: "", Embedded: false}, false, nil
+		return FontInfo{Name: "", Embedded: false}, false
 	}
 	if subtype, ok := val.NameEntry(keySubtype); ok && isCIDFont(subtype) {
-		return FontInfo{Name: "", Embedded: false}, false, nil
+		return FontInfo{Name: "", Embedded: false}, false
 	}
-	return FontInfo{Name: fontName(val), Embedded: file.fontEmbedded(val)}, true, nil
+	return FontInfo{Name: fontName(val), Embedded: file.fontEmbedded(val)}, true
 }
 
 func isCIDFont(subtype string) bool {

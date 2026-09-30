@@ -4,6 +4,12 @@ import (
 	"math"
 )
 
+// recoverHeaderSlack bounds the search for the next object header when an
+// object's endobj keyword is missing. The corpus shape is one stray token
+// between the value and the next header, so a small window is enough and a
+// longer gap keeps the syntax error.
+const recoverHeaderSlack = 64
+
 // ParseValue reads one PDF value at offset. next is the first byte after that value.
 // A dictionary is KindDict. This function does not consume a stream body.
 func ParseValue(src []byte, offset int) (Value, int, error) {
@@ -47,8 +53,17 @@ func parseIndirect(src []byte, offset int, resolve lengthResolver) (int, int, Va
 	if err = lex.attachStream(&val); err != nil {
 		return 0, 0, NullVal(), 0, err
 	}
+	mark := lex.pos
 	if err = lex.expectWord(wordEndObj); err != nil {
-		return 0, 0, NullVal(), 0, err
+		// A missing endobj in front of the next object header is a repair
+		// Ghostscript reports as "Encountered 'obj' while expecting 'endobj'".
+		// The value is already complete, so a header close behind it ends this
+		// object. Anything further away keeps the error. The caller still sees
+		// the end of the value as next, because no endobj was consumed.
+		if objectHeaderNear(src, mark, recoverHeaderSlack) < 0 {
+			return 0, 0, NullVal(), 0, err
+		}
+		return num, gen, val, mark, nil
 	}
 	return num, gen, val, lex.pos, nil
 }
@@ -113,6 +128,17 @@ func (lex *lexer) takeRef(num int64) (Value, bool, error) {
 	mark := lex.pos
 	genTok, ok := lex.peekRef()
 	if !ok {
+		// "num R" with the generation left out. The specification writes
+		// "num gen R", and a producer that dropped the middle number still
+		// meant a reference to generation zero. GHOSTSCRIPT-701876-0.pdf
+		// carries "/OCGs [+ 0 R]" and paints a full page.
+		if lex.peekBareRef() {
+			objNum, fits := fitInt(num)
+			if !fits {
+				return NullVal(), false, syntaxErr(wordRef)
+			}
+			return RefVal(objNum, 0), true, nil
+		}
 		return NullVal(), false, nil
 	}
 	if num < 0 || genTok.num < 0 {
@@ -128,6 +154,30 @@ func (lex *lexer) takeRef(num int64) (Value, bool, error) {
 		return NullVal(), false, syntaxErr(wordRef)
 	}
 	return RefVal(objNum, gen), true, nil
+}
+
+// peekBareRef reads the "R" of a reference whose generation was left out, and
+// reports generation zero. It is only consulted after peekRef has already
+// failed, so the three-token form is never affected.
+//
+// The test is on the bytes rather than on a taken token. Taking a token costs
+// an allocation for every standalone integer in the document, and the level-2
+// rewrite allocation count is a gate: this shape appeared as 715 before the
+// tolerance and 723 after, and the eight allocations were all here.
+func (lex *lexer) peekBareRef() bool {
+	position := lex.pos
+	for position < len(lex.src) && isSpace(lex.src[position]) {
+		position++
+	}
+	if position >= len(lex.src) || lex.src[position] != 'R' {
+		return false
+	}
+	end := position + 1
+	if end < len(lex.src) && !isDelim(lex.src[end]) {
+		return false
+	}
+	lex.pos = end
+	return true
 }
 
 func (lex *lexer) peekRef() (token, bool) {
@@ -163,6 +213,7 @@ func (lex *lexer) parseArray() (Value, error) {
 			lex.pos++
 			return ArrayVal(items), nil
 		}
+		lex.skipStrayPlus()
 		item, err := lex.parseValue()
 		if err != nil {
 			return NullVal(), err
@@ -175,6 +226,7 @@ func (lex *lexer) parseDict() (Value, error) {
 	entries := map[string]Value{}
 	for {
 		lex.skipIgnored()
+		lex.keyMark = lex.pos
 		if lex.pos >= len(lex.src) {
 			return NullVal(), syntaxErr(">>")
 		}
@@ -182,12 +234,9 @@ func (lex *lexer) parseDict() (Value, error) {
 			lex.pos += 2
 			return DictVal(entries), nil
 		}
-		key, err := lex.parseValue()
+		key, err := lex.parseDictKey()
 		if err != nil {
 			return NullVal(), err
-		}
-		if key.Kind != KindName {
-			return NullVal(), syntaxErr("<<")
 		}
 		item, err := lex.parseValue()
 		if err != nil {
@@ -197,11 +246,64 @@ func (lex *lexer) parseDict() (Value, error) {
 	}
 }
 
+// parseDictKey reads a dictionary key. The specification writes it as a name,
+// and a producer that dropped the leading slash still wrote a key: Ghostscript
+// reads +AF as the key AF rather than refusing the dictionary.
+// GHOSTSCRIPT-701801-0.pdf carries "+AF [2 0 R]" where "/AF" was meant.
+func (lex *lexer) parseDictKey() (Value, error) {
+	key, err := lex.parseValue()
+	if err == nil {
+		if key.Kind != KindName {
+			return NullVal(), syntaxErr("<<")
+		}
+		return key, nil
+	}
+	// The value failed. A bare word in this position is the key itself.
+	lex.pos = lex.keyMark
+	lex.skipIgnored()
+	tok, err := lex.take()
+	if err != nil || tok.kind != tokWord {
+		return NullVal(), err
+	}
+	return NameVal(tok.text), nil
+}
+
 func (lex *lexer) atDictClose() bool {
 	if lex.pos+1 >= len(lex.src) {
 		return false
 	}
 	return lex.src[lex.pos] == '>' && lex.src[lex.pos+1] == '>'
+}
+
+// skipStrayPlus steps over a lone "+" in an array element position. A producer
+// that meant "0 0 R" and wrote "+ 0 R" still wrote the element, and Ghostscript
+// drops the sign rather than refusing the array. GHOSTSCRIPT-701876-0.pdf
+// carries "/OCGs [+ 0 R]" and paints a full page. The sign is skipped only when
+// whitespace follows it, so "+5" and "+AF" are untouched.
+func (lex *lexer) skipStrayPlus() {
+	if lex.pos >= len(lex.src) || lex.src[lex.pos] != '+' {
+		return
+	}
+	next := lex.pos + 1
+	if next < len(lex.src) && !isDelim(lex.src[next]) {
+		return
+	}
+	lex.pos = next
+	lex.skipIgnored()
+}
+
+// objectHeaderNear returns the offset of the first object header within slack
+// bytes at or after from, or -1. It is the repair window for a value whose
+// endobj is missing: the next object header follows within a stray token or
+// two, and a longer gap is not evidence of a missing endobj.
+func objectHeaderNear(src []byte, from, slack int) int {
+	limit := min(from+slack, len(src))
+	for pos := max(from, 0); pos < limit; pos++ {
+		if _, _, ok := objectHeaderAt(src, pos); ok {
+			return pos
+		}
+	}
+	return -1
 }
 
 func (lex *lexer) expectWord(word string) error {

@@ -195,7 +195,198 @@ func testExcludedTokens(t *testing.T, base Row) {
 	}
 }
 
+// TestValidationManifestLabelAxes requires the four label columns to be
+// present, in the closed vocabularies, with a non-negative page count. A typo
+// in a label has to fail the parse rather than silently create a new report
+// group, because the pass-rate report joins on these strings.
+func TestValidationManifestLabelAxes(t *testing.T) {
+	sha := strings.Repeat("a", 64)
+	repo := LicenseRepoAuthored
+	cases := []struct {
+		name   string
+		labels []string
+		want   string
+	}{
+		{"unknown area", []string{"nosucharea", ProbeInfo, BasisSpec, "0"}, "area"},
+		{"unknown probe", []string{"paths", "nosuchprobe", BasisSpec, "0"}, "probe"},
+		{"unknown basis", []string{"paths", ProbeInfo, "nosuchbasis", "0"}, "basis"},
+		{"negative pages", []string{"paths", ProbeInfo, BasisSpec, "-1"}, "pages"},
+		{"non-numeric pages", []string{"paths", ProbeInfo, BasisSpec, "many"}, "pages"},
+		{"empty area", []string{"", ProbeInfo, BasisSpec, "0"}, "area is empty"},
+		{"empty basis", []string{"paths", ProbeInfo, "", "0"}, "basis is empty"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			bad := manifestLine("paths/a.pdf", sha, "12", repo, repo,
+				"a feature", ExpectPaint, testCase.labels...)
+			_, err := ParseManifest([]byte(manifestHeader + "\n" + bad))
+			if err == nil {
+				t.Fatalf("ParseManifest accepted %v", testCase.labels)
+			}
+			if !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("error %q does not mention %q", err, testCase.want)
+			}
+		})
+	}
+	t.Run("every label is accepted", func(t *testing.T) {
+		for _, area := range KnownAreas() {
+			for _, probe := range KnownProbes() {
+				for _, basis := range KnownBasis() {
+					assertLabelTriple(t, area, probe, basis)
+				}
+			}
+		}
+	})
+}
+
+// assertLabelTriple requires one area, probe, and basis combination to parse
+// and to survive the round trip. The caller owns the three nested loops so this
+// stays a single assertion.
+func assertLabelTriple(t *testing.T, area, probe, basis string) {
+	t.Helper()
+	sha := strings.Repeat("a", 64)
+	repo := LicenseRepoAuthored
+	line := manifestLine("paths/a.pdf", sha, "12", repo, repo,
+		"a feature", ExpectSurvive, area, probe, basis, "3")
+	rows, err := ParseManifest([]byte(manifestHeader + "\n" + line))
+	if err != nil {
+		t.Fatalf("%s/%s/%s: %v", area, probe, basis, err)
+	}
+	row := rows[0]
+	if row.Area != area || row.Probe != probe || row.Basis != basis {
+		t.Fatalf("parsed %+v, want %s/%s/%s", row, area, probe, basis)
+	}
+	if row.Pages != 3 {
+		t.Fatalf("pages %d, want 3", row.Pages)
+	}
+	if !row.Survived() {
+		t.Fatalf("%+v: Survived() is false", row)
+	}
+}
+
+// TestValidationManifestGated requires a baseline row to be reported rather
+// than asserted, which is what makes the baseline count in the report a debt
+// that has to come down.
+func TestValidationManifestGated(t *testing.T) {
+	base := Row{Basis: BasisSpec}
+	if !base.Gated() {
+		t.Error("a spec row is not gated")
+	}
+	gs := Row{Basis: BasisGS}
+	if !gs.Gated() {
+		t.Error("a gs row is not gated")
+	}
+	baseline := Row{Basis: BasisBaseline}
+	if baseline.Gated() {
+		t.Error("a baseline row is gated, so a recorded outcome became a gate")
+	}
+}
+
+// TestValidationManifestCoverage requires the checked-in manifest to exercise
+// the fetched tier and both label axes, so a refactor cannot quietly drop the
+// live folder or the report.
+func TestValidationManifestCoverage(t *testing.T) {
+	rows, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	counts := map[string]map[string]int{}
+	var external, survive int
+	for _, row := range rows {
+		tally(counts, row)
+		if row.External() {
+			external++
+		}
+		if row.Survived() {
+			survive++
+		}
+	}
+	if external == 0 {
+		t.Error("no external rows, so the live tier is unreachable from the manifest")
+	}
+	if survive == 0 {
+		t.Error("no survive rows, so the robustness contract is untested")
+	}
+	requireLabel(t, counts, "area", "handbuilt")
+	requireLabel(t, counts, "area", "archival")
+	requireLabel(t, counts, "area", "postscript")
+	requireLabel(t, counts, "basis", BasisBaseline)
+	requireLabel(t, counts, "basis", BasisSpec)
+	requireLabel(t, counts, "probe", ProbePS)
+}
+
+// tally counts one row under each of its three label values.
+func tally(counts map[string]map[string]int, row Row) {
+	for _, label := range []struct{ field, value string }{
+		{"area", row.Area}, {"probe", row.Probe}, {"basis", row.Basis},
+	} {
+		if counts[label.field] == nil {
+			counts[label.field] = map[string]int{}
+		}
+		counts[label.field][label.value]++
+	}
+}
+
+// requireLabel reports a missing label value. The point of each one is named at
+// the call site, because a bare count does not say what is missing.
+func requireLabel(t *testing.T, counts map[string]map[string]int, field, value string) {
+	t.Helper()
+	if counts[field][value] == 0 {
+		t.Errorf("no rows with %s %q, so the report cannot show that group", field, value)
+	}
+}
+
 // manifestLine renders one tab-separated manifest data line.
-func manifestLine(path, digest, bytes, source, license, feature, expect string) string {
-	return strings.Join([]string{path, digest, bytes, source, license, feature, expect}, "\t") + "\n"
+// manifestLine builds one 11-column data row. The four label columns are
+// supplied by the caller so a synthetic row can exercise a specific area,
+// probe, basis, or page count.
+func manifestLine(path, digest, bytes, source, license, feature, expect string, labels ...string) string {
+	fields := []string{path, digest, bytes, source, license, feature, expect}
+	fields = append(fields, defaultLabels()...)
+	if len(labels) > 0 {
+		// An override replaces from area onward, so a test can set basis or
+		// pages without spelling out the whole tail.
+		for i, v := range labels {
+			fields[7+i] = v
+		}
+	}
+	return strings.Join(fields, "\t") + "\n"
+}
+
+// defaultLabels returns a valid label tail: the paths area, the info probe,
+// the spec basis, and no page assertion.
+func defaultLabels() []string {
+	return []string{"paths", ProbeInfo, BasisSpec, "0"}
+}
+
+// TestValidationManifestSurviveRequiresNoErrorText requires survive to be a bare
+// form and pins the rest of the expect vocabulary. A survive row asserts
+// robustness, so pinning an error string on one would turn it into a refusal row
+// and defeat the point.
+func TestValidationManifestSurviveRequiresNoErrorText(t *testing.T) {
+	sha := strings.Repeat("a", 64)
+	repo := LicenseRepoAuthored
+	line := manifestLine("handbuilt/a.pdf", sha, "12", repo, repo,
+		"a defective file", ExpectSurvive)
+	rows, err := ParseManifest([]byte(manifestHeader + "\n" + line))
+	if err != nil {
+		t.Fatalf("ParseManifest: %v", err)
+	}
+	if !rows[0].Survived() || rows[0].Refused() {
+		t.Fatalf("%+v: want survive and not refused", rows[0])
+	}
+	for _, bare := range []string{ExpectPaint, ExpectStruct, ExpectSurvive} {
+		if reason := expectReason(bare); reason != "" {
+			t.Errorf("%s: %s", bare, reason)
+		}
+	}
+	if reason := expectReason(ExpectRefuse); reason == "" {
+		t.Error("refuse with no error text was accepted")
+	}
+	if reason := expectReason(ExpectRefuse + "limitcheck"); reason != "" {
+		t.Errorf("refuse:limitcheck: %s", reason)
+	}
+	if reason := expectReason(ExpectSurvive + "limitcheck"); reason == "" {
+		t.Error("survive with an error suffix was accepted")
+	}
 }

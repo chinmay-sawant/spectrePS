@@ -16,8 +16,28 @@
 //     the page where the case calls for marks.
 //   - struct: the file opens and its page structure is the claim; painting is
 //     not asserted.
+//   - survive: the file is defective or carries a feature the reader does not
+//     implement, so the claim is robustness rather than one fixed outcome. The
+//     job must terminate inside the language caps, and any failure must be a
+//     named spectreps JobError rather than a Go panic, a runtime fault, or a
+//     hang. Recovering the page and exiting 0 is a pass. Use this for a
+//     real-world or hand-built file whose correct behaviour is not a fixed
+//     error string.
 //   - refuse:<JobError.Msg>: the corpus job returns an error whose Msg is the
 //     exact text after refuse:, and writes no output.
+//
+// The last four columns are the label axes, added by
+// plans/v0.0.5/8-real-world-corpus.md row 1.1:
+//
+//   - area: a controlled key from KnownAreas. It is the pass-rate group, so a
+//     report can join on it without parsing the feature prose.
+//   - probe: which job runs the row, from KnownProbes. It replaces the
+//     path-prefix inference the corpus runner used to do.
+//   - basis: where expect came from, from KnownBasis. spec means a clause of
+//     ISO 32000 or the PostScript Language Reference fixes it. gs means a
+//     measured Ghostscript run fixes it. baseline means we recorded what this
+//     build did, which is reported and is a debt, never a gate.
+//   - pages: the expected page count, or 0 to assert nothing.
 //
 // Every corpus test is named TestValidation<Area> so that
 // go test -count=1 ./... -run TestValidation runs the group.
@@ -59,9 +79,51 @@ const ExternalPrefix = "external/"
 const (
 	ExpectPaint  = "paint"
 	ExpectStruct = "struct"
+	// ExpectSurvive marks a deliberately defective file. The claim is that the
+	// job terminates and never turns a bad file into a blank success.
+	ExpectSurvive = "survive"
 	// ExpectRefuse prefixes a row whose job must fail with a named error.
 	ExpectRefuse = "refuse:"
 )
+
+// bareExpects returns the expect forms that accept no error text. A refuse
+// row takes an error, so it is not in this set.
+func bareExpects() []string {
+	return []string{ExpectPaint, ExpectStruct, ExpectSurvive}
+}
+
+// The probe constants. A probe names the job a row runs, so a row's runner
+// comes from data rather than from its folder name.
+const (
+	ProbeRaster  = "raster"
+	ProbeInfo    = "info"
+	ProbeRewrite = "rewrite"
+	ProbeText    = "text"
+	ProbePS      = "ps"
+	ProbeGS      = "gs"
+)
+
+// KnownAreas returns every accepted area key. A row's area is the pass-rate
+// group, so a typo has to fail the parse rather than create a new report
+// group. It is a function rather than a package variable for the same reason
+// ExcludedTokens is: a caller cannot mutate the vocabulary.
+func KnownAreas() []string {
+	return []string{
+		"archival", "compatibility", "gs-argv", "handbuilt", "images",
+		"malformed", "paths", "pdfa", "postscript", "prepress", "refs",
+		"rewrite", "structural", "tagged", "text",
+	}
+}
+
+// KnownProbes returns every accepted job selector.
+func KnownProbes() []string {
+	return []string{ProbeRaster, ProbeInfo, ProbeRewrite, ProbeText, ProbePS, ProbeGS}
+}
+
+// KnownBasis returns every accepted basis, strongest first.
+func KnownBasis() []string {
+	return []string{BasisSpec, BasisGS, BasisBaseline}
+}
 
 // The admitted licenses, as the exact strings in the license column. The
 // committed tier admits all of them. The external tier also admits
@@ -75,14 +137,39 @@ const (
 	LicensePublicDomain = "US-public-domain"
 	LicenseRepoAuthored = "repo-authored"
 	LicenseCCBYSA4      = "CC-BY-SA-4.0"
+	// LicenseAGPL3 is admitted in the external tier only. The Artifex public
+	// test files are AGPL-3.0, and two of them carry proprietary third-party
+	// content, so they may be fetched and run and may never be committed.
+	LicenseAGPL3 = "AGPL-3.0"
+)
+
+// The basis vocabularies, named so a report and a test can refer to them.
+const (
+	// BasisSpec means a clause of ISO 32000 or the PostScript Language
+	// Reference fixes the expected outcome. These rows gate.
+	BasisSpec = "spec"
+	// BasisGS means a measured Ghostscript run fixes the outcome. These rows
+	// gate, and they are the most valuable rows available, because the
+	// project already keeps a Ghostscript baseline and every real file is one
+	// more comparison.
+	BasisGS = "gs"
+	// BasisBaseline means the outcome was recorded from this build rather than
+	// derived. These rows are reported, not gated, and every one is a debt to
+	// promote to spec or gs or delete.
+	BasisBaseline = "baseline"
 )
 
 const (
-	manifestHeader    = "path\tsha256\tbytes\tsource\tlicense\tfeature\texpect"
-	manifestColumns   = 7
+	manifestHeader = "path\tsha256\tbytes\tsource\tlicense\tfeature\texpect" +
+		"\tarea\tprobe\tbasis\tpages"
+	manifestColumns   = 11
 	sha256HexDigits   = 64
 	scannerBufferSize = 64 << 10
 	maxManifestLine   = 1 << 20
+	// maxAssertedPages bounds the pages column. A real corpus row never
+	// asserts more pages than this, and the ceiling keeps a fat-fingered page
+	// count from turning into an unbounded loop in a test.
+	maxAssertedPages = 100000
 )
 
 // Error is one manifest or corpus problem.
@@ -113,6 +200,27 @@ type Row struct {
 	License string
 	Feature string
 	Expect  string
+	// Area is the pass-rate group, from KnownAreas.
+	Area string
+	// Probe selects the job, from KnownProbes.
+	Probe string
+	// Basis records where Expect came from, from KnownBasis.
+	Basis string
+	// Pages is the expected page count, or 0 to assert nothing.
+	Pages int
+}
+
+// Survived reports whether the row asserts robustness on a defective file
+// rather than a fixed outcome.
+func (row Row) Survived() bool {
+	return row.Expect == ExpectSurvive
+}
+
+// Gated reports whether the row is a gate. A baseline row records observed
+// behaviour and is reported, never asserted, so a report that grows its
+// baseline share is a report saying the corpus stopped being a specification.
+func (row Row) Gated() bool {
+	return row.Basis != BasisBaseline
 }
 
 // External reports whether the row lives in the fetched, non-committed tier.
@@ -218,6 +326,9 @@ func parseRow(line int, text string) (Row, error) {
 	row.License = fields[4]
 	row.Feature = fields[5]
 	row.Expect = fields[6]
+	row.Area = fields[7]
+	row.Probe = fields[8]
+	row.Basis = fields[9]
 	if reason := pathReason(row.Path); reason != "" {
 		return Row{}, rowError(line, reason)
 	}
@@ -229,13 +340,41 @@ func parseRow(line int, text string) (Row, error) {
 		return Row{}, rowError(line, "bytes: "+reason)
 	}
 	row.Bytes = bytes
+	pages, reason := parsePages(fields[10])
+	if reason != "" {
+		return Row{}, rowError(line, "pages: "+reason)
+	}
+	row.Pages = pages
 	if reason := emptyFieldReason(row); reason != "" {
 		return Row{}, rowError(line, reason)
 	}
 	if reason := expectReason(row.Expect); reason != "" {
 		return Row{}, rowError(line, reason)
 	}
+	if reason := labelReason(row); reason != "" {
+		return Row{}, rowError(line, reason)
+	}
 	return row, nil
+}
+
+// labelReason checks the three closed vocabularies. They are three separate
+// sets rather than one field type so a row can name an area and a probe
+// independently, and a mistyped area can never become a probe.
+func labelReason(row Row) string {
+	for _, check := range []struct {
+		name  string
+		value string
+		set   []string
+	}{
+		{"area", row.Area, KnownAreas()},
+		{"probe", row.Probe, KnownProbes()},
+		{"basis", row.Basis, KnownBasis()},
+	} {
+		if reason := vocabReason(check.name, check.value, check.set); reason != "" {
+			return reason
+		}
+	}
+	return ""
 }
 
 // pathReason rejects absolute paths, parent jumps, and backslashes.
@@ -282,12 +421,30 @@ func parseBytes(text string) (int64, string) {
 	return value, ""
 }
 
+// parsePages accepts a non-negative page count, where 0 asserts nothing.
+func parsePages(text string) (int, string) {
+	value, err := strconv.Atoi(text)
+	if err != nil {
+		return 0, fmt.Sprintf("%q is not an integer", text)
+	}
+	if value < 0 {
+		return 0, fmt.Sprintf("%d is negative", value)
+	}
+	if value > maxAssertedPages {
+		return 0, fmt.Sprintf("%d is above the %d page assertion ceiling", value, maxAssertedPages)
+	}
+	return value, ""
+}
+
 func emptyFieldReason(row Row) string {
 	for _, pair := range []struct{ name, value string }{
 		{"source", row.Source},
 		{"license", row.License},
 		{"feature", row.Feature},
 		{"expect", row.Expect},
+		{"area", row.Area},
+		{"probe", row.Probe},
+		{"basis", row.Basis},
 	} {
 		if strings.TrimSpace(pair.value) == "" {
 			return pair.name + " is empty"
@@ -296,13 +453,25 @@ func emptyFieldReason(row Row) string {
 	return ""
 }
 
+// vocabReason rejects a label that is not in the closed set, so a typo fails
+// the parse instead of silently creating a new report group.
+func vocabReason(name, value string, set []string) string {
+	for _, allowed := range set {
+		if value == allowed {
+			return ""
+		}
+	}
+	return fmt.Sprintf("%s %q is not one of %v", name, value, set)
+}
+
 func expectReason(expect string) string {
-	switch expect {
-	case ExpectPaint, ExpectStruct:
-		return ""
+	for _, bare := range bareExpects() {
+		if expect == bare {
+			return ""
+		}
 	}
 	if !strings.HasPrefix(expect, ExpectRefuse) {
-		return fmt.Sprintf("expect %q is not paint, struct, or refuse:<error>", expect)
+		return fmt.Sprintf("expect %q is not paint, struct, survive, or refuse:<error>", expect)
 	}
 	if strings.TrimSpace(strings.TrimPrefix(expect, ExpectRefuse)) == "" {
 		return fmt.Sprintf("expect %q names no error", expect)
@@ -317,7 +486,10 @@ func AdmittedLicense(license string, external bool) bool {
 	case LicenseApache2, LicenseMIT, LicenseBSD3, LicenseCC0,
 		LicenseCCBY4, LicensePublicDomain, LicenseRepoAuthored:
 		return true
-	case LicenseCCBYSA4:
+	case LicenseCCBYSA4, LicenseAGPL3:
+		// A share-alike or copyleft file may be fetched and run here, and
+		// putting its bytes in the repository would impose the licence on
+		// everything around it.
 		return external
 	}
 	return false
@@ -342,6 +514,10 @@ func ExcludedTokens() []string {
 		"22060_a1_01_plans",
 		"openoffice",
 		"agpl",
+		// The Artifex public test files are AGPL-labelled and some carry
+		// proprietary third-party content, so they stay in the fetched tier.
+		"artifexsoftware",
+		"ghostscript/tests",
 	}
 }
 
