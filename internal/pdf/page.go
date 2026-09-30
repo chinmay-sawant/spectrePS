@@ -29,8 +29,10 @@ const (
 // pageLeaf is one page leaf from the tree walk: the decoded content bytes and
 // the nearest /Resources, either the page's own or an ancestor's.
 type pageLeaf struct {
-	content   []byte
-	resources Value
+	content     []byte
+	resources   Value
+	size        PageSize
+	contentNums []int
 }
 
 // PageCount returns the number of page leaves walked from the page tree.
@@ -56,6 +58,9 @@ func (file *File) Content(index int) ([]byte, error) {
 func (file *File) PageContentNums(pageIndex int) ([]int, error) {
 	if file == nil || pageIndex < 0 || pageIndex >= len(file.pages) {
 		return nil, NewError(opPDF, errRange)
+	}
+	if len(file.contentNums) == len(file.pages) {
+		return append([]int(nil), file.contentNums[pageIndex]...), nil
 	}
 	groups, err := file.contentNumPages()
 	if err != nil {
@@ -219,6 +224,9 @@ func (file *File) recoveredPagesOrError(err error) ([]pageLeaf, error) {
 
 func (file *File) pagesAfterTreeError(pages Value, treeErr error) ([]pageLeaf, error) {
 	if file.recovered {
+		if scanned := file.walkDamagedTree(pages); len(scanned) > 0 {
+			return scanned, nil
+		}
 		return file.scanPages()
 	}
 	if !file.pageTreeHasStream(pages) {
@@ -274,48 +282,108 @@ func (file *File) pageTreeHasStreamNode(val Value, seen map[int]bool) bool {
 }
 
 func (file *File) walkDamagedTree(val Value) []pageLeaf {
-	return file.walkDamagedTreeNode(val, map[int]bool{}, map[int]bool{}, NullVal())
+	file.damagedTree = true
+	remaining := len(file.xref) * 2
+	if remaining < 1 {
+		remaining = 1
+	}
+	defaultSize := PageSize{Width: infoDefaultPageWidth, Height: infoDefaultPageHeight}
+	leaves, complete := file.walkDamagedTreeNode(val, map[int]bool{}, NullVal(), defaultSize, &remaining)
+	if !complete {
+		return nil
+	}
+	root, err := file.deref(val)
+	if err == nil {
+		if count, ok := root.IntEntry("Count"); ok && count >= 0 && uint64(count) < uint64(len(leaves)) {
+			leaves = leaves[:int(count)]
+		}
+	}
+	return leaves
 }
 
-func (file *File) walkDamagedTreeNode(val Value, seen, path map[int]bool, inherited Value) []pageLeaf {
+// walkDamagedTreeNode keeps repeated /Kids references as separate occurrences
+// and stops only cycles on the current branch. Rebuilt tables can leave untyped
+// streams among page children, which count as blank pages; readable tables skip
+// streams. The shared visit budget limits expansion of malformed page graphs.
+func (file *File) walkDamagedTreeNode(
+	val Value,
+	path map[int]bool,
+	inherited Value,
+	inheritedSize PageSize,
+	remaining *int,
+) ([]pageLeaf, bool) {
+	if *remaining == 0 {
+		return nil, false
+	}
+	*remaining = *remaining - 1
 	if val.Kind == KindRef {
-		if seen[val.RefNum] || path[val.RefNum] {
-			return nil
+		if path[val.RefNum] {
+			return nil, true
 		}
-		seen[val.RefNum] = true
 		path[val.RefNum] = true
 		defer delete(path, val.RefNum)
 	}
 	node, err := file.deref(val)
-	if err != nil || node.Kind != KindDict {
-		return nil
+	if err != nil {
+		return nil, true
 	}
-	return file.walkDamagedTreeNodeContents(node, seen, path, inherited)
-}
-
-func (file *File) walkDamagedTreeNodeContents(node Value, seen, path map[int]bool, inherited Value) []pageLeaf {
+	if node.Kind == KindStream {
+		typeName, _ := node.NameEntry(keyType)
+		if typeName == "XObject" || !file.recovered {
+			return nil, true
+		}
+		return []pageLeaf{{resources: inherited, size: inheritedSize}}, true
+	}
+	if node.Kind != KindDict {
+		if node.Kind == KindNull {
+			return nil, true
+		}
+		return []pageLeaf{{resources: inherited, size: inheritedSize}}, true
+	}
 	resources := nearestResources(node, inherited)
+	inheritedSize = file.inheritedPageSize(node, inheritedSize)
 	typeName, _ := node.NameEntry(keyType)
 	if typeName == keyPage {
-		leaf, err := file.leaf(node, resources)
-		if err == nil {
-			return leaf
+		content, contentErr := file.pageBytes(node)
+		if contentErr != nil {
+			return nil, true
 		}
-		return nil
+		return []pageLeaf{{
+			content:     content,
+			resources:   resources,
+			size:        inheritedSize,
+			contentNums: file.contentNumRefs(node),
+		}}, true
 	}
-	kids, hasKids, err := file.kidArray(node)
-	if err != nil || !hasKids {
-		return nil
+	kids, hasKids, kidsErr := file.kidArray(node)
+	if kidsErr != nil {
+		return nil, true
 	}
-	return file.walkDamagedTreeKids(kids, seen, path, resources)
+	if hasKids {
+		return file.walkDamagedTreeKids(kids, path, resources, inheritedSize, remaining)
+	}
+	if typeName == keyPages {
+		return nil, true
+	}
+	return []pageLeaf{{resources: resources, size: inheritedSize}}, true
 }
 
-func (file *File) walkDamagedTreeKids(kids []Value, seen, path map[int]bool, resources Value) []pageLeaf {
+func (file *File) walkDamagedTreeKids(
+	kids []Value,
+	path map[int]bool,
+	resources Value,
+	size PageSize,
+	remaining *int,
+) ([]pageLeaf, bool) {
 	pages := []pageLeaf{}
 	for _, kid := range kids {
-		pages = append(pages, file.walkDamagedTreeNode(kid, seen, path, resources)...)
+		sub, complete := file.walkDamagedTreeNode(kid, path, resources, size, remaining)
+		if !complete {
+			return nil, false
+		}
+		pages = append(pages, sub...)
 	}
-	return pages
+	return pages, true
 }
 
 // scanPages collects every object whose /Type is /Page, in object-number order.
@@ -323,6 +391,7 @@ func (file *File) walkDamagedTreeKids(kids []Value, seen, path map[int]bool, res
 // file does not carry. A page whose own body will not parse is skipped rather
 // than failing the document, because the scan is already the fallback.
 func (file *File) scanPages() ([]pageLeaf, error) {
+	file.damagedTree = true
 	nums := make([]int, 0, len(file.xref))
 	for num := range file.xref {
 		nums = append(nums, num)
@@ -342,7 +411,7 @@ func (file *File) scanPages() ([]pageLeaf, error) {
 		if err != nil {
 			continue
 		}
-		leaves = append(leaves, pageLeaf{content: content, resources: nearestResources(node, NullVal())})
+		leaves = append(leaves, pageLeaf{content: content, resources: nearestResources(node, NullVal()), contentNums: file.contentNumRefs(node)})
 	}
 	if len(leaves) == 0 {
 		return nil, NewError(opPDF, errUndefined)
@@ -432,7 +501,11 @@ func (file *File) leaf(node Value, resources Value) ([]pageLeaf, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []pageLeaf{{content: content, resources: resources}}, nil
+	leaf := pageLeaf{content: content, resources: resources}
+	if file.damagedTree {
+		leaf.contentNums = file.contentNumRefs(node)
+	}
+	return []pageLeaf{leaf}, nil
 }
 
 func (file *File) walkKids(kids []Value, seen, path map[int]bool, resources Value) ([]pageLeaf, error) {

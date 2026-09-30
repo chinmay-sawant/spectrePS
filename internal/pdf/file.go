@@ -43,18 +43,21 @@ const (
 // File is one open PDF subset.
 // Page count is the number of leaves walked from the page tree.
 type File struct {
-	src       []byte
-	trailer   Value
-	xref      map[int]XEntry
-	cache     map[int]Value
-	streams   map[int]map[int]stmItem
-	pages     [][]byte
-	resources []Value
-	busy      map[int]bool
-	scan      map[int]XEntry
-	packed    map[int]XEntry
-	recovered bool
-	crypt     *cryptState
+	src          []byte
+	trailer      Value
+	xref         map[int]XEntry
+	cache        map[int]Value
+	streams      map[int]map[int]stmItem
+	pages        [][]byte
+	resources    []Value
+	pageBoxSizes []PageSize
+	contentNums  [][]int
+	damagedTree  bool
+	busy         map[int]bool
+	scan         map[int]XEntry
+	packed       map[int]XEntry
+	recovered    bool
+	crypt        *cryptState
 }
 
 type objPos struct {
@@ -105,18 +108,21 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 		return nil, err
 	}
 	file := &File{
-		src:       src,
-		trailer:   trailer,
-		xref:      entries,
-		cache:     map[int]Value{},
-		streams:   map[int]map[int]stmItem{},
-		pages:     nil,
-		resources: nil,
-		busy:      map[int]bool{},
-		scan:      nil,
-		packed:    nil,
-		recovered: recovered,
-		crypt:     nil,
+		src:          src,
+		trailer:      trailer,
+		xref:         entries,
+		cache:        map[int]Value{},
+		streams:      map[int]map[int]stmItem{},
+		pages:        nil,
+		resources:    nil,
+		pageBoxSizes: nil,
+		contentNums:  nil,
+		damagedTree:  false,
+		busy:         map[int]bool{},
+		scan:         nil,
+		packed:       nil,
+		recovered:    recovered,
+		crypt:        nil,
 	}
 	if err := file.installCrypt(trailer); err != nil {
 		return nil, err
@@ -127,9 +133,17 @@ func Open(ctx context.Context, src []byte) (*File, error) {
 	}
 	file.pages = make([][]byte, len(leaves))
 	file.resources = make([]Value, len(leaves))
+	if file.damagedTree {
+		file.pageBoxSizes = make([]PageSize, len(leaves))
+		file.contentNums = make([][]int, len(leaves))
+	}
 	for i, leaf := range leaves {
 		file.pages[i] = leaf.content
 		file.resources[i] = leaf.resources
+		if file.damagedTree {
+			file.pageBoxSizes[i] = leaf.size
+			file.contentNums[i] = leaf.contentNums
+		}
 	}
 	return file, nil
 }
