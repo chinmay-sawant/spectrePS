@@ -16,7 +16,8 @@ const (
 
 	// contentArrayDepth caps a /Contents array nested through indirect arrays.
 	// A real producer nests one level; the cap turns a cycle into limitcheck.
-	contentArrayDepth = 8
+	contentArrayDepth          = 8
+	damagedTreeVisitMultiplier = 2
 
 	keyPage      = "Page"
 	keyPages     = "Pages"
@@ -283,7 +284,7 @@ func (file *File) pageTreeHasStreamNode(val Value, seen map[int]bool) bool {
 
 func (file *File) walkDamagedTree(val Value) []pageLeaf {
 	file.damagedTree = true
-	remaining := len(file.xref) * 2
+	remaining := len(file.xref) * damagedTreeVisitMultiplier
 	if remaining < 1 {
 		remaining = 1
 	}
@@ -294,8 +295,8 @@ func (file *File) walkDamagedTree(val Value) []pageLeaf {
 	}
 	root, err := file.deref(val)
 	if err == nil {
-		if count, ok := root.IntEntry("Count"); ok && count >= 0 && uint64(count) < uint64(len(leaves)) {
-			leaves = leaves[:int(count)]
+		if count, ok := root.IntEntry("Count"); ok && count >= 0 && count < len(leaves) {
+			leaves = leaves[:count]
 		}
 	}
 	return leaves
@@ -315,7 +316,7 @@ func (file *File) walkDamagedTreeNode(
 	if *remaining == 0 {
 		return nil, false
 	}
-	*remaining = *remaining - 1
+	*remaining--
 	if val.Kind == KindRef {
 		if path[val.RefNum] {
 			return nil, true
@@ -327,33 +328,48 @@ func (file *File) walkDamagedTreeNode(
 	if err != nil {
 		return nil, true
 	}
+	return file.walkDamagedTreeValue(node, path, inherited, inheritedSize, remaining)
+}
+
+func (file *File) walkDamagedTreeValue(
+	node Value,
+	path map[int]bool,
+	inherited Value,
+	inheritedSize PageSize,
+	remaining *int,
+) ([]pageLeaf, bool) {
 	if node.Kind == KindStream {
-		typeName, _ := node.NameEntry(keyType)
-		if typeName == "XObject" || !file.recovered {
-			return nil, true
-		}
-		return []pageLeaf{{resources: inherited, size: inheritedSize}}, true
+		return file.walkDamagedStream(node, inherited, inheritedSize)
 	}
 	if node.Kind != KindDict {
 		if node.Kind == KindNull {
 			return nil, true
 		}
-		return []pageLeaf{{resources: inherited, size: inheritedSize}}, true
+		return []pageLeaf{damagedBlankPage(inherited, inheritedSize)}, true
 	}
+	return file.walkDamagedTreeDict(node, path, inherited, inheritedSize, remaining)
+}
+
+func (file *File) walkDamagedStream(node Value, inherited Value, size PageSize) ([]pageLeaf, bool) {
+	typeName, _ := node.NameEntry(keyType)
+	if typeName == "XObject" || !file.recovered {
+		return nil, true
+	}
+	return []pageLeaf{damagedBlankPage(inherited, size)}, true
+}
+
+func (file *File) walkDamagedTreeDict(
+	node Value,
+	path map[int]bool,
+	inherited Value,
+	inheritedSize PageSize,
+	remaining *int,
+) ([]pageLeaf, bool) {
 	resources := nearestResources(node, inherited)
 	inheritedSize = file.inheritedPageSize(node, inheritedSize)
 	typeName, _ := node.NameEntry(keyType)
 	if typeName == keyPage {
-		content, contentErr := file.pageBytes(node)
-		if contentErr != nil {
-			return nil, true
-		}
-		return []pageLeaf{{
-			content:     content,
-			resources:   resources,
-			size:        inheritedSize,
-			contentNums: file.contentNumRefs(node),
-		}}, true
+		return file.walkDamagedPage(node, resources, inheritedSize)
 	}
 	kids, hasKids, kidsErr := file.kidArray(node)
 	if kidsErr != nil {
@@ -365,7 +381,29 @@ func (file *File) walkDamagedTreeNode(
 	if typeName == keyPages {
 		return nil, true
 	}
-	return []pageLeaf{{resources: resources, size: inheritedSize}}, true
+	return []pageLeaf{damagedBlankPage(resources, inheritedSize)}, true
+}
+
+func (file *File) walkDamagedPage(node Value, resources Value, size PageSize) ([]pageLeaf, bool) {
+	content, err := file.pageBytes(node)
+	if err != nil {
+		return nil, true
+	}
+	return []pageLeaf{{
+		content:     content,
+		resources:   resources,
+		size:        size,
+		contentNums: file.contentNumRefs(node),
+	}}, true
+}
+
+func damagedBlankPage(resources Value, size PageSize) pageLeaf {
+	return pageLeaf{
+		content:     nil,
+		resources:   resources,
+		size:        size,
+		contentNums: nil,
+	}
 }
 
 func (file *File) walkDamagedTreeKids(
@@ -411,7 +449,12 @@ func (file *File) scanPages() ([]pageLeaf, error) {
 		if err != nil {
 			continue
 		}
-		leaves = append(leaves, pageLeaf{content: content, resources: nearestResources(node, NullVal()), contentNums: file.contentNumRefs(node)})
+		leaves = append(leaves, pageLeaf{
+			content:     content,
+			resources:   nearestResources(node, NullVal()),
+			size:        PageSize{},
+			contentNums: file.contentNumRefs(node),
+		})
 	}
 	if len(leaves) == 0 {
 		return nil, NewError(opPDF, errUndefined)
@@ -501,7 +544,12 @@ func (file *File) leaf(node Value, resources Value) ([]pageLeaf, error) {
 	if err != nil {
 		return nil, err
 	}
-	leaf := pageLeaf{content: content, resources: resources}
+	leaf := pageLeaf{
+		content:     content,
+		resources:   resources,
+		size:        PageSize{},
+		contentNums: nil,
+	}
 	if file.damagedTree {
 		leaf.contentNums = file.contentNumRefs(node)
 	}
