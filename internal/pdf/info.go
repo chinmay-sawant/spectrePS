@@ -257,7 +257,12 @@ func (file *File) walkDamagedPageSizes(val Value, seen, path map[int]bool, inher
 	file.walkDamagedPageSizeKids(kids, seen, path, inherited, sizes)
 }
 
-func (file *File) walkDamagedPageSizeKids(kids []Value, seen, path map[int]bool, inherited PageSize, sizes *[]PageSize) {
+func (file *File) walkDamagedPageSizeKids(
+	kids []Value,
+	seen, path map[int]bool,
+	inherited PageSize,
+	sizes *[]PageSize,
+) {
 	for _, kid := range kids {
 		file.walkDamagedPageSizes(kid, seen, path, inherited, sizes)
 	}

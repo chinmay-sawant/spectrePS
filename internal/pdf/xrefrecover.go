@@ -503,7 +503,13 @@ type objectHeaderCandidate struct {
 func objectHeaderCandidateAt(src []byte, pos int) (objectHeaderCandidate, bool) {
 	num, gen, ok := objectHeaderAt(src, pos)
 	if !ok {
-		return objectHeaderCandidate{}, false
+		return objectHeaderCandidate{
+			num:    0,
+			gen:    0,
+			next:   0,
+			body:   Value{},
+			parsed: false,
+		}, false
 	}
 	got, gotGen, body, next, err := ParseIndirect(src, pos)
 	return objectHeaderCandidate{
@@ -530,20 +536,22 @@ func scanStreamSpan(src []byte, current objectSpan, entries, malformed map[int]X
 func scanStreamHeaderAt(src []byte, pos, end int, entries, malformed map[int]XEntry) (int, objectSpan, bool) {
 	candidate, found := objectHeaderCandidateAt(src, pos)
 	if !found {
-		return pos + 1, objectSpan{}, false
+		return pos + 1, objectSpan{start: 0, end: 0}, false
 	}
 	if !candidate.parsed {
 		keepHeader(malformed, candidate.num, pos, candidate.gen)
-		return pos + 1, objectSpan{}, false
+		return pos + 1, objectSpan{start: 0, end: 0}, false
 	}
 	keepHeader(entries, candidate.num, pos, candidate.gen)
-	if candidate.body.Kind == KindStream && directLengthMismatch(candidate.body) && candidate.next > pos && candidate.next <= end {
+	isMismatchedStream := candidate.body.Kind == KindStream && directLengthMismatch(candidate.body)
+	isInSpan := candidate.next > pos && candidate.next <= end
+	if isMismatchedStream && isInSpan {
 		return candidate.next, objectSpan{start: pos + 1, end: candidate.next}, true
 	}
-	if candidate.next > pos && candidate.next <= end {
-		return candidate.next, objectSpan{}, false
+	if isInSpan {
+		return candidate.next, objectSpan{start: 0, end: 0}, false
 	}
-	return pos + 1, objectSpan{}, false
+	return pos + 1, objectSpan{start: 0, end: 0}, false
 }
 
 func mergeHeaderEntries(entries, candidates map[int]XEntry) {
