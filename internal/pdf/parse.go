@@ -132,12 +132,12 @@ func (lex *lexer) takeRef(num int64) (Value, bool, error) {
 		// "num gen R", and a producer that dropped the middle number still
 		// meant a reference to generation zero. GHOSTSCRIPT-701876-0.pdf
 		// carries "/OCGs [+ 0 R]" and paints a full page.
-		if gen, isRef := lex.peekBareRef(); isRef {
+		if lex.peekBareRef() {
 			objNum, fits := fitInt(num)
 			if !fits {
 				return NullVal(), false, syntaxErr(wordRef)
 			}
-			return RefVal(objNum, gen), true, nil
+			return RefVal(objNum, 0), true, nil
 		}
 		return NullVal(), false, nil
 	}
@@ -164,20 +164,20 @@ func (lex *lexer) takeRef(num int64) (Value, bool, error) {
 // an allocation for every standalone integer in the document, and the level-2
 // rewrite allocation count is a gate: this shape appeared as 715 before the
 // tolerance and 723 after, and the eight allocations were all here.
-func (lex *lexer) peekBareRef() (int, bool) {
-	at := lex.pos
-	for at < len(lex.src) && isSpace(lex.src[at]) {
-		at++
+func (lex *lexer) peekBareRef() bool {
+	position := lex.pos
+	for position < len(lex.src) && isSpace(lex.src[position]) {
+		position++
 	}
-	if at >= len(lex.src) || lex.src[at] != 'R' {
-		return 0, false
+	if position >= len(lex.src) || lex.src[position] != 'R' {
+		return false
 	}
-	end := at + 1
+	end := position + 1
 	if end < len(lex.src) && !isDelim(lex.src[end]) {
-		return 0, false
+		return false
 	}
 	lex.pos = end
-	return 0, true
+	return true
 }
 
 func (lex *lexer) peekRef() (token, bool) {

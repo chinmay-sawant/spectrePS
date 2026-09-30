@@ -644,6 +644,7 @@ func prevLoopDoc(t *testing.T) []byte {
 // shape in the corpus.
 func TestRecoverDamagedTrailerKeyword(t *testing.T) {
 	t.Parallel()
+	//nolint:misspell // The replacement is deliberately an invalid PDF keyword.
 	src := bytes.Replace(classicLine(t), []byte("trailer"), []byte("trailes"), 1)
 	file := mustOpen(t, src)
 	if file.PageCount() != 1 {

@@ -5,9 +5,9 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"sort"
 
 	"github.com/chinmay-sawant/spectrePS/internal/graphics"
-	"sort"
 )
 
 const (
@@ -197,10 +197,7 @@ func (file *File) walkRoot() ([]pageLeaf, error) {
 		// of the same damage, so scan for pages; a table the file wrote keeps
 		// its own generation numbers and a dead reference in it is still a
 		// hard failure, which TestValidTableGenerationStaysStrict pins.
-		if file.recovered {
-			return file.scanPages()
-		}
-		return nil, err
+		return file.recoveredPagesOrError(err)
 	}
 	pages, ok := catalog.ValueEntry(keyPages)
 	if !ok || pages.Kind == KindNull {
@@ -208,25 +205,36 @@ func (file *File) walkRoot() ([]pageLeaf, error) {
 	}
 	leaves, err := file.walkRef(pages, map[int]bool{}, map[int]bool{}, NullVal())
 	if err != nil {
-		// The catalog's page tree is not walkable. The pages are still in the
-		// file, each carrying /Type /Page and a /Parent that may point at an
-		// object nobody wrote; Ghostscript finds them by scanning rather than
-		// by descending, and paints a full page from a file whose /Pages is
-		// dangling. GHOSTSCRIPT-701877-0.pdf is that shape.
-		if file.recovered {
-			return file.scanPages()
-		}
-		if file.pageTreeHasStream(pages) {
-			if scanned := file.walkDamagedTree(pages); len(scanned) > 0 {
-				return scanned, nil
-			}
-			if scanned, serr := file.scanPages(); serr == nil && len(scanned) > 0 {
-				return scanned, nil
-			}
-		}
-		return nil, err
+		return file.pagesAfterTreeError(pages, err)
 	}
 	return leaves, nil
+}
+
+func (file *File) recoveredPagesOrError(err error) ([]pageLeaf, error) {
+	if file.recovered {
+		return file.scanPages()
+	}
+	return nil, err
+}
+
+func (file *File) pagesAfterTreeError(pages Value, treeErr error) ([]pageLeaf, error) {
+	if file.recovered {
+		return file.scanPages()
+	}
+	if !file.pageTreeHasStream(pages) {
+		return nil, treeErr
+	}
+	if scanned := file.walkDamagedTree(pages); len(scanned) > 0 {
+		return scanned, nil
+	}
+	return file.scannedPagesOrError(treeErr)
+}
+
+func (file *File) scannedPagesOrError(err error) ([]pageLeaf, error) {
+	if scanned, scanErr := file.scanPages(); scanErr == nil && len(scanned) > 0 {
+		return scanned, nil
+	}
+	return nil, err
 }
 
 // pageTreeHasStream reports whether a page-tree branch resolves to a stream.
@@ -282,6 +290,10 @@ func (file *File) walkDamagedTreeNode(val Value, seen, path map[int]bool, inheri
 	if err != nil || node.Kind != KindDict {
 		return nil
 	}
+	return file.walkDamagedTreeNodeContents(node, seen, path, inherited)
+}
+
+func (file *File) walkDamagedTreeNodeContents(node Value, seen, path map[int]bool, inherited Value) []pageLeaf {
 	resources := nearestResources(node, inherited)
 	typeName, _ := node.NameEntry(keyType)
 	if typeName == keyPage {
@@ -295,6 +307,10 @@ func (file *File) walkDamagedTreeNode(val Value, seen, path map[int]bool, inheri
 	if err != nil || !hasKids {
 		return nil
 	}
+	return file.walkDamagedTreeKids(kids, seen, path, resources)
+}
+
+func (file *File) walkDamagedTreeKids(kids []Value, seen, path map[int]bool, resources Value) []pageLeaf {
 	pages := []pageLeaf{}
 	for _, kid := range kids {
 		pages = append(pages, file.walkDamagedTreeNode(kid, seen, path, resources)...)

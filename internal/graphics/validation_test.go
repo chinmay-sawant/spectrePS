@@ -116,24 +116,35 @@ func TestValidationFillBoundingBox(t *testing.T) {
 	img := shownPixmap(t, pixmap)
 
 	painted := 0
-	for y := range img.Height {
-		for x := range img.Width {
-			at := y*img.Stride + x*bytesPerPixel
-			if img.Pixels[at] == whiteByte && img.Pixels[at+1] == whiteByte && img.Pixels[at+2] == whiteByte {
+	for row := range img.Height {
+		for column := range img.Width {
+			if !validationPixelPainted(img, row, column) {
 				continue
 			}
 			painted++
-			// The pixel centre has to be inside the path's box, with one
-			// pixel of slack for the boundary itself.
-			centerX := float64(x) + pixelCenter
-			centerY := float64(img.Height-1-y) + pixelCenter
-			if centerX < 1 || centerX > 7 || centerY < 1 || centerY > 6 {
-				t.Fatalf("pixel (%d,%d) is painted and lies outside the path box", x, y)
-			}
+			validationAssertInsidePathBox(t, img, row, column)
 		}
 	}
 	if painted == 0 {
 		t.Fatal("nothing was painted, so the bound skipped the path itself")
+	}
+}
+
+func validationPixelPainted(img Image, row, column int) bool {
+	index := row*img.Stride + column*bytesPerPixel
+	return img.Pixels[index] != whiteByte ||
+		img.Pixels[index+1] != whiteByte ||
+		img.Pixels[index+2] != whiteByte
+}
+
+func validationAssertInsidePathBox(t *testing.T, img Image, row, column int) {
+	t.Helper()
+	// The pixel centre has to be inside the path's box, with one pixel of slack
+	// for the boundary itself.
+	centerColumn := float64(column) + pixelCenter
+	centerRow := float64(img.Height-1-row) + pixelCenter
+	if centerColumn < 1 || centerColumn > 7 || centerRow < 1 || centerRow > 6 {
+		t.Fatalf("pixel (%d,%d) is painted and lies outside the path box", column, row)
 	}
 }
 

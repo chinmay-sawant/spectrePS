@@ -449,38 +449,30 @@ func scanObjectHeaders(src []byte) map[int]XEntry {
 	streamEntries := map[int]XEntry{}
 	malformedEntries := map[int]XEntry{}
 	for pos := 0; pos < len(src); {
-		num, gen, ok := objectHeaderAt(src, pos)
-		if !ok {
-			pos++
-			continue
-		}
-		got, gotGen, body, next, err := ParseIndirect(src, pos)
-		if err != nil || got != num || gotGen != gen || num == 0 {
-			keepHeader(malformedEntries, num, pos, gen)
-			pos++
-			continue
-		}
-		keepHeader(entries, num, pos, gen)
-		if body.Kind == KindStream && directLengthMismatch(body) {
-			scanStreamHeaders(src, pos+1, next, streamEntries, malformedEntries)
-		}
-		if next > pos {
-			pos = next
-			continue
-		}
-		pos++
+		pos = scanOuterHeader(src, pos, entries, streamEntries, malformedEntries)
 	}
-	for num, entry := range streamEntries {
-		if _, seen := entries[num]; !seen {
-			entries[num] = entry
-		}
-	}
-	for num, entry := range malformedEntries {
-		if _, seen := entries[num]; !seen {
-			entries[num] = entry
-		}
-	}
+	mergeHeaderEntries(entries, streamEntries)
+	mergeHeaderEntries(entries, malformedEntries)
 	return entries
+}
+
+func scanOuterHeader(src []byte, pos int, entries, streamEntries, malformedEntries map[int]XEntry) int {
+	candidate, found := objectHeaderCandidateAt(src, pos)
+	if !found {
+		return pos + 1
+	}
+	if !candidate.parsed {
+		keepHeader(malformedEntries, candidate.num, pos, candidate.gen)
+		return pos + 1
+	}
+	keepHeader(entries, candidate.num, pos, candidate.gen)
+	if candidate.body.Kind == KindStream && directLengthMismatch(candidate.body) {
+		scanStreamHeaders(src, pos+1, candidate.next, streamEntries, malformedEntries)
+	}
+	if candidate.next > pos {
+		return candidate.next
+	}
+	return pos + 1
 }
 
 // scanStreamHeaders searches a stream span after its direct /Length disagrees
@@ -489,33 +481,75 @@ func scanObjectHeaders(src []byte) map[int]XEntry {
 // them as stream data. These entries stay secondary to objects found outside
 // the stream.
 func scanStreamHeaders(src []byte, start, end int, entries, malformed map[int]XEntry) {
-	type span struct{ start, end int }
-	spans := []span{{start: start, end: end}}
+	spans := []objectSpan{{start: start, end: end}}
 	for len(spans) > 0 {
 		last := len(spans) - 1
 		current := spans[last]
 		spans = spans[:last]
-		for pos := current.start; pos < current.end; {
-			num, gen, ok := objectHeaderAt(src, pos)
-			if !ok {
-				pos++
-				continue
-			}
-			got, gotGen, body, next, err := ParseIndirect(src, pos)
-			if err != nil || got != num || gotGen != gen || num == 0 {
-				keepHeader(malformed, num, pos, gen)
-				pos++
-				continue
-			}
-			keepHeader(entries, num, pos, gen)
-			if body.Kind == KindStream && directLengthMismatch(body) && next > pos && next <= current.end {
-				spans = append(spans, span{start: pos + 1, end: next})
-			}
-			if next > pos && next <= current.end {
-				pos = next
-				continue
-			}
-			pos++
+		spans = append(spans, scanStreamSpan(src, current, entries, malformed)...)
+	}
+}
+
+type objectSpan struct{ start, end int }
+
+type objectHeaderCandidate struct {
+	num    int
+	gen    int
+	next   int
+	body   Value
+	parsed bool
+}
+
+func objectHeaderCandidateAt(src []byte, pos int) (objectHeaderCandidate, bool) {
+	num, gen, ok := objectHeaderAt(src, pos)
+	if !ok {
+		return objectHeaderCandidate{}, false
+	}
+	got, gotGen, body, next, err := ParseIndirect(src, pos)
+	return objectHeaderCandidate{
+		num:    num,
+		gen:    gen,
+		next:   next,
+		body:   body,
+		parsed: err == nil && got == num && gotGen == gen,
+	}, true
+}
+
+func scanStreamSpan(src []byte, current objectSpan, entries, malformed map[int]XEntry) []objectSpan {
+	nested := []objectSpan{}
+	for pos := current.start; pos < current.end; {
+		next, child, hasChild := scanStreamHeaderAt(src, pos, current.end, entries, malformed)
+		if hasChild {
+			nested = append(nested, child)
+		}
+		pos = next
+	}
+	return nested
+}
+
+func scanStreamHeaderAt(src []byte, pos, end int, entries, malformed map[int]XEntry) (int, objectSpan, bool) {
+	candidate, found := objectHeaderCandidateAt(src, pos)
+	if !found {
+		return pos + 1, objectSpan{}, false
+	}
+	if !candidate.parsed {
+		keepHeader(malformed, candidate.num, pos, candidate.gen)
+		return pos + 1, objectSpan{}, false
+	}
+	keepHeader(entries, candidate.num, pos, candidate.gen)
+	if candidate.body.Kind == KindStream && directLengthMismatch(candidate.body) && candidate.next > pos && candidate.next <= end {
+		return candidate.next, objectSpan{start: pos + 1, end: candidate.next}, true
+	}
+	if candidate.next > pos && candidate.next <= end {
+		return candidate.next, objectSpan{}, false
+	}
+	return pos + 1, objectSpan{}, false
+}
+
+func mergeHeaderEntries(entries, candidates map[int]XEntry) {
+	for num, entry := range candidates {
+		if _, seen := entries[num]; !seen {
+			entries[num] = entry
 		}
 	}
 }
@@ -642,15 +676,15 @@ func recoverNearTable(src []byte, offset int) (map[int]XEntry, Value, bool) {
 	if low < 0 {
 		low = 0
 	}
-	at := bytes.LastIndex(src[low:offset], []byte(wordXRef))
-	if at < 0 {
+	xrefOffset := bytes.LastIndex(src[low:offset], []byte(wordXRef))
+	if xrefOffset < 0 {
 		return nil, NullVal(), false
 	}
-	at += low
-	if !keywordHere(src, at, wordXRef) {
+	xrefOffset += low
+	if !keywordHere(src, xrefOffset, wordXRef) {
 		return nil, NullVal(), false
 	}
-	entries, trailer, err := readCrossRef(src, at)
+	entries, trailer, err := readCrossRef(src, xrefOffset)
 	if err != nil || len(entries) == 0 {
 		return nil, NullVal(), false
 	}
