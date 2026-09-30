@@ -66,8 +66,8 @@ Info passed: 612; info passed and GS emitted pages: 564
 
 ## PR metadata checklist (author)
 
-- [ ] Self-assigned (`--assignee @me`)
-- [ ] Labels applied
+- [x] Self-assigned (`--assignee @me`)
+- [x] Labels applied
 - [x] Related issue status stated above
 - [x] Filled body committed under `plans/PR/pr-batch2-recovery-audit.md`
 
@@ -82,10 +82,10 @@ Info passed: 612; info passed and GS emitted pages: 564
 - [ ] No unrelated changes in diff
 - [ ] Public API / CLI changes documented
 - [x] New recovery rules have inline fixture coverage
-- [ ] PR has assignee and labels
+- [x] PR has assignee and labels
 - [ ] Related issues use correct Closes/Relates keywords
 - [ ] No secrets or generated artifacts committed
-- [ ] Diff-stat-by-extension table pasted below
+- [x] Diff-stat-by-extension table pasted below
 
 ## Diff stat by extension
 
