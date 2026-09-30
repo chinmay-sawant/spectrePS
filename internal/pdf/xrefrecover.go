@@ -507,7 +507,7 @@ func objectHeaderCandidateAt(src []byte, pos int) (objectHeaderCandidate, bool) 
 			num:    0,
 			gen:    0,
 			next:   0,
-			body:   Value{},
+			body:   NullVal(),
 			parsed: false,
 		}, false
 	}

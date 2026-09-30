@@ -41,7 +41,7 @@ This change adds regression coverage for three remaining batch2 recovery shapes 
 
 ## Test plan
 
-- [x] `make test` (passed in 22.1 seconds)
+- [x] `make test` (passed in 17.1 seconds)
 - [ ] `make lint` (not run locally at the user's request; CI remains the lint gate)
 - [x] `make build`
 
