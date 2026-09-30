@@ -180,10 +180,16 @@ func (file *File) pageSizes() ([]PageSize, error) {
 
 func (file *File) recoverPageSizes(pages Value, inherited PageSize, walkErr error) ([]PageSize, error) {
 	if file.recovered {
+		if sizes, ok := file.pageLeafSizes(); ok {
+			return sizes, nil
+		}
 		return file.scannedPageSizesOrError(walkErr)
 	}
 	if !file.pageTreeHasStream(pages) {
 		return nil, walkErr
+	}
+	if sizes, ok := file.pageLeafSizes(); ok {
+		return sizes, nil
 	}
 	recovered := []PageSize{}
 	file.walkDamagedPageSizes(pages, map[int]bool{}, map[int]bool{}, inherited, &recovered)
@@ -191,6 +197,20 @@ func (file *File) recoverPageSizes(pages Value, inherited PageSize, walkErr erro
 		return recovered, nil
 	}
 	return file.scannedPageSizesOrError(walkErr)
+}
+
+func (file *File) pageLeafSizes() ([]PageSize, bool) {
+	if len(file.pageBoxSizes) == 0 {
+		return nil, false
+	}
+	sizes := make([]PageSize, len(file.pageBoxSizes))
+	for i, size := range file.pageBoxSizes {
+		if size.Width <= 0 || size.Height <= 0 {
+			return nil, false
+		}
+		sizes[i] = size
+	}
+	return sizes, true
 }
 
 func (file *File) scannedPageSizesOrError(err error) ([]PageSize, error) {
