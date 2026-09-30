@@ -214,6 +214,12 @@ func (file *File) walkRoot() ([]pageLeaf, error) {
 		// by descending, and paints a full page from a file whose /Pages is
 		// dangling. GHOSTSCRIPT-701877-0.pdf is that shape.
 		if file.recovered {
+			return file.scanPages()
+		}
+		if file.pageTreeHasStream(pages) {
+			if scanned := file.walkDamagedTree(pages); len(scanned) > 0 {
+				return scanned, nil
+			}
 			if scanned, serr := file.scanPages(); serr == nil && len(scanned) > 0 {
 				return scanned, nil
 			}
@@ -221,6 +227,79 @@ func (file *File) walkRoot() ([]pageLeaf, error) {
 		return nil, err
 	}
 	return leaves, nil
+}
+
+// pageTreeHasStream reports whether a page-tree branch resolves to a stream.
+// A readable xref can still point /Kids at a stream object, so this check
+// keeps page scanning limited to that broken tree shape on unrecovered files.
+func (file *File) pageTreeHasStream(val Value) bool {
+	return file.pageTreeHasStreamNode(val, map[int]bool{})
+}
+
+func (file *File) pageTreeHasStreamNode(val Value, seen map[int]bool) bool {
+	if val.Kind == KindRef {
+		if seen[val.RefNum] {
+			return false
+		}
+		seen[val.RefNum] = true
+	}
+	node, err := file.deref(val)
+	if err != nil {
+		return false
+	}
+	if node.Kind == KindStream {
+		return true
+	}
+	if node.Kind != KindDict {
+		return false
+	}
+	kids, hasKids, err := file.kidArray(node)
+	if err != nil || !hasKids {
+		return false
+	}
+	for _, kid := range kids {
+		if file.pageTreeHasStreamNode(kid, seen) {
+			return true
+		}
+	}
+	return false
+}
+
+func (file *File) walkDamagedTree(val Value) []pageLeaf {
+	return file.walkDamagedTreeNode(val, map[int]bool{}, map[int]bool{}, NullVal())
+}
+
+func (file *File) walkDamagedTreeNode(val Value, seen, path map[int]bool, inherited Value) []pageLeaf {
+	if val.Kind == KindRef {
+		if seen[val.RefNum] || path[val.RefNum] {
+			return nil
+		}
+		seen[val.RefNum] = true
+		path[val.RefNum] = true
+		defer delete(path, val.RefNum)
+	}
+	node, err := file.deref(val)
+	if err != nil || node.Kind != KindDict {
+		return nil
+	}
+	resources := nearestResources(node, inherited)
+	typeName, _ := node.NameEntry(keyType)
+	if typeName == keyPage {
+		leaf, err := file.leaf(node, resources)
+		if err == nil {
+			return leaf
+		}
+		return nil
+	}
+	kids, hasKids, err := file.kidArray(node)
+	if err != nil || !hasKids {
+		return nil
+	}
+	pages := []pageLeaf{}
+	for _, kid := range kids {
+		pages = append(pages, file.walkDamagedTreeNode(kid, seen, path, resources)...)
+	}
+	return pages
 }
 
 // scanPages collects every object whose /Type is /Page, in object-number order.

@@ -172,9 +172,85 @@ func (file *File) pageSizes() ([]PageSize, error) {
 	inherited := PageSize{Width: infoDefaultPageWidth, Height: infoDefaultPageHeight}
 	sizes := []PageSize{}
 	if err := file.walkPageSizes(pages, map[int]bool{}, map[int]bool{}, inherited, &sizes); err != nil {
+		if file.recovered {
+			if scanned, scanErr := file.scanPageSizes(); scanErr == nil {
+				return scanned, nil
+			}
+		} else if file.pageTreeHasStream(pages) {
+			recovered := []PageSize{}
+			file.walkDamagedPageSizes(pages, map[int]bool{}, map[int]bool{}, inherited, &recovered)
+			if len(recovered) > 0 {
+				return recovered, nil
+			}
+			if scanned, scanErr := file.scanPageSizes(); scanErr == nil {
+				return scanned, nil
+			}
+		}
 		return nil, err
 	}
 	return sizes, nil
+}
+
+// scanPageSizes uses page objects directly when a damaged page tree cannot be
+// walked. This follows scanPages order and uses the normal default page box.
+func (file *File) scanPageSizes() ([]PageSize, error) {
+	nums := make([]int, 0, len(file.xref))
+	for num := range file.xref {
+		nums = append(nums, num)
+	}
+	slices.Sort(nums)
+	sizes := []PageSize{}
+	defaultSize := PageSize{Width: infoDefaultPageWidth, Height: infoDefaultPageHeight}
+	for _, num := range nums {
+		node, err := file.resolve(num)
+		if err != nil || node.Kind != KindDict {
+			continue
+		}
+		typeName, _ := node.NameEntry(keyType)
+		if typeName != keyPage {
+			continue
+		}
+		size, err := file.nodeSize(node, defaultSize)
+		if err != nil {
+			return nil, err
+		}
+		sizes = append(sizes, size)
+	}
+	if len(sizes) == 0 {
+		return nil, NewError(opInfo, errSyntax)
+	}
+	return sizes, nil
+}
+
+func (file *File) walkDamagedPageSizes(val Value, seen, path map[int]bool, inherited PageSize, sizes *[]PageSize) {
+	if val.Kind == KindRef {
+		if seen[val.RefNum] || path[val.RefNum] {
+			return
+		}
+		seen[val.RefNum] = true
+		path[val.RefNum] = true
+		defer delete(path, val.RefNum)
+	}
+	node, err := file.deref(val)
+	if err != nil || node.Kind != KindDict {
+		return
+	}
+	size, err := file.nodeSize(node, inherited)
+	if err == nil {
+		inherited = size
+	}
+	typeName, _ := node.NameEntry(keyType)
+	if typeName == keyPage {
+		*sizes = append(*sizes, inherited)
+		return
+	}
+	kids, hasKids, err := file.kidArray(node)
+	if err != nil || !hasKids {
+		return
+	}
+	for _, kid := range kids {
+		file.walkDamagedPageSizes(kid, seen, path, inherited, sizes)
+	}
 }
 
 // walkPageSizes walks the page tree for /MediaBox. It takes the same two

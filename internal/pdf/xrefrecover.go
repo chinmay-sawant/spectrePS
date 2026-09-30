@@ -446,19 +446,23 @@ func xrefStreamParses(src []byte, pos int) bool {
 // every stream it accepts out of the search.
 func scanObjectHeaders(src []byte) map[int]XEntry {
 	entries := map[int]XEntry{}
+	streamEntries := map[int]XEntry{}
+	malformedEntries := map[int]XEntry{}
 	for pos := 0; pos < len(src); {
 		num, gen, ok := objectHeaderAt(src, pos)
 		if !ok {
 			pos++
 			continue
 		}
-		got, gotGen, _, next, err := ParseIndirect(src, pos)
+		got, gotGen, body, next, err := ParseIndirect(src, pos)
 		if err != nil || got != num || gotGen != gen || num == 0 {
+			keepHeader(malformedEntries, num, pos, gen)
 			pos++
 			continue
 		}
-		if _, seen := entries[num]; !seen {
-			entries[num] = plainEntry(pos, gen)
+		keepHeader(entries, num, pos, gen)
+		if body.Kind == KindStream && directLengthMismatch(body) {
+			scanStreamHeaders(src, pos+1, next, streamEntries, malformedEntries)
 		}
 		if next > pos {
 			pos = next
@@ -466,7 +470,74 @@ func scanObjectHeaders(src []byte) map[int]XEntry {
 		}
 		pos++
 	}
+	for num, entry := range streamEntries {
+		if _, seen := entries[num]; !seen {
+			entries[num] = entry
+		}
+	}
+	for num, entry := range malformedEntries {
+		if _, seen := entries[num]; !seen {
+			entries[num] = entry
+		}
+	}
 	return entries
+}
+
+// scanStreamHeaders searches a stream span after its direct /Length disagrees
+// with the bytes ending at endstream. Some damaged files place real indirect
+// objects before that keyword, so the ordinary scan would otherwise treat
+// them as stream data. These entries stay secondary to objects found outside
+// the stream.
+func scanStreamHeaders(src []byte, start, end int, entries, malformed map[int]XEntry) {
+	type span struct{ start, end int }
+	spans := []span{{start: start, end: end}}
+	for len(spans) > 0 {
+		last := len(spans) - 1
+		current := spans[last]
+		spans = spans[:last]
+		for pos := current.start; pos < current.end; {
+			num, gen, ok := objectHeaderAt(src, pos)
+			if !ok {
+				pos++
+				continue
+			}
+			got, gotGen, body, next, err := ParseIndirect(src, pos)
+			if err != nil || got != num || gotGen != gen || num == 0 {
+				keepHeader(malformed, num, pos, gen)
+				pos++
+				continue
+			}
+			keepHeader(entries, num, pos, gen)
+			if body.Kind == KindStream && directLengthMismatch(body) && next > pos && next <= current.end {
+				spans = append(spans, span{start: pos + 1, end: next})
+			}
+			if next > pos && next <= current.end {
+				pos = next
+				continue
+			}
+			pos++
+		}
+	}
+}
+
+func keepHeader(entries map[int]XEntry, num, pos, gen int) {
+	if num == 0 {
+		return
+	}
+	if _, seen := entries[num]; !seen {
+		entries[num] = plainEntry(pos, gen)
+	}
+}
+
+func directLengthMismatch(value Value) bool {
+	if value.Kind != KindStream {
+		return false
+	}
+	length, ok := value.Dict[wordLength]
+	if !ok || length.Kind != KindInt {
+		return false
+	}
+	return length.Int != int64(len(value.Stream))
 }
 
 // objectHeaderAt reports the object number, the generation, and whether src[pos:]
