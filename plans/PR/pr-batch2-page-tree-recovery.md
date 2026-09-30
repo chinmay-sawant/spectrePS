@@ -87,6 +87,6 @@ TIKA-3224-1.pdf: Spectre Info 24 pages; Ghostscript PPM 24 pages
 
 | Extension | Files | Insertions | Deletions |
 | --- | ---: | ---: | ---: |
-| `.go` | 4 | 272 | 57 |
+| `.go` | 4 | 271 | 57 |
 | `.md` | 1 | 92 | 0 |
-| **Total** | **5** | **364** | **57** |
+| **Total** | **5** | **363** | **57** |
