@@ -23,7 +23,6 @@ func TestValidationPageTree(t *testing.T) {
 		{name: "array contents", run: validationArrayContents},
 	}
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			test.run(t)
