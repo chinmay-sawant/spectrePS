@@ -42,7 +42,7 @@ Damaged PDF page trees now keep repeated `/Kids` references as separate page occ
 
 ## Test plan
 
-- [x] `timeout 30s make test` (passed in 16.3 seconds)
+- [x] `timeout 30s make test` (passed in 19.5 seconds)
 - [ ] `make lint` (not run locally at the user's request; CI should run it)
 - [x] Targeted PDF recovery and allocation checks passed.
 
@@ -87,6 +87,6 @@ TIKA-3224-1.pdf: Spectre Info 24 pages; Ghostscript PPM 24 pages
 
 | Extension | Files | Insertions | Deletions |
 | --- | ---: | ---: | ---: |
-| `.go` | 4 | 207 | 52 |
+| `.go` | 4 | 260 | 57 |
 | `.md` | 1 | 92 | 0 |
-| **Total** | **5** | **299** | **52** |
+| **Total** | **5** | **352** | **57** |
