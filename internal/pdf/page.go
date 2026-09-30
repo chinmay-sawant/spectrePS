@@ -452,7 +452,7 @@ func (file *File) scanPages() ([]pageLeaf, error) {
 		leaves = append(leaves, pageLeaf{
 			content:     content,
 			resources:   nearestResources(node, NullVal()),
-			size:        PageSize{},
+			size:        PageSize{Width: 0, Height: 0},
 			contentNums: file.contentNumRefs(node),
 		})
 	}
@@ -547,7 +547,7 @@ func (file *File) leaf(node Value, resources Value) ([]pageLeaf, error) {
 	leaf := pageLeaf{
 		content:     content,
 		resources:   resources,
-		size:        PageSize{},
+		size:        PageSize{Width: 0, Height: 0},
 		contentNums: nil,
 	}
 	if file.damagedTree {

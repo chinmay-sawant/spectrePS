@@ -11,12 +11,24 @@ import (
 // read through Content.
 func TestValidationPageTree(t *testing.T) {
 	t.Parallel()
-	validationKidsCycle(t)
-	validationDamagedSharedSubtree(t)
-	validationMissingPages(t)
-	validationNonPageKid(t)
-	validationDirectContents(t)
-	validationArrayContents(t)
+	tests := []struct {
+		name string
+		run  func(*testing.T)
+	}{
+		{name: "kids cycle", run: validationKidsCycle},
+		{name: "damaged shared subtree", run: validationDamagedSharedSubtree},
+		{name: "missing pages", run: validationMissingPages},
+		{name: "non-page kid", run: validationNonPageKid},
+		{name: "direct contents", run: validationDirectContents},
+		{name: "array contents", run: validationArrayContents},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			test.run(t)
+		})
+	}
 }
 
 func validationDamagedSharedSubtree(t *testing.T) {
