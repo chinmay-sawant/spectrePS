@@ -91,11 +91,11 @@ Info passed: 612; info passed and GS emitted pages: 564
 
 | Extension | Files | Insertions | Deletions |
 | --- | ---: | ---: | ---: |
-| `.go` | 29 | 5586 | 207 |
+| `.go` | 29 | 5668 | 209 |
 | `.md` | 8 | 947 | 140 |
 | `.ps` | 1 | 279 | 0 |
 | `.py` | 1 | 176 | 0 |
 | `.sh` | 1 | 139 | 0 |
 | `.tsv` | 2 | 3137 | 84 |
 | No extension | 2 | 33 | 3 |
-| **Total** | **44** | **10297** | **434** |
+| **Total** | **44** | **10379** | **436** |
