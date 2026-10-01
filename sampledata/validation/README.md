@@ -142,11 +142,22 @@ is the only place the split is written down. A manifest built from the
 ## Fetch and verify
 
 ```sh
-make validation-fetch     # fetch the live tier
-make validation-verify    # check the cache, no network
-make validation-report    # per-area and per-basis pass rate
+make validation-fetch         # fetch the live tier
+make validation-fetch BULK=1  # add the batch2 bulk tier, a 4.5 GB download
+make validation-verify        # check the cache, no network
+make validation-report        # per-area and per-basis pass rate
 go test -count=1 ./internal/validation -run TestValidation
 ```
+
+`bulk.tsv` pins whole tarballs. Its only row is the batch2 stressful-corpus
+archive: 5,613 files, 6,063,564,131 bytes extracted, and a 4.5 GB download from
+`labs.pdfa.org`. `make validation-fetch BULK=1` checks the archive SHA-512,
+extracts to a staging directory, checks every member against
+`bulk/batch2.members.tsv`, and only then moves a file into the tree, so the
+tree only ever sees bytes whose digest is pinned. `make validation-verify
+BULK=1` checks the extracted files without touching the network. The bulk tier
+is audit material: no manifest row names its files, and `make test` never
+reads them.
 
 The generator downloads every selected row into a content-addressed cache,
 checks its SHA-256 and byte count, and only places files into the tree after

@@ -5,6 +5,7 @@
 //
 //	go run internal/validation/gen.go                    # the committed tier
 //	go run internal/validation/gen.go -fetch-external    # the fetched tier
+//	go run internal/validation/gen.go -fetch-external -fetch-bulk   # and the 4.5 GB bulk tier
 //	go run internal/validation/gen.go -fetch-external -verify-only
 //	go run internal/validation/gen.go -fetch-external -dry-run -area archival
 //
@@ -32,6 +33,16 @@
 // overridable with -cache or SPECTREPS_VALIDATION_CACHE, so a CI cache step can
 // point it at a restored directory.
 //
+// # The bulk tier
+//
+// bulk.tsv pins whole tarballs whose files are too many to list as manifest
+// rows. -fetch-bulk downloads each archive into the cache, checks the
+// archive's SHA-512 and byte count, extracts it to a staging directory, and
+// checks every member against bulk/<name>.members.tsv before moving a single
+// file into the tree. The batch2 archive is 4.5 GB and 5,613 files, so the
+// tier is always opt-in: a run without -fetch-bulk prints the cost and changes
+// nothing.
+//
 // # Politeness
 //
 // Per-host concurrency and rate limits live in hostPolicy below, not in a flag,
@@ -41,7 +52,11 @@
 package main
 
 import (
+	"archive/tar"
+	"bufio"
+	"compress/gzip"
 	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/hex"
 	"errors"
 	"flag"
@@ -51,8 +66,10 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -100,6 +117,8 @@ const (
 func main() {
 	fetchExternal := flag.Bool("fetch-external", false,
 		"also fetch the external tier under sampledata/validation/external")
+	fetchBulk := flag.Bool("fetch-bulk", false,
+		"also fetch the tarball tier in bulk.tsv; batch2 is a 4.5 GB download")
 	verifyOnly := flag.Bool("verify-only", false,
 		"check the cache against the manifest and touch no network")
 	dryRun := flag.Bool("dry-run", false,
@@ -117,33 +136,46 @@ func main() {
 	selected := selectRows(rows, *fetchExternal, *area)
 	if len(selected) == 0 {
 		fmt.Println("gen: no rows selected")
-		return
+	}
+	bulk, err := loadBulk(validation.BulkManifestName)
+	if err != nil {
+		fail("load bulk manifest: %v", err)
 	}
 
 	cache := cacheRoot(*cacheDir)
 	if *dryRun {
-		printPlan(selected, cache)
+		if len(selected) > 0 {
+			printPlan(selected, cache)
+		}
+		printBulkPlan(bulk, *fetchBulk)
 		return
 	}
 
-	if err := resolveAll(newClient(), selected, cache, *verifyOnly, *workers); err != nil {
-		fail("%v", err)
+	client := newClient()
+	if len(selected) > 0 {
+		if err := resolveAll(client, selected, cache, *verifyOnly, *workers); err != nil {
+			fail("%v", err)
+		}
+
+		// Every row resolved before this point. Only now touch the tree, so a
+		// failure above leaves the working tree as it was.
+		dir := validation.CorpusDir()
+		for _, row := range selected {
+			blob := filepath.Join(cache, blobName(row.SHA256))
+			dest := filepath.Join(dir, filepath.FromSlash(row.Path))
+			if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+				fail("mkdir %s: %v", filepath.Dir(dest), err)
+			}
+			if err := place(blob, dest); err != nil {
+				fail("place %s: %v", row.Path, err)
+			}
+		}
+		fmt.Printf("gen: %d rows, all present and verified\n", len(selected))
 	}
 
-	// Every row resolved before this point. Only now touch the tree, so a
-	// failure above leaves the working tree as it was.
-	dir := validation.CorpusDir()
-	for _, row := range selected {
-		blob := filepath.Join(cache, blobName(row.SHA256))
-		path := filepath.Join(dir, filepath.FromSlash(row.Path))
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			fail("mkdir %s: %v", filepath.Dir(path), err)
-		}
-		if err := place(blob, path); err != nil {
-			fail("place %s: %v", row.Path, err)
-		}
+	if err := runBulk(newBulkClient(), bulk, *fetchBulk, *verifyOnly, cache); err != nil {
+		fail("%v", err)
 	}
-	fmt.Printf("gen: %d rows, all present and verified\n", len(selected))
 }
 
 // selectRows returns the rows this run acts on: the external tier only with
@@ -509,6 +541,19 @@ func newClient() *http.Client {
 	return &http.Client{Timeout: 5 * time.Minute, Transport: transport}
 }
 
+// newBulkClient returns the client for the tarball tier. The row client sets a
+// five-minute total timeout, which is right for a file measured in KiB and
+// wrong for a 4.5 GB body: Client.Timeout covers the read, so a slow link
+// would abort every attempt part way through. This client bounds the header
+// wait and leaves the body to the TCP stream and the retry loop.
+func newBulkClient() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConnsPerHost = 16
+	transport.MaxConnsPerHost = 32
+	transport.ResponseHeaderTimeout = 60 * time.Second
+	return &http.Client{Transport: transport}
+}
+
 func hostOf(source string) string {
 	rest := strings.TrimPrefix(source, "https://")
 	rest = strings.TrimPrefix(rest, "http://")
@@ -527,4 +572,465 @@ func policyFor(host string) budget {
 
 func fail(format string, args ...any) {
 	log.Fatalf("gen: "+format, args...)
+}
+
+// A bulkArchive pins one tarball tier. The members file lists every regular
+// file the archive holds, with its SHA-256, so extraction verifies each file
+// before it reaches the tree.
+type bulkArchive struct {
+	Path    string
+	URL     string
+	SHA512  string
+	Bytes   int64
+	Members string
+}
+
+// A bulkMember is one regular file inside a bulk archive, relative to the
+// archive's destination root.
+type bulkMember struct {
+	Path   string
+	SHA256 string
+	Bytes  int64
+}
+
+// loadBulk reads the committed bulk manifest. A missing file is an empty
+// tier, so an older checkout still runs.
+func loadBulk(rel string) ([]bulkArchive, error) {
+	f, err := os.Open(filepath.Join(validation.CorpusDir(), filepath.FromSlash(rel)))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	var archives []bulkArchive
+	line := 0
+	for scanner.Scan() {
+		line++
+		text := strings.TrimSuffix(scanner.Text(), "\r")
+		if line == 1 {
+			if text != "path\turl\tsha512\tbytes\tmembers" {
+				return nil, fmt.Errorf("%s line 1: unexpected header %q", rel, text)
+			}
+			continue
+		}
+		if strings.TrimSpace(text) == "" {
+			continue
+		}
+		fields := strings.Split(text, "\t")
+		if len(fields) != 5 {
+			return nil, fmt.Errorf("%s line %d: %d columns, want 5", rel, line, len(fields))
+		}
+		size, err := strconv.ParseInt(fields[3], 10, 64)
+		if err != nil || size <= 0 {
+			return nil, fmt.Errorf("%s line %d: bytes %q", rel, line, fields[3])
+		}
+		if len(fields[2]) != 128 {
+			return nil, fmt.Errorf("%s line %d: sha512 %q", rel, line, fields[2])
+		}
+		if fields[0] == "" || path.IsAbs(fields[0]) || strings.Contains(fields[0], "..") {
+			return nil, fmt.Errorf("%s line %d: unsafe path %q", rel, line, fields[0])
+		}
+		archives = append(archives, bulkArchive{
+			Path: fields[0], URL: fields[1], SHA512: fields[2],
+			Bytes: size, Members: fields[4],
+		})
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return archives, nil
+}
+
+// loadBulkMembers reads one archive's member list, sorted by path.
+func loadBulkMembers(rel string) ([]bulkMember, error) {
+	f, err := os.Open(filepath.Join(validation.CorpusDir(), filepath.FromSlash(rel)))
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	var members []bulkMember
+	line := 0
+	for scanner.Scan() {
+		line++
+		text := strings.TrimSuffix(scanner.Text(), "\r")
+		if line == 1 {
+			if text != "sha256\tbytes\tpath" {
+				return nil, fmt.Errorf("%s line 1: unexpected header %q", rel, text)
+			}
+			continue
+		}
+		if strings.TrimSpace(text) == "" {
+			continue
+		}
+		fields := strings.Split(text, "\t")
+		if len(fields) != 3 {
+			return nil, fmt.Errorf("%s line %d: %d columns, want 3", rel, line, len(fields))
+		}
+		size, err := strconv.ParseInt(fields[1], 10, 64)
+		if err != nil || size < 0 {
+			return nil, fmt.Errorf("%s line %d: bytes %q", rel, line, fields[1])
+		}
+		if len(fields[0]) != 64 {
+			return nil, fmt.Errorf("%s line %d: sha256 %q", rel, line, fields[0])
+		}
+		members = append(members, bulkMember{
+			Path: fields[2], SHA256: fields[0], Bytes: size,
+		})
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return members, nil
+}
+
+// humanBytes prints a byte count in the two units a user checks it against:
+// the decimal figure a download page shows and the binary figure `du` shows.
+func humanBytes(n int64) string {
+	return fmt.Sprintf("%.1f GB (%.2f GiB)", float64(n)/1e9, float64(n)/(1<<30))
+}
+
+// bulkTotals counts the tier's files and download bytes.
+func bulkTotals(archives []bulkArchive) (files int, bytes int64) {
+	for _, a := range archives {
+		members, err := loadBulkMembers(a.Members)
+		if err != nil {
+			continue
+		}
+		files += len(members)
+		bytes += a.Bytes
+	}
+	return files, bytes
+}
+
+// printBulkPlan reports the tier's cost without touching the network.
+func printBulkPlan(archives []bulkArchive, fetch bool) {
+	if len(archives) == 0 {
+		return
+	}
+	files, bytes := bulkTotals(archives)
+	fmt.Printf("gen: bulk tier: %d archives, %d files, %s download\n",
+		len(archives), files, humanBytes(bytes))
+	if fetch {
+		fmt.Println("gen: -fetch-bulk is set, the archives would be fetched and verified")
+	}
+}
+
+// printBulkNotice names the tier and its cost when a run leaves it alone.
+func printBulkNotice(archives []bulkArchive) {
+	files, bytes := bulkTotals(archives)
+	names := make([]string, 0, len(archives))
+	for _, a := range archives {
+		names = append(names, path.Base(a.URL))
+	}
+	fmt.Printf("gen: bulk tier not fetched: %s, %d files, %s download; run make validation-fetch BULK=1 to add it\n",
+		strings.Join(names, ", "), files, humanBytes(bytes))
+}
+
+// runBulk fetches or verifies the bulk tier. Without -fetch-bulk it prints the
+// cost so a user knows the tier exists before choosing to add 4.5 GB.
+func runBulk(client *http.Client, archives []bulkArchive, fetch, verifyOnly bool, cache string) error {
+	if len(archives) == 0 {
+		return nil
+	}
+	if !fetch {
+		printBulkNotice(archives)
+		return nil
+	}
+	for _, a := range archives {
+		if err := fetchBulkArchive(client, a, verifyOnly, cache); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// fetchBulkArchive brings one archive's files into the tree. The archive is
+// verified as a whole, then extracted to staging, then verified member by
+// member, so the tree only ever sees files whose digest is pinned.
+func fetchBulkArchive(client *http.Client, a bulkArchive, verifyOnly bool, cache string) error {
+	members, err := loadBulkMembers(a.Members)
+	if err != nil {
+		return fmt.Errorf("%s: %w", a.Members, err)
+	}
+	destRoot := filepath.Join(validation.CorpusDir(), filepath.FromSlash(a.Path))
+	log.Printf("gen: bulk %s: %d files, %s, into %s",
+		path.Base(a.URL), len(members), humanBytes(a.Bytes), destRoot)
+
+	if verifyOnly {
+		if err := verifyBulkTree(destRoot, members); err != nil {
+			return fmt.Errorf("%s: %w", a.Path, err)
+		}
+		fmt.Printf("gen: bulk %s: %d files present and verified\n", path.Base(a.URL), len(members))
+		return nil
+	}
+
+	blob := filepath.Join(cache, "bulk", a.SHA512)
+	ok, err := verifyBulkBlob(blob, a)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		if err := downloadBulk(client, a, blob); err != nil {
+			return err
+		}
+	}
+	// A complete tree costs no extraction, which matters because the archive
+	// is 4.5 GB and the extraction is 5.7 GB.
+	if err := verifyBulkTree(destRoot, members); err == nil {
+		fmt.Printf("gen: bulk %s: %d files present and verified\n", path.Base(a.URL), len(members))
+		return nil
+	}
+	return extractBulk(blob, destRoot, members)
+}
+
+// verifyBulkTree checks every member of one archive against the tree.
+func verifyBulkTree(root string, members []bulkMember) error {
+	for _, m := range members {
+		full := filepath.Join(root, filepath.FromSlash(m.Path))
+		f, err := os.Open(full)
+		if err != nil {
+			return err
+		}
+		hasher := sha256.New()
+		size, err := io.Copy(hasher, f)
+		f.Close()
+		if err != nil {
+			return err
+		}
+		if size != m.Bytes {
+			return fmt.Errorf("%s: %d bytes, want %d", m.Path, size, m.Bytes)
+		}
+		if got := hex.EncodeToString(hasher.Sum(nil)); got != m.SHA256 {
+			return fmt.Errorf("%s: sha256 %s, want %s", m.Path, got, m.SHA256)
+		}
+	}
+	return nil
+}
+
+// verifyBulkBlob reports whether the cache holds exactly the archive's bytes.
+func verifyBulkBlob(blob string, a bulkArchive) (bool, error) {
+	f, err := os.Open(blob)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	defer f.Close()
+	hasher := sha512.New()
+	size, err := io.Copy(hasher, f)
+	if err != nil {
+		return false, err
+	}
+	if got := hex.EncodeToString(hasher.Sum(nil)); got != a.SHA512 {
+		return false, fmt.Errorf("%s: cache sha512 %s, want %s", a.URL, got, a.SHA512)
+	}
+	if size != a.Bytes {
+		return false, fmt.Errorf("%s: cache %d bytes, want %d", a.URL, size, a.Bytes)
+	}
+	return true, nil
+}
+
+// downloadBulk streams one archive into the cache, retrying what is worth
+// retrying. The digest is checked before the blob gets its final name.
+func downloadBulk(client *http.Client, a bulkArchive, blob string) error {
+	if err := os.MkdirAll(filepath.Dir(blob), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(blob), ".bulk-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		sum, size, retryable, err := fetchBulkOnce(client, a, tmp)
+		if err == nil {
+			if got := hex.EncodeToString(sum[:]); got != a.SHA512 {
+				return fmt.Errorf("sha512 %s, want %s", got, a.SHA512)
+			}
+			if size != a.Bytes {
+				return fmt.Errorf("%d bytes, want %d", size, a.Bytes)
+			}
+			if err := tmp.Close(); err != nil {
+				return err
+			}
+			return os.Rename(tmpName, blob)
+		}
+		if !retryable {
+			tmp.Close()
+			return err
+		}
+		lastErr = err
+		if attempt == maxAttempts {
+			break
+		}
+		wait := backoff(attempt)
+		log.Printf("gen: %s: %v, retrying in %s", a.URL, err, wait)
+		if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+		if err := tmp.Truncate(0); err != nil {
+			return err
+		}
+		time.Sleep(wait)
+	}
+	tmp.Close()
+	return fmt.Errorf("after %d attempts: %w", maxAttempts, lastErr)
+}
+
+// fetchBulkOnce performs one archive request and reports whether the failure
+// is worth retrying, matching fetchOnce.
+func fetchBulkOnce(client *http.Client, a bulkArchive, w io.Writer) ([64]byte, int64, bool, error) {
+	var zero [64]byte
+	req, err := http.NewRequest(http.MethodGet, a.URL, nil)
+	if err != nil {
+		return zero, 0, false, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := client.Do(req)
+	if err != nil {
+		return zero, 0, true, err
+	}
+	defer resp.Body.Close()
+	switch {
+	case resp.StatusCode == http.StatusOK:
+	case resp.StatusCode == http.StatusRequestTimeout,
+		resp.StatusCode == http.StatusTooManyRequests,
+		resp.StatusCode >= 500:
+		return zero, 0, true, fmt.Errorf("get: %s", resp.Status)
+	default:
+		return zero, 0, false, fmt.Errorf("get: %s", resp.Status)
+	}
+	hasher := sha512.New()
+	size, err := io.Copy(io.MultiWriter(w, hasher), resp.Body)
+	if err != nil {
+		return zero, 0, true, fmt.Errorf("read: %w", err)
+	}
+	var sum [64]byte
+	copy(sum[:], hasher.Sum(nil))
+	return sum, size, false, nil
+}
+
+// extractBulk unpacks a verified archive into staging, checks every member
+// against the members manifest, and only then moves files into the tree, so a
+// kill or a bad member leaves the tree as it was.
+func extractBulk(blob, destRoot string, members []bulkMember) error {
+	byPath := make(map[string]bulkMember, len(members))
+	for _, m := range members {
+		byPath[m.Path] = m
+	}
+	staging, err := os.MkdirTemp(filepath.Dir(blob), "extract-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(staging)
+
+	f, err := os.Open(blob)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return err
+	}
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+	seen := 0
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		if hdr.Typeflag != tar.TypeReg && hdr.Typeflag != tar.TypeRegA {
+			continue
+		}
+		name := path.Clean(hdr.Name)
+		if name != hdr.Name || path.IsAbs(name) || name == ".." || strings.HasPrefix(name, "../") {
+			return fmt.Errorf("unsafe archive member %q", hdr.Name)
+		}
+		member, ok := byPath[name]
+		if !ok {
+			return fmt.Errorf("archive member not in the members manifest: %s", name)
+		}
+		target := filepath.Join(staging, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		out, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if err != nil {
+			return err
+		}
+		hasher := sha256.New()
+		size, copyErr := io.Copy(io.MultiWriter(out, hasher), tr)
+		closeErr := out.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		if size != member.Bytes {
+			return fmt.Errorf("%s: %d bytes, want %d", name, size, member.Bytes)
+		}
+		if got := hex.EncodeToString(hasher.Sum(nil)); got != member.SHA256 {
+			return fmt.Errorf("%s: sha256 %s, want %s", name, got, member.SHA256)
+		}
+		seen++
+	}
+	if seen != len(byPath) {
+		return fmt.Errorf("%d files in the archive, %d in the members manifest", seen, len(byPath))
+	}
+	// Every member verified in staging. Only now touch the tree.
+	for _, m := range members {
+		src := filepath.Join(staging, filepath.FromSlash(m.Path))
+		dst := filepath.Join(destRoot, filepath.FromSlash(m.Path))
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return err
+		}
+		if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err := moveFile(src, dst); err != nil {
+			return err
+		}
+	}
+	fmt.Printf("gen: bulk %s: %d files extracted and verified\n", path.Base(destRoot), seen)
+	return nil
+}
+
+// moveFile renames src to dst, falling back to a copy across filesystems.
+func moveFile(src, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	if err := out.Close(); err != nil {
+		return err
+	}
+	return os.Remove(src)
 }

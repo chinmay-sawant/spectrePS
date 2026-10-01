@@ -17,6 +17,22 @@ make build
 ./bin/spectreps version
 ```
 
+## Test
+
+```sh
+make test    # go test over every package, including the validation corpus
+make lint    # gofmt, golangci-lint, and the 2,000-line file limit
+```
+
+Tests read a checked-in validation corpus under `sampledata/validation/` and a fetched tier under `sampledata/validation/external/`. A fresh clone has the committed files and skips the fetched rows, so the suite needs no network. To run the same fetched rows on your machine, populate the tier once:
+
+```sh
+make validation-fetch   # download the live tier, every SHA-256 checked
+make validation-verify  # confirm a provisioned machine, no network
+```
+
+`make validation-fetch` runs the same generator on every machine, `go run internal/validation/gen.go -fetch-external`, and caches the bytes, so a second run costs no network. The batch2 stressful-corpus tarball is a separate opt-in: `make validation-fetch BULK=1` adds 5,613 audit files and a 4.5 GB download, and a plain `make validation-fetch` prints the size and fetches none of it. [documentation/test.md](documentation/test.md) holds the test contract and [sampledata/validation/README.md](sampledata/validation/README.md) holds the corpus details.
+
 ## Demo
 
 Paint a 100 by 100 square on a 200 by 200 point page, then read the page back.

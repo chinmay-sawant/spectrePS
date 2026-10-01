@@ -5,6 +5,9 @@ PKG := ./cmd/spectreps
 NPROC := $(shell nproc 2>/dev/null || echo 1)
 # BENCH_PKGS is the packages with Benchmark functions. make test never runs them.
 BENCH_PKGS := ./spectreps ./internal/cli ./internal/engine ./internal/font ./internal/pdf ./internal/pdfa ./internal/pdfout ./internal/graphics ./internal/ps ./internal/psout ./internal/tag
+# BULK=1 makes validation-fetch and validation-verify also cover the bulk
+# tarball tier. batch2 is 5,613 files and a 4.5 GB download, so it is opt-in.
+BULK_FLAG := $(if $(filter 1,$(BULK)),-fetch-bulk,)
 
 .PHONY: help build test lint fmt tidy clean size-check pdfa-check pdfa-corpus-check pdfua2-check refs-gs-check validation-run validation-fetch validation-verify validation-report bench bench-profile bench-check
 
@@ -19,7 +22,7 @@ help:
 		'pdfua2-check run veraPDF over sampledata/pdfua2 when installed' \
 		'refs-gs-check run the Ghostscript reference proofs when gs is installed' \
 		'validation-run run the acceptance harness over sampledata/validation' \
-		'validation-fetch  fetch the live tier into sampledata/validation/external' \
+		'validation-fetch  fetch the live tier (BULK=1 adds batch2, 4.5 GB)' \
 		'validation-verify check the live tier cache against the manifest, no network' \
 		'validation-report write the per-area pass rate to profiles/' \
 		'bench       run the benchmarks with -count=3 into profiles/bench.txt' \
@@ -107,13 +110,15 @@ validation-run:
 # sampledata/validation/external are gitignored; the manifest rows that pin
 # them are committed, so the reviewable record is in git even though the bytes
 # are not. It needs the network, which is why it is never part of make test.
+# BULK=1 adds the tarball tier in sampledata/validation/bulk.tsv, which is
+# batch2 at 5,613 files and a 4.5 GB download.
 validation-fetch:
-	go run internal/validation/gen.go -fetch-external
+	go run internal/validation/gen.go -fetch-external $(BULK_FLAG)
 
 # validation-verify checks the cache against the manifest without touching the
 # network. Use it to confirm a machine is provisioned.
 validation-verify:
-	go run internal/validation/gen.go -fetch-external -verify-only
+	go run internal/validation/gen.go -fetch-external -verify-only $(BULK_FLAG)
 
 # validation-report runs the corpus tests with -json and writes a per-area and
 # per-basis pass rate to profiles/. A report whose baseline share grows is a

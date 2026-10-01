@@ -26,6 +26,19 @@ Confirm a machine is provisioned without touching the network:
 make validation-verify
 ```
 
+## The bulk tier
+
+`make validation-fetch BULK=1` adds `_bulk/`, the batch2 tarball from
+`labs.pdfa.org/stressful-corpus/pdfs_202011/`: 5,613 files, 6,063,564,131 bytes
+extracted, and a 4.5 GB download. It is opt-in because of the size; a plain
+`make validation-fetch` prints the cost and fetches none of it. The committed
+`../bulk.tsv` pins the archive SHA-512 and byte count, and
+`../bulk/batch2.members.tsv` pins every member SHA-256, so extraction verifies
+each file before it reaches the tree. Upstream states no redistribution grant
+for the set, so the tier is fetched and never committed. No manifest row names
+these files and `make test` never reads them; the tier exists for the batch2
+audit.
+
 ## How the fetch behaves
 
 Every row is fetched into a content-addressed cache first, at
@@ -47,6 +60,7 @@ which sec.gov and Wikimedia both require and both enforce with a 403.
 
 | Folder | Rows | Licence | What it is |
 | --- | --- | --- | --- |
+| `_bulk/` | 5,613 | none stated upstream | The batch2 stressful-corpus tarball: GHOSTSCRIPT and TIKA issue-tracker files from `labs.pdfa.org`. Fetched only with `make validation-fetch BULK=1`, because the download is 4.5 GB. Audit material, not a `make test` input. |
 | `artifex/` | 233 | AGPL-3.0 | The Artifex public test files: 79 PDF/X prepress suites, 29 JBIG2, 13 JPEG2000, the PDF Association safedocs subset, 21 PostScript programs, 6 encrypted, and 4 CMap cases. Fetched, never committed. Three files are excluded for third-party content. |
 | `verapdf/` | 2,691 | CC-BY-4.0 | The veraPDF conformance corpus, three levels deep by ISO 32000 clause. Every expected outcome is a measured Ghostscript run rather than a recording of our own reader. The upstream directory structure is preserved on disk. |
 | `handbuilt/` | 89 | CC-BY-SA-4.0 | ISO 32000-1 well-formedness cases, one defect each. Fetched rather than committed because the dataset's rights record is share-alike, not CC0. See `handbuilt/README.md`. |
