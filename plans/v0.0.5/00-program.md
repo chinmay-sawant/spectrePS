@@ -1,7 +1,7 @@
 # v0.0.5 - Benchmark coverage and PDF compatibility
 
 > **Parent:** `plans/v0.0.4/00-program.md` - the previous tag
-> **Status:** open development ledger. Phases 1 through 5 cover benchmarks; phases 6 and 7 record PDF compatibility work. No new tag has been cut.
+> **Status:** implemented. Phases 1 through 7 landed in full. Phase 8 landed the committed corpus, the fetched tier, the pass-rate report, and the bulk tier; its 28 open rows stay open in `8-real-world-corpus.md`. Deferred row 4.3 stays `[~]`. The v0.0.5 tag is cut from the release pull request.
 > **Estimated effort for the benchmark phases:** about a week for phase 1 and 2, about three days for phase 3 and 4, about two days for phase 5.
 
 ---
