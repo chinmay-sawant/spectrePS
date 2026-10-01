@@ -4,9 +4,9 @@ Spectre PS is a Go library and CLI for the jobs Ghostscript is used for. It read
 
 The command is `spectreps`. The library import path is `github.com/chinmay-sawant/spectrePS/spectreps`, package name `spectreps`. The command calls that package through `internal/cli`, and an external importer calls the same functions.
 
-v0.0.1 is the first release: the PostScript subset, the path-only PDF, PPM and PNG raster, Flate rewrite, validate, and byte and pixel compare. v0.0.2 adds `bbox`, `inkcov`, JPEG and TIFF raster, page ranges, gray and CMYK image PDF, and PDF compression levels 1 to 5. v0.0.3 adds weighted `ink_cov`, CCITT and JPEG2000 decode, painting `Do`, `spectreps ps`, the `spectreps gs` argv mode, the PDF/A-4 and PDF/UA-2 preflights, and the font and text machine with `spectreps text`. v0.0.4 adds the Type 1 font machine, `spectreps info`, PDF transparency, the extra stream filters and predictors, PDF/UA-2 tag generation, and the checked-in validation corpus. `spectreps version` prints `0.0.4`.
+v0.0.1 is the first release: the PostScript subset, the path-only PDF, PPM and PNG raster, Flate rewrite, validate, and byte and pixel compare. v0.0.2 adds `bbox`, `inkcov`, JPEG and TIFF raster, page ranges, gray and CMYK image PDF, and PDF compression levels 1 to 5. v0.0.3 adds weighted `ink_cov`, CCITT and JPEG2000 decode, painting `Do`, `spectreps ps`, the `spectreps gs` argv mode, the PDF/A-4 and PDF/UA-2 preflights, and the font and text machine with `spectreps text`. v0.0.4 adds the Type 1 font machine, `spectreps info`, PDF transparency, the extra stream filters and predictors, PDF/UA-2 tag generation, and the checked-in validation corpus. v0.0.5 adds the benchmark coverage extension, the effective PDF version report, the PDF/A profile and PDF version corpora, the labelled validation corpus with its fetched tier, and the damaged-file recovery. `spectreps version` prints `0.0.5`.
 
-The latest tag is v0.0.4, and that is the version the command reports. Work that v0.0.4 deferred is listed in `plans/v0.0.1/10-deferred.md`.
+The latest tag is v0.0.5, and that is the version the command reports. Work left open by v0.0.5 is recorded in its ledger and in `plans/v0.0.1/10-deferred.md`.
 
 ## Build
 
@@ -108,7 +108,7 @@ Page 1
 | [reference-proofs.md](documentation/reference-proofs.md) | The Ghostscript and veraPDF cross-checks, run by hand. |
 | [development.md](documentation/development.md) | Make targets and the phase checklist rule. |
 
-The released work ledgers are [v0.0.1](plans/v0.0.1/00-program.md), [v0.0.2](plans/v0.0.2/00-program.md), [v0.0.3](plans/v0.0.3/00-program.md), and [v0.0.4](plans/v0.0.4/00-program.md). The open [v0.0.5 development ledger](plans/v0.0.5/00-program.md) covers benchmark work and [PDF compatibility](plans/v0.0.5/6-pdf-compatibility.md). Release notes stay under each released tag's `PR/` folder, and [deferred work](plans/v0.0.1/10-deferred.md) has its own ledger.
+The released work ledgers are [v0.0.1](plans/v0.0.1/00-program.md), [v0.0.2](plans/v0.0.2/00-program.md), [v0.0.3](plans/v0.0.3/00-program.md), [v0.0.4](plans/v0.0.4/00-program.md), and [v0.0.5](plans/v0.0.5/00-program.md). Release notes stay under each released tag's `PR/` folder, and [deferred work](plans/v0.0.1/10-deferred.md) has its own ledger.
 
 ## License
 

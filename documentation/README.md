@@ -24,8 +24,9 @@ Read these in order when changing behavior.
 | `reference-proofs.md` | The Ghostscript and veraPDF cross-checks, run by hand and never in `make test`. |
 | `development.md` | Make targets and how a phase row gets checked. |
 
-`plans/v0.0.5/00-program.md` tracks benchmark work and the PDF compatibility
-corpus. The released tag remains v0.0.4. Deferred product work stays in
+`plans/v0.0.5/00-program.md` is the released ledger for the benchmark coverage
+extension, the PDF compatibility and PDF/A profile corpora, and the real-world
+validation corpus. Deferred product work stays in
 `plans/v0.0.1/10-deferred.md`.
 
-The released tag is v0.0.4, which is the version the command reports. Documentation that says a feature "landed in v0.0.4" means it shipped with that tag.
+The released tag is v0.0.5, which is the version the command reports. Documentation that says a feature "landed in v0.0.4" means it shipped with that tag, and "landed in v0.0.5" ships with this one.
