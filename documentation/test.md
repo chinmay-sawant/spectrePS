@@ -30,7 +30,7 @@ Four expectations are possible. `paint` asserts a rasterized page, `struct` asse
 The corpus has two tiers:
 
 - The committed tier is checked in. Every file is at or under 1 MiB.
-- The live tier lives under `sampledata/validation/external/`, which is gitignored apart from its own README. It holds larger files, whole suites, and files whose license does not permit committing. `make validation-fetch` populates it after checking every SHA-256, through a content-addressed cache, so a second run costs no network. `make validation-verify` checks the cache without touching the network. Tests skip the live tier when it is absent, and no test opens a network connection.
+- The live tier lives under `sampledata/validation/external/`, which is gitignored apart from its own README. It holds larger files, whole suites, and files whose license does not permit committing. `make validation-fetch` populates it after checking every SHA-256, through a content-addressed cache, so a second run costs no network. `make validation-verify` checks the cache without touching the network. A fresh clone skips the live tier until `make validation-fetch` runs once, and no test opens a network connection.
 
 The fetched tier's `verapdf/` is 2,691 conformance files whose expected outcomes are measured
 Ghostscript runs rather than recordings of our own reader, so a pass rate over them is a

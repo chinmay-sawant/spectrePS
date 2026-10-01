@@ -1,0 +1,2 @@
+path	url	sha512	bytes	members
+external/_bulk	https://labs.pdfa.org/stressful-corpus/pdfs_202011/batch2.tgz	d96c5e20f4e1d86ab69feb5cd5fc0f651e28eb21ff04f4918e0ff09abbadfd842905240345d77c949d31cb307b3567ad4cf307f5c80688ee90287c69adcdb141	4496841248	bulk/batch2.members.tsv

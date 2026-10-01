@@ -70,6 +70,12 @@ const (
 	// no manifest row because they are test output, not corpus inputs, so
 	// checkUnlisted skips the folder.
 	ExpectedTextDir = "text/expected"
+	// BulkManifestName pins the bulk tarball tier: one archive row per
+	// tarball. BulkMembersDir holds one member digest per extracted file,
+	// named after its archive. Neither carries a manifest row, because the
+	// files they pin are fetched and audited outside the corpus run.
+	BulkManifestName = "bulk.tsv"
+	BulkMembersDir   = "bulk"
 )
 
 // ExternalPrefix marks a row in the fetched, non-committed tier.
@@ -596,15 +602,19 @@ func listedPaths(rows []Row) map[string]bool {
 }
 
 // skippedCorpusDir reports whether the walk ignores rel: the fetched external
-// tier and the checked-in golden text carry no manifest rows.
+// tier, the checked-in golden text, and the bulk tier's member manifests carry
+// no manifest rows.
 func skippedCorpusDir(rel string) bool {
-	return rel == strings.TrimSuffix(ExternalPrefix, "/") || rel == ExpectedTextDir
+	return rel == strings.TrimSuffix(ExternalPrefix, "/") || rel == ExpectedTextDir ||
+		rel == BulkMembersDir
 }
 
 // corpusMetaFile reports whether rel names a file that carries no manifest
-// row: the manifest, the traceability table, and any README.
+// row: the manifest, the traceability table, the bulk manifest, and any
+// README.
 func corpusMetaFile(rel string) bool {
-	return rel == ManifestName || rel == TraceabilityName || filepath.Base(rel) == ReadmeName
+	return rel == ManifestName || rel == TraceabilityName || rel == BulkManifestName ||
+		filepath.Base(rel) == ReadmeName
 }
 
 // CheckLicenses applies the license gate.
